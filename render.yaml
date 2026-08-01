@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: examora-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm ci && npx prisma generate && npm run server:build
+    startCommand: npm run server:start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false

@@ -150,6 +150,7 @@ export default function TakeExamPage() {
   const [warnings, setWarnings] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedViaAuto, setSubmittedViaAuto] = useState(false);
   const [submittedResult, setSubmittedResult] = useState<null | {
     submittedAt: string;
   }>(null);
@@ -164,36 +165,73 @@ export default function TakeExamPage() {
 
   const socketRef = useRef<Socket | null>(null);
 
-  // -------- Data load + session init --------
+  // -------- Data load + session verification --------
   useEffect(() => {
     let canceled = false;
     (async () => {
       setLoading(true);
       try {
-        // Attempt to join via backend
         let examData: ExamData | null = null;
         let sessionData: SessionInit | null = null;
 
-        try {
-          const sessionQuery = initialSessionToken
-            ? `?token=${encodeURIComponent(initialSessionToken)}`
-            : "";
-          const res = await fetch(
-            `/api/exams/${examId}/join${sessionQuery}`,
-            { credentials: "include" }
-          );
-          if (res.ok) {
-            const payload = (await res.json()) as {
-              exam: ExamData;
-              session: SessionInit;
-            };
-            if (!canceled) {
-              examData = payload.exam;
-              sessionData = payload.session;
+        // Verify the session token against the backend. The server returns
+        // 403 when the session is already SUBMITTED/TERMINATED, so a student
+        // refreshing the page can never retake the exam.
+        if (initialSessionToken) {
+          try {
+            const res = await fetch(
+              `/api/exams/${examId}/student-view?sessionToken=${encodeURIComponent(
+                initialSessionToken
+              )}`,
+              { credentials: "include" }
+            );
+
+            if (res.status === 403) {
+              // Already submitted or terminated — do not allow a retake.
+              if (!canceled) router.replace("/exam/already-completed");
+              return;
             }
+            if (res.status === 401) {
+              // Invalid or expired session token — start over at join.
+              if (!canceled) router.replace(`/exam/${examId}/join`);
+              return;
+            }
+            if (res.status === 404) {
+              if (!canceled) router.replace("/exam/not-found");
+              return;
+            }
+            if (res.status === 400) {
+              if (!canceled)
+                router.replace("/exam/not-found?reason=inactive");
+              return;
+            }
+            if (res.ok) {
+              const payload = (await res.json()) as {
+                exam: ExamData;
+                session: {
+                  id: string;
+                  studentName: string;
+                  startedAt?: string;
+                  warningsCount?: number;
+                };
+              };
+              if (!canceled) {
+                examData = {
+                  ...payload.exam,
+                  warningsLimit:
+                    payload.exam.warningsLimit ?? DEFAULT_WARNINGS_LIMIT,
+                };
+                sessionData = {
+                  id: payload.session.id,
+                  sessionId: payload.session.id,
+                  sessionToken: initialSessionToken,
+                  studentName: payload.session.studentName,
+                };
+              }
+            }
+          } catch {
+            // Network failure — fall back to demo data below.
           }
-        } catch {
-          // ignore; fall back to mock below
         }
 
         if (!examData) examData = mockExamData(examId);
@@ -211,7 +249,7 @@ export default function TakeExamPage() {
     return () => {
       canceled = true;
     };
-  }, [examId, initialSessionToken]);
+  }, [examId, initialSessionToken, router]);
 
   // -------- Socket --------
   useEffect(() => {
@@ -222,10 +260,9 @@ export default function TakeExamPage() {
       socketRef.current = socket;
 
       socket.on("connect", () => {
-        socket?.emit("student_join_exam_room", {
+        socket?.emit("join_exam_room", {
           examId: exam.id,
-          sessionId: session.id,
-          token: session.sessionToken,
+          sessionToken: session.sessionToken,
         });
       });
 
@@ -240,8 +277,8 @@ export default function TakeExamPage() {
         doTerminate(ev.reason ?? "warnings_limit");
       });
 
-      socket.on("exam_submitted_ack", () => {
-        // noop; backend-ack now handled by fetch return
+      socket.on("proctoring_error", () => {
+        // noop; the session still works without live proctoring
       });
 
       socket.connect();
@@ -251,7 +288,7 @@ export default function TakeExamPage() {
     return () => {
       if (socket) {
         try {
-          socket.emit("student_leave_exam_room", {
+          socket.emit("leave_exam_room", {
             examId: exam.id,
             sessionId: session.id,
           });
@@ -260,7 +297,7 @@ export default function TakeExamPage() {
         }
         socket.off("connect");
         socket.off("exam_terminated");
-        socket.off("exam_submitted_ack");
+        socket.off("proctoring_error");
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -281,17 +318,14 @@ export default function TakeExamPage() {
   }, [timeLeft === null, submitted, terminated]);
 
   // -------- Tab-switch proctoring --------
-  const emitStatusUpdate = useCallback(
-    (patch: { warnings?: number; status?: string; terminated?: boolean }) => {
+  const emitViolation = useCallback(
+    (reason: string) => {
       if (!socketRef.current || !session || !exam) return;
       try {
-        socketRef.current.emit("student_status_update", {
+        socketRef.current.emit("student_warning", {
           examId: exam.id,
-          sessionId: session.id,
-          warnings: patch.warnings,
-          status: patch.status ?? "ACTIVE",
-          terminated: Boolean(patch.terminated),
-          timestamp: new Date().toISOString(),
+          sessionToken: session.sessionToken,
+          reason,
         });
       } catch {
         /* ignore */
@@ -304,6 +338,7 @@ export default function TakeExamPage() {
     if (submitted || loading || !exam) return;
     const onVisibility = () => {
       if (document.hidden) {
+        const reason = "Tab or window switch detected";
         setWarnings((w) => {
           const next = w + 1;
           toast({
@@ -313,7 +348,7 @@ export default function TakeExamPage() {
             }.`,
             variant: next >= DEFAULT_WARNINGS_LIMIT ? "destructive" : "default",
           });
-          emitStatusUpdate({ warnings: next });
+          emitViolation(reason);
           if (next >= (exam?.warningsLimit ?? DEFAULT_WARNINGS_LIMIT)) {
             doTerminate("warnings_limit");
           }
@@ -352,7 +387,7 @@ export default function TakeExamPage() {
       setTerminatedCountdown(
         Math.round(TERMINATED_REDIRECT_DELAY_MS / 1000)
       );
-      emitStatusUpdate({ warnings, status: "TERMINATED", terminated: true });
+      emitViolation("session-terminated");
       // Try POSTing answers server-side
       if (!exam) return;
       const payload = {
@@ -374,7 +409,7 @@ export default function TakeExamPage() {
         body: JSON.stringify(payload),
       }).catch(() => void 0);
     },
-    [answers, emitStatusUpdate, exam, warnings]
+    [answers, emitViolation, exam, warnings]
   );
 
   function setAnswer(qid: string, value: string) {
@@ -444,9 +479,8 @@ export default function TakeExamPage() {
       };
 
       if (res.ok) {
-        emitStatusUpdate({ status: "SUBMITTED" });
         toast({
-          title: auto ? "Auto-submitted" : "Exam submitted",
+          title: auto ? "Time's up — auto-submitted" : "Exam submitted",
           description:
             data?.message ?? "Your answers have been received.",
         });
@@ -460,6 +494,7 @@ export default function TakeExamPage() {
       }
 
       setSubmitted(true);
+      setSubmittedViaAuto(auto);
       setShowConfirm(false);
       setSubmittedResult({
         submittedAt: data?.submittedAt ?? new Date().toISOString(),
@@ -470,6 +505,7 @@ export default function TakeExamPage() {
         description: "Network unavailable; stored on device.",
       });
       setSubmitted(true);
+      setSubmittedViaAuto(auto);
       setShowConfirm(false);
       setSubmittedResult({ submittedAt: new Date().toISOString() });
     } finally {
@@ -477,19 +513,23 @@ export default function TakeExamPage() {
     }
   }
 
-  // -------- Submission-success redirect to /terminated?reason=submitted --------
+  // -------- Submission-success redirect --------
+  // Auto (time's up) → /exam/times-up · Manual → /exam/already-completed
   useEffect(() => {
     if (!submitted) return;
+    const delay = submittedViaAuto ? 2_000 : 4_500;
     const t = setTimeout(() => {
       const q = new URLSearchParams();
-      q.set("reason", "submitted");
       q.set("warnings", String(warnings));
       q.set("limit", String(warningLimit));
       if (exam) q.set("examId", exam.id);
-      router.replace(`/exam/terminated?${q.toString()}`);
-    }, 4_500);
+      const destination = submittedViaAuto
+        ? `/exam/times-up?${q.toString()}`
+        : `/exam/already-completed?${q.toString()}`;
+      router.replace(destination);
+    }, delay);
     return () => clearTimeout(t);
-  }, [submitted, router, warnings, warningLimit, exam]);
+  }, [submitted, submittedViaAuto, router, warnings, warningLimit, exam]);
 
   // -------- Rendering states --------
   if (loading) {

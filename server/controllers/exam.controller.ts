@@ -293,3 +293,108 @@ export const gradeAllSessions = async (
     next(err);
   }
 };
+
+// ── GET /api/exams ────────────────────────────────────────────────────────────
+// Protected: requires valid teacher JWT (applied at the router level).
+// Returns the authenticated teacher's exams with session counts.
+
+export const listExams = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+
+    const exams = await prisma.exam.findMany({
+      where: { createdBy: teacher.userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: { select: { questions: true, sessions: true } },
+      },
+    });
+
+    res.json({
+      status: 'success',
+      data: { exams },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── GET /api/exams/:id/status ─────────────────────────────────────────────────
+// Public route — no teacher auth. Used by the student join page to verify an
+// exam exists and is joinable before showing the join form.
+
+export const getExamStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { id: examId } = req.params;
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { id: true, title: true, status: true },
+    });
+
+    if (!exam) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Exam not found',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      data: { exam },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── DELETE /api/exams/:id ─────────────────────────────────────────────────────
+// Protected: requires valid teacher JWT (applied at the router level).
+// Deletes the exam and its questions/sessions/submissions (cascade). Owner only.
+
+export const deleteExam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { id: true, createdBy: true },
+    });
+
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    if (exam.createdBy !== teacher.userId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'You do not have access to this exam',
+      });
+      return;
+    }
+
+    await prisma.exam.delete({ where: { id: examId } });
+
+    res.json({
+      status: 'success',
+      data: { message: 'Exam deleted successfully' },
+    });
+  } catch (err) {
+    next(err);
+  }
+};

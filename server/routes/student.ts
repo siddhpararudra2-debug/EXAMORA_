@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { joinExam } from "../controllers/student.js";
 import { studentJoinRateLimiter, validateBody } from "../middleware/security.js";
-import { joinExamSchema } from "../validators/student.js";
+import { studentJoinSchema } from "../validators/student.js";
 
 const router = Router();
 
@@ -12,7 +12,7 @@ const router = Router();
 router.post(
   "/exams/:examId/join",
   studentJoinRateLimiter,
-  validateBody(joinExamSchema),
+  validateBody(studentJoinSchema),
   joinExam
 );
 

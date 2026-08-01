@@ -33,9 +33,12 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
-    // Check if exam is available (ACTIVE or DRAFT for students to join)
-    if (exam.status !== ExamStatus.ACTIVE && exam.status !== ExamStatus.DRAFT) {
-      res.status(400).json({ status: 'error', message: 'Exam is not available for joining' });
+    // Check if exam is available (only ACTIVE exams are joinable)
+    if (exam.status !== ExamStatus.ACTIVE) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Exam is not active yet — it has not been published',
+      });
       return;
     }
 

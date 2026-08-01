@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "server": "tsx watch server.ts",
     "server:build": "tsc",
     "server:start": "node dist/server.js",

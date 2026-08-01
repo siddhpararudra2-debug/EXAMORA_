@@ -3,12 +3,22 @@ import { Router } from 'express';
 import { requireTeacher } from '../middleware/auth.js';
 import {
   createExam,
+  listExams,
   getStudentView,
+  getExamStatus,
   submitExam,
   gradeAllSessions,
+  deleteExam,
 } from '../controllers/exam.controller.js';
 
 const router = Router();
+
+/**
+ * GET /api/exams
+ * List the authenticated teacher's exams.
+ * Protected — valid teacher JWT required.
+ */
+router.get('/', requireTeacher, listExams);
 
 /**
  * POST /api/exams
@@ -16,6 +26,13 @@ const router = Router();
  * Protected — valid teacher JWT required.
  */
 router.post('/', requireTeacher, createExam);
+
+/**
+ * GET /api/exams/:id/status
+ * Check whether an exam exists and is joinable.
+ * Public — used by the student join page.
+ */
+router.get('/:id/status', getExamStatus);
 
 /**
  * GET /api/exams/:id/student-view
@@ -37,5 +54,12 @@ router.post('/:id/submit', submitExam);
  * Protected — valid teacher JWT required (owner only).
  */
 router.post('/:id/grade-all', requireTeacher, gradeAllSessions);
+
+/**
+ * DELETE /api/exams/:id
+ * Delete an exam and all its data.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.delete('/:id', requireTeacher, deleteExam);
 
 export default router;

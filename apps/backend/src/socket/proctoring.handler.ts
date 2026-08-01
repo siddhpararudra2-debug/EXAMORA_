@@ -10,6 +10,9 @@ export const PROCTORING_EVENTS = {
   EXAM_TERMINATED: 'exam_terminated',
   STUDENT_STATUS_UPDATE: 'student_status_update',
   PROCTORING_ERROR: 'proctoring_error',
+  TEACHER_JOIN_EXAM_ROOM: 'teacher_join_exam_room',
+  TEACHER_LEAVE_EXAM_ROOM: 'teacher_leave_exam_room',
+  EXAM_ROOM_JOINED: 'exam_room_joined',
 } as const;
 
 export interface JoinExamRoomPayload {
@@ -23,21 +26,31 @@ export interface StudentWarningPayload {
   reason?: string;
 }
 
-export interface StudentStatusUpdatePayload {
-  sessionId: string;
+export interface TeacherJoinRoomPayload {
   examId: string;
+}
+
+export interface StudentStatusUpdatePayload {
+  examId: string;
+  sessionId: string;
   studentName: string;
   studentEmail: string;
   enrollmentNo: string;
-  warningsCount: number;
   status: SessionStatus;
+  warnings: number;
+  warningsLimit: number;
+  terminated: boolean;
+  submitted: boolean;
+  timestamp: string;
   reason?: string;
 }
 
 export interface ExamTerminatedPayload {
+  examId: string;
   sessionId: string;
-  warningsCount: number;
   reason: string;
+  warnings: number;
+  warningsLimit: number;
 }
 
 export type JoinExamRoomResponse =
@@ -80,22 +93,28 @@ const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
         });
 
         socket.emit(PROCTORING_EVENTS.EXAM_TERMINATED, {
+          examId,
           sessionId: session.id,
-          warningsCount: updated.warningsCount,
-          reason: reason ?? 'Maximum proctoring warnings exceeded',
+          reason: reason ?? 'warnings_limit',
+          warnings: updated.warningsCount,
+          warningsLimit: MAX_WARNINGS,
         } satisfies ExamTerminatedPayload);
       }
 
       io.to(roomName(examId)).emit(
         PROCTORING_EVENTS.STUDENT_STATUS_UPDATE,
         {
-          sessionId: session.id,
           examId,
+          sessionId: session.id,
           studentName: session.studentName,
           studentEmail: session.studentEmail,
           enrollmentNo: session.enrollmentNo,
-          warningsCount: updated.warningsCount,
           status: terminated ? SessionStatus.TERMINATED : SessionStatus.ACTIVE,
+          warnings: updated.warningsCount,
+          warningsLimit: MAX_WARNINGS,
+          terminated,
+          submitted: false,
+          timestamp: new Date().toISOString(),
           reason,
         } satisfies StudentStatusUpdatePayload,
       );
@@ -150,9 +169,36 @@ const registerJoinExamRoomHandler = (socket: Socket): void => {
   );
 };
 
+const registerTeacherRoomHandler = (socket: Socket): void => {
+  socket.on(
+    PROCTORING_EVENTS.TEACHER_JOIN_EXAM_ROOM,
+    (payload: TeacherJoinRoomPayload) => {
+      const { examId } = payload;
+      if (!examId) {
+        socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
+          message: 'examId is required',
+        });
+        return;
+      }
+      void socket.join(roomName(examId));
+      socket.emit(PROCTORING_EVENTS.EXAM_ROOM_JOINED, { examId });
+    },
+  );
+
+  socket.on(
+    PROCTORING_EVENTS.TEACHER_LEAVE_EXAM_ROOM,
+    (payload: TeacherJoinRoomPayload) => {
+      const { examId } = payload;
+      if (!examId) return;
+      void socket.leave(roomName(examId));
+    },
+  );
+};
+
 export const registerProctoringHandlers = (io: Server): void => {
   io.on('connection', (socket: Socket) => {
     registerJoinExamRoomHandler(socket);
     registerStudentWarningHandler(io, socket);
+    registerTeacherRoomHandler(socket);
   });
 };
