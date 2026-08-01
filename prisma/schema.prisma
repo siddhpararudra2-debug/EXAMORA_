@@ -72,6 +72,8 @@ model Question {
   correctAnswer String
   marks        Int
   submissions  Submission[]
+
+  @@index([examId])
 }
 
 model StudentSession {
@@ -89,6 +91,9 @@ model StudentSession {
   submittedAt   DateTime?
   submissions   Submission[]
   proctoringEvents ProctoringEvent[]
+
+  @@index([examId])
+  @@index([examId, studentEmail, enrollmentNo])
 }
 
 model ProctoringEvent {
@@ -112,4 +117,5 @@ model Submission {
   createdAt   DateTime @default(now())
 
   @@unique([sessionId, questionId])
+  @@index([sessionId])
 }

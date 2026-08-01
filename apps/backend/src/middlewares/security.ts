@@ -33,11 +33,20 @@ export const securityMiddleware = helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'", "data:", "https:"],
       objectSrc: ["'none'"],
+      frameAncestors: ["'none'"], // Clickjacking protection — the exam UI must never be iframed
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
       upgradeInsecureRequests: [],
     },
   },
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
+  referrerPolicy: { policy: "no-referrer" },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
 });
 
 /**

@@ -1,39 +1,21 @@
-import express, { Application, Request, Response, NextFunction } from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import cors from 'cors';
-import helmet from 'helmet';
 import dotenv from 'dotenv';
 
 import { connectDatabase } from './prisma/client.js';
-import authRoutes from './server/routes/auth.js';
-import studentRoutes from './server/routes/student.js';
-import { registerProctoringHandlers } from './apps/backend/src/socket/proctoring.handler.js';
-import examRoutes from './server/routes/exam.routes.js';
+import { createApp, AppBundle } from './server/app.js';
 
 // Load environment variables
 dotenv.config();
 
-const app: Application = express();
-const httpServer = createServer(app);
-
-// Socket.io initialization
-const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-});
+// Build the Express app + Socket.io server (single source of truth in server/app.ts)
+const { app, httpServer, io }: AppBundle = createApp();
 
 // Socket.io adapter (for scaling across multiple instances)
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
 
 // Redis adapter for Socket.io (when Redis is available)
-const setupRedisAdapter = async () => {
+const setupRedisAdapter = async (): Promise<void> => {
+  if (!io) return;
   if (process.env.REDIS_URL) {
     try {
       const pubClient = createClient({ url: process.env.REDIS_URL });
@@ -50,78 +32,6 @@ const setupRedisAdapter = async () => {
   }
 };
 
-import { securityMiddleware, apiRateLimiter } from './server/middleware/security.js';
-
-// Middleware configuration
-const setupMiddleware = () => {
-  // CORS - allow Next.js frontend
-  app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  }));
-
-  // Helmet with strict CSP allowing webcam media-src 'self' blob: & AI models
-  app.use(securityMiddleware);
-
-  // General API rate limiter
-  app.use('/api', apiRateLimiter);
-
-  // JSON body parsing
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-  // Health check endpoint
-  app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-
-  // API routes
-  app.use('/api/auth', authRoutes);
-  app.use('/api/exams', examRoutes);
-  app.use('/api', studentRoutes);
-};
-
-// Global error handling middleware
-interface CustomError extends Error {
-  statusCode?: number;
-  status?: string;
-}
-
-const errorHandler = (
-  err: CustomError,
-  _req: Request,
-  res: Response,
-  _next: NextFunction
-): void => {
-  const statusCode = err.statusCode || 500;
-  const status = err.status || 'error';
-
-  console.error('❌ Error:', {
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    statusCode,
-  });
-
-  res.status(statusCode).json({
-    status,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  });
-};
-
-// 404 handler
-const notFoundHandler = (_req: Request, res: Response) => {
-  res.status(404).json({
-    status: 'error',
-    message: 'Route not found',
-  });
-};
-
-app.use(notFoundHandler);
-app.use(errorHandler);
-
 // Start server
 const PORT = process.env.PORT || 4000;
 
@@ -129,18 +39,9 @@ const startServer = async (): Promise<void> => {
   try {
     // Connect to database
     await connectDatabase();
-    
-    // Setup middleware
-    setupMiddleware();
-    
+
     // Setup Socket.io adapter (Redis if available)
     await setupRedisAdapter();
-
-    // Register real-time proctoring handlers
-    registerProctoringHandlers(io);
-
-    // Store io instance for use in routes
-    (app as any).io = io;
 
     // Start HTTP server
     httpServer.listen(PORT, () => {
@@ -157,14 +58,20 @@ const startServer = async (): Promise<void> => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received. Shutting down gracefully...');
-  io.close();
-  await import('./prisma/client.js').then(m => m.default.$disconnect());
+  io?.close();
+  await import('./prisma/client.js').then((m) => m.default.$disconnect());
   httpServer.close(() => {
     console.log('Server closed');
     process.exit(0);
   });
 });
 
-startServer();
+// Only listen when executed directly (not when imported by tests)
+const isMainModule =
+  typeof require !== 'undefined' && require.main === module;
+
+if (isMainModule) {
+  startServer();
+}
 
 export { app, httpServer, io };

@@ -73,9 +73,44 @@ export const submitExamSchema = z.object({
     .min(1, 'At least one answer is required'),
 });
 
+// ── AI Question Generation ────────────────────────────────────────────────────
+
+export const aiGenerateSchema = z.object({
+  topic: z.string().min(2, 'Topic must be at least 2 characters'),
+  count: z
+    .number()
+    .int()
+    .min(1, 'Count must be at least 1')
+    .max(20, 'Count must be at most 20')
+    .optional(),
+  difficulty: z
+    .enum(['easy', 'medium', 'hard', 'Easy', 'Medium', 'Hard'])
+    .optional(),
+  type: z
+    .enum(['MCQ', 'TRUE_FALSE', 'SHORT_ANSWER'])
+    .optional(),
+});
+
+// ── Proctoring Event Logging ──────────────────────────────────────────────────
+
+export const proctoringEventSchema = z.object({
+  sessionToken: z.string().uuid('sessionToken must be a valid UUID'),
+  eventType: z.enum([
+    'TAB_SWITCH',
+    'FACE_LOST',
+    'FULLSCREEN_EXIT',
+    'MULTIPLE_FACES',
+    'PHONE_DETECTED',
+  ]),
+  reason: z.string().max(200, 'Reason must be at most 200 characters').optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
 // ── Inferred types ────────────────────────────────────────────────────────────
 
 export type CreateExamInput = z.infer<typeof createExamSchema>;
 export type SubmitExamInput = z.infer<typeof submitExamSchema>;
 export type QuestionInput = z.infer<typeof questionSchema>;
 export type SubmissionItemInput = z.infer<typeof submissionItemSchema>;
+export type AiGenerateInput = z.infer<typeof aiGenerateSchema>;
+export type ProctoringEventInput = z.infer<typeof proctoringEventSchema>;

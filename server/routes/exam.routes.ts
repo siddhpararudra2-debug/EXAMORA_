@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 
 import { requireTeacher } from '../middleware/auth.js';
+import { validateBody } from '../middleware/security.js';
 import {
   createExam,
   listExams,
@@ -13,18 +14,24 @@ import {
   publishExam,
   getSessionEvents,
 } from '../controllers/exam.controller.js';
-import { inviteBulkStudents } from '../../apps/backend/src/controllers/invite.controller.js';
 import { generateAIQuestions } from '../../apps/backend/src/controllers/ai.controller.js';
+import { inviteBulkStudents } from '../../apps/backend/src/controllers/invite.controller.js';
+import { logProctoringEvent } from '../../apps/backend/src/controllers/proctoring.controller.js';
+import {
+  createExamSchema,
+  submitExamSchema,
+  aiGenerateSchema,
+  proctoringEventSchema,
+} from '../validators/exam.js';
 
-const upload = multer({ storage: multer.memoryStorage() });
 const router = Router();
 
 /**
- * POST /api/exams/generate-questions
- * TASK 3: AI Question Generator backend route (Groq SDK llama-3.3-70b-versatile).
+ * POST /api/exams
+ * Create a new exam with questions.
  * Protected — valid teacher JWT required.
  */
-router.post('/generate-questions', requireTeacher, generateAIQuestions);
+router.post('/', requireTeacher, validateBody(createExamSchema), createExam);
 
 /**
  * GET /api/exams
@@ -34,11 +41,33 @@ router.post('/generate-questions', requireTeacher, generateAIQuestions);
 router.get('/', requireTeacher, listExams);
 
 /**
- * POST /api/exams
- * Create a new exam with questions.
+ * POST /api/exams/generate-questions
+ * Generate exam questions via Groq AI (free tier) with a built-in fallback.
  * Protected — valid teacher JWT required.
  */
-router.post('/', requireTeacher, createExam);
+router.post(
+  '/generate-questions',
+  requireTeacher,
+  validateBody(aiGenerateSchema),
+  generateAIQuestions,
+);
+
+/**
+ * POST /api/exams/:examId/invite-bulk
+ * Bulk-invite students from a CSV upload (field: "file") or JSON
+ * (body: { students: [...] }). Emails each student a personalized join link.
+ * Protected — valid teacher JWT required (owner only).
+ */
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+});
+router.post(
+  '/:examId/invite-bulk',
+  requireTeacher,
+  csvUpload.single('file'),
+  inviteBulkStudents,
+);
 
 /**
  * GET /api/exams/:id/status
@@ -59,21 +88,25 @@ router.get('/:id/student-view', getStudentView);
  * Submit answers for an exam session.
  * Public — requires a valid sessionToken in the request body.
  */
-router.post('/:id/submit', submitExam);
+router.post('/:id/submit', validateBody(submitExamSchema), submitExam);
 
 /**
- * GET /api/exams/:examId/sessions/:sessionId/events
- * TASK 1 Step 3: Fetch all ProctoringEvents for that session ordered by timestamp ascending.
- * Protected — valid teacher JWT required (owner only).
+ * POST /api/exams/:id/proctoring-event
+ * Persist a proctoring violation and enforce the 3-warning termination rule.
+ * Public — requires a valid sessionToken in the request body.
  */
-router.get('/:examId/sessions/:sessionId/events', requireTeacher, getSessionEvents);
+router.post(
+  '/:id/proctoring-event',
+  validateBody(proctoringEventSchema),
+  logProctoringEvent,
+);
 
 /**
- * POST /api/exams/:examId/invite-bulk
- * TASK 2 Step 3: Bulk Student Email Invite System (CSV parse + Nodemailer send).
+ * POST /api/exams/:id/publish
+ * Publish a DRAFT exam so students can join it.
  * Protected — valid teacher JWT required (owner only).
  */
-router.post('/:examId/invite-bulk', requireTeacher, upload.single('file'), inviteBulkStudents);
+router.post('/:id/publish', requireTeacher, publishExam);
 
 /**
  * POST /api/exams/:id/grade-all
@@ -83,11 +116,15 @@ router.post('/:examId/invite-bulk', requireTeacher, upload.single('file'), invit
 router.post('/:id/grade-all', requireTeacher, gradeAllSessions);
 
 /**
- * POST /api/exams/:id/publish
- * Publish a DRAFT exam so students can join it.
+ * GET /api/exams/:examId/sessions/:sessionId/events
+ * Fetch the proctoring event timeline for one session.
  * Protected — valid teacher JWT required (owner only).
  */
-router.post('/:id/publish', requireTeacher, publishExam);
+router.get(
+  '/:examId/sessions/:sessionId/events',
+  requireTeacher,
+  getSessionEvents,
+);
 
 /**
  * DELETE /api/exams/:id

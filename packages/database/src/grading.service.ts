@@ -11,7 +11,10 @@ export interface GradingResult {
 
 const normalize = (value: string): string => value.trim().toLowerCase();
 
-const isAnswerCorrect = (question: Question, answerText: string): boolean => {
+const isAnswerCorrect = (
+  question: Pick<Question, 'type' | 'correctAnswer'>,
+  answerText: string
+): boolean => {
   const submitted = answerText.trim();
   const correct = question.correctAnswer.trim();
 
@@ -32,6 +35,7 @@ export async function gradeSubmission(
   return prisma.$transaction(async (tx) => {
     const session = await tx.studentSession.findFirst({
       where: { id: sessionId, examId },
+      select: { id: true },
     });
 
     if (!session) {
@@ -39,8 +43,14 @@ export async function gradeSubmission(
     }
 
     const [submissions, questions] = await Promise.all([
-      tx.submission.findMany({ where: { sessionId } }),
-      tx.question.findMany({ where: { examId } }),
+      tx.submission.findMany({
+        where: { sessionId },
+        select: { questionId: true, answerText: true },
+      }),
+      tx.question.findMany({
+        where: { examId },
+        select: { id: true, type: true, correctAnswer: true, marks: true },
+      }),
     ]);
 
     const questionById = new Map(questions.map((q) => [q.id, q]));
