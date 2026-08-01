@@ -30,6 +30,14 @@ enum SessionStatus {
   GRADED
 }
 
+enum EventType {
+  TAB_SWITCH
+  FACE_LOST
+  FULLSCREEN_EXIT
+  MULTIPLE_FACES
+  PHONE_DETECTED
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -80,6 +88,18 @@ model StudentSession {
   startedAt     DateTime      @default(now())
   submittedAt   DateTime?
   submissions   Submission[]
+  proctoringEvents ProctoringEvent[]
+}
+
+model ProctoringEvent {
+  id        String        @id @default(cuid())
+  sessionId String
+  session   StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  eventType EventType
+  timestamp DateTime      @default(now())
+  metadata  Json?
+
+  @@index([sessionId, timestamp])
 }
 
 model Submission {

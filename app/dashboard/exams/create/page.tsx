@@ -50,6 +50,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { authHeaders } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
+import { AIQuestionGenerator, GeneratedQuestion } from "@/components/exams/AIQuestionGenerator";
 
 // ---------- Types & Schemas ----------
 
@@ -163,6 +164,41 @@ export default function CreateExamPage() {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [submitting, setSubmitting] = useState(false);
+  const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
+
+  const handleAIQuestionsAdded = (questions: GeneratedQuestion[]) => {
+    questions.forEach((q) => {
+      const formatted: QuestionFormValue =
+        q.type === "MCQ"
+          ? {
+              type: "MCQ",
+              questionText: q.questionText,
+              marks: q.marks || 2,
+              options: q.options && q.options.length >= 2 ? q.options : ["Option A", "Option B"],
+              correctAnswer: q.options?.[0] || "",
+            }
+          : q.type === "TRUE_FALSE"
+          ? {
+              type: "TRUE_FALSE",
+              questionText: q.questionText,
+              marks: q.marks || 1,
+              options: ["True", "False"],
+              correctAnswer: "True",
+            }
+          : {
+              type: "SHORT_ANSWER",
+              questionText: q.questionText,
+              marks: q.marks || 5,
+              options: [],
+              correctAnswer: "Model answer sample",
+            };
+      append(formatted);
+    });
+    toast({
+      title: "AI Questions Added! ✨",
+      description: `Added ${questions.length} question(s) to your exam draft.`,
+    });
+  };
 
   const form = useForm<ExamFormValues>({
     resolver: zodResolver(examSchema),
@@ -932,20 +968,33 @@ export default function CreateExamPage() {
                   );
                 })}
 
-                {/* Add question CTA */}
-                <button
-                  type="button"
-                  onClick={() => addQuestion()}
-                  className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/40 px-6 py-6 text-base font-semibold text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50/40 hover:text-indigo-700"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200 group-hover:ring-indigo-200">
-                    <Plus className="h-5 w-5" />
-                  </span>
-                  Add a question
-                  <span className="hidden rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 ring-1 ring-inset ring-slate-200 sm:inline">
-                    {fields.length} so far
-                  </span>
-                </button>
+                {/* Add question CTA & AI Question Generator CTA */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => addQuestion()}
+                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/40 px-6 py-5 text-base font-semibold text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50/40 hover:text-indigo-700"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200 group-hover:ring-indigo-200">
+                      <Plus className="h-5 w-5" />
+                    </span>
+                    Add a question
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-400 ring-1 ring-inset ring-slate-200">
+                      {fields.length} so far
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAIGeneratorOpen(true)}
+                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 px-6 py-5 text-base font-semibold text-indigo-700 transition hover:border-indigo-500 hover:bg-indigo-100/50 shadow-sm"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
+                      <Sparkles className="h-5 w-5" />
+                    </span>
+                    ✨ Generate with AI
+                  </button>
+                </div>
               </div>
 
               {errors.questions?.root?.message && (
@@ -1025,6 +1074,13 @@ export default function CreateExamPage() {
           </div>
         </form>
       </Form>
+
+      {/* AI Question Generator Modal */}
+      <AIQuestionGenerator
+        isOpen={isAIGeneratorOpen}
+        onClose={() => setIsAIGeneratorOpen(false)}
+        onAddQuestions={handleAIQuestionsAdded}
+      />
     </div>
   );
 }
