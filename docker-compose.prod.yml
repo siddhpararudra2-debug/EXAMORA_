@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: examora_postgres_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-examora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-examora_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-examora_prod}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-examora}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - examora_net
+
+  # 2. Redis Adapter & Cache
+  redis:
+    image: redis:7-alpine
+    container_name: examora_redis_prod
+    restart: always
+    volumes:
+      - redis_prod_data:/data
+    networks:
+      - examora_net
+
+  # 3. Express Node.js Backend API & Socket.io Server
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: examora_backend_prod
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-examora}:${POSTGRES_PASSWORD:-examora_secure_pass}@postgres:5432/${POSTGRES_DB:-examora_prod}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-examora_production_jwt_secret_key_2026}
+      FRONTEND_URL: http://localhost
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - examora_net
+
+  # 4. Next.js Frontend App
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: examora_frontend_prod
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_SOCKET_URL: http://localhost
+      NEXT_PUBLIC_API_URL: http://localhost/api
+    depends_on:
+      - backend
+    networks:
+      - examora_net
+
+  # 5. Nginx Reverse Proxy (Routes /api and /socket.io to backend, / to frontend)
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: examora_nginx_prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - examora_net
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
+
+networks:
+  examora_net:
+    driver: bridge

@@ -14,6 +14,7 @@ import {
   getExamForStudent,
   recordSubmissions,
 } from '../../packages/database/src/exam.service.js';
+import { gradeAllSubmissionsForExam } from '../../packages/database/src/grading.service.js';
 
 const prisma = new PrismaClient();
 
@@ -241,6 +242,51 @@ export const submitExam = async (
         message: 'Exam submitted successfully',
         submittedAt: new Date().toISOString(),
         answersRecorded: answers.length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── POST /api/exams/:id/grade-all ─────────────────────────────────────────────
+// Protected: requires valid teacher JWT (applied at the router level).
+// Grades every SUBMITTED session of the exam and persists score + GRADED status.
+
+export const gradeAllSessions = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { id: true, createdBy: true },
+    });
+
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    if (exam.createdBy !== teacher.userId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'You do not have access to this exam',
+      });
+      return;
+    }
+
+    const gradedSessions = await gradeAllSubmissionsForExam(examId);
+
+    res.json({
+      status: 'success',
+      data: {
+        message: `${gradedSessions.length} session(s) graded`,
+        gradedSessions,
       },
     });
   } catch (err) {

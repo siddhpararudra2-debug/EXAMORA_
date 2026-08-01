@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { connectDatabase } from './prisma/client.js';
 import authRoutes from './server/routes/auth.js';
 import studentRoutes from './server/routes/student.js';
+import { registerProctoringHandlers } from './apps/backend/src/socket/proctoring.handler.js';
 import examRoutes from './server/routes/exam.routes.js';
 
 // Load environment variables
@@ -49,6 +50,8 @@ const setupRedisAdapter = async () => {
   }
 };
 
+import { securityMiddleware, apiRateLimiter } from './server/middleware/security.js';
+
 // Middleware configuration
 const setupMiddleware = () => {
   // CORS - allow Next.js frontend
@@ -59,18 +62,11 @@ const setupMiddleware = () => {
     allowedHeaders: ['Content-Type', 'Authorization'],
   }));
 
-  // Helmet for security headers
-  app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'blob:'],
-      },
-    },
-    crossOriginEmbedderPolicy: false,
-  }));
+  // Helmet with strict CSP allowing webcam media-src 'self' blob: & AI models
+  app.use(securityMiddleware);
+
+  // General API rate limiter
+  app.use('/api', apiRateLimiter);
 
   // JSON body parsing
   app.use(express.json({ limit: '10mb' }));
@@ -139,6 +135,9 @@ const startServer = async (): Promise<void> => {
     
     // Setup Socket.io adapter (Redis if available)
     await setupRedisAdapter();
+
+    // Register real-time proctoring handlers
+    registerProctoringHandlers(io);
 
     // Store io instance for use in routes
     (app as any).io = io;

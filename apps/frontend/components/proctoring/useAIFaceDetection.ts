@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface UseAIFaceDetectionOptions {
-  /** Callback triggered when 0 faces or >1 face is detected */
+  /** Callback triggered when 0 faces (after grace period) or >1 face is detected */
   onViolation?: (reason: string, faceCount: number) => void;
   /** Detection interval in milliseconds. Default: 2000ms */
   intervalMs?: number;
+  /** Grace period duration in milliseconds before a missing face triggers a violation. Default: 5000ms (5 seconds) */
+  gracePeriodMs?: number;
   /** Whether AI face detection is active. Default: true */
   enabled?: boolean;
   /** Optional video element reference if an external stream is provided */
@@ -96,14 +98,16 @@ function loadScript(src: string): Promise<void> {
 }
 
 /**
- * Task 1: Client-Side AI Face Detection Hook for Examora.
+ * Task 1 & Task 2: Client-Side AI Face Detection Hook for Examora.
  * Runs MediaPipe/BlazeFace face detection every 2000ms.
- * Triggers onViolation if 0 faces or >1 face is detected.
+ * Includes a 5-Second Grace Period for missing face detection to eliminate false positives.
+ * Triggers onViolation if face remains missing for >5s OR if >1 face is detected.
  * Manages model disposal and webcam track cleanup on unmount.
  */
 export function useAIFaceDetection({
   onViolation,
   intervalMs = 2000,
+  gracePeriodMs = 5000,
   enabled = true,
   externalVideoRef,
 }: UseAIFaceDetectionOptions = {}): UseAIFaceDetectionReturn {
@@ -119,6 +123,7 @@ export function useAIFaceDetection({
   const onViolationRef = useRef(onViolation);
   const streamRef = useRef<MediaStream | null>(null);
   const isDetectingRef = useRef<boolean>(false);
+  const noFaceStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     onViolationRef.current = onViolation;
@@ -206,7 +211,7 @@ export function useAIFaceDetection({
     };
   }, [enabled, videoRef]);
 
-  // Step 3 & Step 4: Run face detection every intervalMs (2000ms)
+  // Step 3 & Step 4: Run face detection every intervalMs with 5-Second Grace Period
   useEffect(() => {
     if (!enabled || isModelLoading || modelError || typeof window === "undefined") return;
 
@@ -224,12 +229,31 @@ export function useAIFaceDetection({
 
         setFaceCount(count);
 
-        // Step 4: Violation logic (0 faces OR >1 face)
+        // 5-Second Grace Period Logic
         if (count === 0) {
-          if (onViolationRef.current) {
-            onViolationRef.current("No face detected in camera view", 0);
+          const now = Date.now();
+          if (noFaceStartTimeRef.current === null) {
+            noFaceStartTimeRef.current = now;
           }
+
+          const missingDurationMs = now - noFaceStartTimeRef.current;
+
+          // Only trigger violation after full 5-second grace period expires
+          if (missingDurationMs >= gracePeriodMs) {
+            if (onViolationRef.current) {
+              onViolationRef.current(
+                `No face detected for over ${Math.round(gracePeriodMs / 1000)} seconds`,
+                0
+              );
+            }
+            noFaceStartTimeRef.current = null; // Reset grace period timer after violation
+          }
+        } else if (count === 1) {
+          // Face restored / single face verified — reset missing face timer
+          noFaceStartTimeRef.current = null;
         } else if (count > 1) {
+          // Multiple faces detected — reset missing face timer & trigger violation immediately
+          noFaceStartTimeRef.current = null;
           if (onViolationRef.current) {
             onViolationRef.current(`Multiple faces detected (${count} faces)`, count);
           }
@@ -244,7 +268,7 @@ export function useAIFaceDetection({
     return () => {
       clearInterval(intervalId);
     };
-  }, [enabled, isModelLoading, modelError, intervalMs, videoRef]);
+  }, [enabled, isModelLoading, modelError, intervalMs, gracePeriodMs, videoRef]);
 
   return {
     faceCount,

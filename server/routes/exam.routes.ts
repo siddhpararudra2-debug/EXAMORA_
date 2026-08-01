@@ -5,6 +5,7 @@ import {
   createExam,
   getStudentView,
   submitExam,
+  gradeAllSessions,
 } from '../controllers/exam.controller.js';
 
 const router = Router();
@@ -29,5 +30,12 @@ router.get('/:id/student-view', getStudentView);
  * Public — requires a valid sessionToken in the request body.
  */
 router.post('/:id/submit', submitExam);
+
+/**
+ * POST /api/exams/:id/grade-all
+ * Grade every SUBMITTED session of an exam.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.post('/:id/grade-all', requireTeacher, gradeAllSessions);
 
 export default router;

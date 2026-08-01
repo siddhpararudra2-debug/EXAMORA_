@@ -1,8 +1,19 @@
-import { Router } from 'express';
-import { joinExam } from '../controllers/student.js';
+import { Router } from "express";
+import { joinExam } from "../controllers/student.js";
+import { studentJoinRateLimiter, validateBody } from "../middleware/security.js";
+import { joinExamSchema } from "../validators/student.js";
 
 const router = Router();
 
-router.post('/exams/:examId/join', joinExam);
+/**
+ * POST /api/exams/:examId/join
+ * Join an exam session with strict rate limiting (10 req/min/IP) and Zod validation.
+ */
+router.post(
+  "/exams/:examId/join",
+  studentJoinRateLimiter,
+  validateBody(joinExamSchema),
+  joinExam
+);
 
 export default router;
