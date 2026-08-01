@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { authHeaders } from "@/lib/auth-token";
 
 type ExamStatus = "DRAFT" | "ACTIVE" | "COMPLETED";
 
@@ -126,7 +127,10 @@ export default function DashboardHomePage() {
   const loadExams = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/exams", { credentials: "include" });
+      const res = await fetch("/api/exams", {
+        credentials: "include",
+        headers: { ...authHeaders() },
+      });
       if (res.ok) {
         const payload = (await res.json()) as {
           data: { exams: ExamListItem[] };
@@ -151,6 +155,7 @@ export default function DashboardHomePage() {
       const res = await fetch(`/api/exams/${deleteTarget.id}`, {
         method: "DELETE",
         credentials: "include",
+        headers: { ...authHeaders() },
       });
       if (res.ok) {
         setExams((prev) => prev.filter((e) => e.id !== deleteTarget.id));

@@ -9,6 +9,7 @@ import {
   submitExam,
   gradeAllSessions,
   deleteExam,
+  publishExam,
 } from '../controllers/exam.controller.js';
 
 const router = Router();
@@ -54,6 +55,13 @@ router.post('/:id/submit', submitExam);
  * Protected — valid teacher JWT required (owner only).
  */
 router.post('/:id/grade-all', requireTeacher, gradeAllSessions);
+
+/**
+ * POST /api/exams/:id/publish
+ * Publish a DRAFT exam so students can join it.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.post('/:id/publish', requireTeacher, publishExam);
 
 /**
  * DELETE /api/exams/:id

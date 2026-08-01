@@ -48,6 +48,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { authHeaders } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
 
 // ---------- Types & Schemas ----------
@@ -316,14 +317,16 @@ export default function CreateExamPage() {
 
       const res = await fetch("/api/exams", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         credentials: "include",
         body: JSON.stringify(payload),
       });
       const json = (await res.json().catch(() => ({}))) as {
+        status?: string;
         ok?: boolean;
         examId?: string;
         message?: string;
+        data?: { exam?: { id?: string } };
       };
 
       if (!res.ok) {
@@ -342,10 +345,7 @@ export default function CreateExamPage() {
         description: `"${payload.title}" has been saved to your dashboard.`,
       });
 
-      const destination = json?.examId
-        ? `/dashboard/exams/${json.examId}`
-        : "/dashboard";
-      router.push(destination);
+      router.push("/dashboard");
       router.refresh();
     } catch (err) {
       // Demo-friendly fallback: show toast + redirect even without backend

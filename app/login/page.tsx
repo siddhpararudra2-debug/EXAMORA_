@@ -35,6 +35,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { setAuthToken } from "@/lib/auth-token";
 
 const loginSchema = z.object({
   email: z
@@ -90,9 +91,11 @@ export default function TeacherLoginPage() {
         body: JSON.stringify(data),
       });
       const result = (await res.json().catch(() => ({}))) as {
+        status?: string;
         message?: string;
         ok?: boolean;
         teacher?: { id: string; name: string; email: string };
+        data?: { user: { id: string; name: string; email: string }; token: string };
       };
 
       if (!res.ok) {
@@ -104,12 +107,22 @@ export default function TeacherLoginPage() {
         return;
       }
 
-      toast({
-        title: "Signed in",
-        description: result.teacher
-          ? `Welcome back, ${result.teacher.name}.`
-          : "Redirecting to your dashboard.",
-      });
+      if (result?.data?.token) {
+        setAuthToken(result.data.token);
+        toast({
+          title: "Signed in",
+          description: result.data.user?.name
+            ? `Welcome back, ${result.data.user.name}.`
+            : "Redirecting to your dashboard.",
+        });
+      } else {
+        toast({
+          title: "Signed in",
+          description: result.teacher
+            ? `Welcome back, ${result.teacher.name}.`
+            : "Redirecting to your dashboard.",
+        });
+      }
 
       router.push("/dashboard");
       router.refresh();

@@ -357,6 +357,65 @@ export const getExamStatus = async (
   }
 };
 
+// ── POST /api/exams/:id/publish ───────────────────────────────────────────────
+// Protected: requires valid teacher JWT (applied at the router level). Owner only.
+// Transitions a DRAFT exam to ACTIVE so students can join it.
+
+export const publishExam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { id: true, title: true, status: true, createdBy: true },
+    });
+
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    if (exam.createdBy !== teacher.userId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'You do not have access to this exam',
+      });
+      return;
+    }
+
+    if (exam.status === 'COMPLETED') {
+      res.status(409).json({
+        status: 'error',
+        message: 'Completed exams cannot be republished',
+      });
+      return;
+    }
+
+    if (exam.status === 'ACTIVE') {
+      res.json({
+        status: 'success',
+        data: { exam: { id: exam.id, status: exam.status } },
+      });
+      return;
+    }
+
+    const published = await prisma.exam.update({
+      where: { id: examId },
+      data: { status: 'ACTIVE' },
+      select: { id: true, status: true },
+    });
+
+    res.json({ status: 'success', data: { exam: published } });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ── DELETE /api/exams/:id ─────────────────────────────────────────────────────
 // Protected: requires valid teacher JWT (applied at the router level).
 // Deletes the exam and its questions/sessions/submissions (cascade). Owner only.
