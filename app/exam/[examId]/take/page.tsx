@@ -25,12 +25,12 @@ import {
   getSocket,
 } from "@/lib/socket";
 
-type QuestionType = "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER";
+type QuestionType = "MCQ_SINGLE" | "TRUE_FALSE" | "SHORT_ANSWER";
 
 interface ExamQuestion {
   id: string;
   type: QuestionType;
-  questionText: string;
+  question_text: string;
   options?: string[];
   marks: number;
 }
@@ -39,7 +39,7 @@ interface ExamData {
   id: string;
   title: string;
   description?: string | null;
-  durationMinutes: number;
+  duration_minutes: number;
   questions: ExamQuestion[];
   warningsLimit: number;
 }
@@ -68,21 +68,21 @@ function mockExamData(examId: string): ExamData {
     title: "Midterm Examination — Introduction to Computer Science",
     description:
       "Covers chapters 1–5. Read each question carefully. Switching tabs will be logged as a proctoring violation.",
-    durationMinutes: 60,
+    duration_minutes: 60,
     warningsLimit: DEFAULT_WARNINGS_LIMIT,
     questions: [
       {
         id: "q1",
-        type: "MCQ",
-        questionText:
+        type: "MCQ_SINGLE",
+        question_text:
           "Which of the following data structures uses LIFO (Last-In, First-Out) ordering?",
         options: ["Queue", "Stack", "Linked List", "Binary Search Tree"],
         marks: 2,
       },
       {
         id: "q2",
-        type: "MCQ",
-        questionText:
+        type: "MCQ_SINGLE",
+        question_text:
           "What is the time complexity of binary search on a sorted array of size N?",
         options: ["O(N)", "O(N log N)", "O(log N)", "O(1)"],
         marks: 2,
@@ -90,7 +90,7 @@ function mockExamData(examId: string): ExamData {
       {
         id: "q3",
         type: "TRUE_FALSE",
-        questionText:
+        question_text:
           "True or False: HTTP is a stateless application-layer protocol.",
         options: ["True", "False"],
         marks: 1,
@@ -98,14 +98,14 @@ function mockExamData(examId: string): ExamData {
       {
         id: "q4",
         type: "SHORT_ANSWER",
-        questionText:
+        question_text:
           "In 2–4 sentences, explain the difference between process and thread. Mention at least one context where threads are preferred.",
         marks: 5,
       },
       {
         id: "q5",
-        type: "MCQ",
-        questionText:
+        type: "MCQ_SINGLE",
+        question_text:
           "Which sorting algorithm has the best average-case time complexity?",
         options: ["Bubble Sort", "Selection Sort", "Merge Sort", "Insertion Sort"],
         marks: 2,
@@ -113,7 +113,7 @@ function mockExamData(examId: string): ExamData {
       {
         id: "q6",
         type: "SHORT_ANSWER",
-        questionText:
+        question_text:
           "Define Big-O notation. What is the Big-O of the following loop?\n\nfor (int i = 0; i < n; i *= 2) { print(i); }",
         marks: 5,
       },
@@ -207,25 +207,36 @@ export default function TakeExamPage() {
             }
             if (res.ok) {
               const payload = (await res.json()) as {
-                exam: ExamData;
-                session: {
+                data?: {
+                  exam?: ExamData;
+                  session?: {
+                    id: string;
+                    studentName: string;
+                    startedAt?: string;
+                    warningsCount?: number;
+                  };
+                };
+                exam?: ExamData;
+                session?: {
                   id: string;
                   studentName: string;
                   startedAt?: string;
                   warningsCount?: number;
                 };
               };
-              if (!canceled) {
+              const serverExam = payload.data?.exam ?? payload.exam;
+              const serverSession = payload.data?.session ?? payload.session;
+              if (!canceled && serverExam && serverSession) {
                 examData = {
-                  ...payload.exam,
+                  ...serverExam,
                   warningsLimit:
-                    payload.exam.warningsLimit ?? DEFAULT_WARNINGS_LIMIT,
+                    serverExam.warningsLimit ?? DEFAULT_WARNINGS_LIMIT,
                 };
                 sessionData = {
-                  id: payload.session.id,
-                  sessionId: payload.session.id,
+                  id: serverSession.id,
+                  sessionId: serverSession.id,
                   sessionToken: initialSessionToken,
-                  studentName: payload.session.studentName,
+                  studentName: serverSession.studentName,
                 };
               }
             }
@@ -240,7 +251,7 @@ export default function TakeExamPage() {
         if (!canceled) {
           setExam(examData);
           setSession(sessionData);
-          setTimeLeft(examData.durationMinutes * 60);
+          setTimeLeft(examData.duration_minutes * 60);
         }
       } finally {
         if (!canceled) setLoading(false);
@@ -778,7 +789,7 @@ export default function TakeExamPage() {
                       <span
                         className={cn(
                           "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                          currentQuestion.type === "MCQ" &&
+                          currentQuestion.type === "MCQ_SINGLE" &&
                             "bg-indigo-50 text-indigo-700",
                           currentQuestion.type === "TRUE_FALSE" &&
                             "bg-sky-50 text-sky-700",
@@ -786,7 +797,7 @@ export default function TakeExamPage() {
                             "bg-emerald-50 text-emerald-700"
                         )}
                       >
-                        {currentQuestion.type === "MCQ"
+                        {currentQuestion.type === "MCQ_SINGLE"
                           ? "Multiple choice"
                           : currentQuestion.type === "TRUE_FALSE"
                           ? "True / False"
@@ -801,11 +812,11 @@ export default function TakeExamPage() {
                 </div>
 
                 <h2 className="text-2xl font-semibold leading-relaxed tracking-tight text-slate-900 whitespace-pre-wrap sm:text-3xl">
-                  {currentQuestion.questionText}
+                  {currentQuestion.question_text}
                 </h2>
 
                 {/* MCQ / True-False */}
-                {(currentQuestion.type === "MCQ" ||
+                {(currentQuestion.type === "MCQ_SINGLE" ||
                   currentQuestion.type === "TRUE_FALSE") && (
                   <div className="flex flex-col gap-3">
                     {(currentQuestion.options ?? []).map((option, i) => {

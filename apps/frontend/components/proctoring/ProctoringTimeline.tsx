@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   EyeOff,
   Maximize2,
-  Users,
   Smartphone,
   Clock,
   Info,
@@ -13,16 +12,19 @@ import {
 
 export type ProctoringEventType =
   | "TAB_SWITCH"
-  | "FACE_LOST"
-  | "FULLSCREEN_EXIT"
-  | "MULTIPLE_FACES"
-  | "PHONE_DETECTED"
+  | "APP_SWITCH"
+  | "MINIMIZE"
+  | "MOBILE_BUTTON"
+  | "AI_OVERLAY"
+  | "DEVTOOLS"
+  | "SCREEN_CAPTURE"
+  | "KEYBOARD_SHORTCUT"
   | string;
 
 export interface ProctoringEvent {
   id: string;
   type: ProctoringEventType;
-  timestamp: string; // ISO date string
+  occurred_at: string; // ISO date string
   description?: string;
   metadata?: Record<string, unknown>;
 }
@@ -45,37 +47,61 @@ export function getEventConfig(type: string) {
         icon: AlertTriangle,
         textColor: "text-amber-700",
       };
-    case "FACE_LOST":
+    case "APP_SWITCH":
       return {
-        label: "Face Lost",
+        label: "App Switch",
         dotColor: "bg-orange-500 border-orange-700 ring-orange-200",
         badgeBg: "bg-orange-50 text-orange-800 border-orange-200",
         icon: EyeOff,
         textColor: "text-orange-700",
       };
-    case "FULLSCREEN_EXIT":
+    case "MINIMIZE":
       return {
-        label: "Fullscreen Exit",
+        label: "Window Minimized",
+        dotColor: "bg-yellow-500 border-yellow-700 ring-yellow-200",
+        badgeBg: "bg-yellow-50 text-yellow-800 border-yellow-200",
+        icon: Maximize2,
+        textColor: "text-yellow-700",
+      };
+    case "MOBILE_BUTTON":
+      return {
+        label: "Mobile Button Pressed",
+        dotColor: "bg-purple-600 border-purple-800 ring-purple-200",
+        badgeBg: "bg-purple-50 text-purple-800 border-purple-200",
+        icon: Smartphone,
+        textColor: "text-purple-700",
+      };
+    case "AI_OVERLAY":
+      return {
+        label: "AI Overlay Detected",
+        dotColor: "bg-indigo-600 border-indigo-800 ring-indigo-200",
+        badgeBg: "bg-indigo-50 text-indigo-800 border-indigo-200",
+        icon: EyeOff,
+        textColor: "text-indigo-700",
+      };
+    case "DEVTOOLS":
+      return {
+        label: "DevTools Opened",
         dotColor: "bg-red-600 border-red-800 ring-red-200",
         badgeBg: "bg-red-50 text-red-800 border-red-200",
         icon: Maximize2,
         textColor: "text-red-700",
       };
-    case "MULTIPLE_FACES":
+    case "SCREEN_CAPTURE":
       return {
-        label: "Multiple Faces Detected",
-        dotColor: "bg-purple-600 border-purple-800 ring-purple-200",
-        badgeBg: "bg-purple-50 text-purple-800 border-purple-200",
-        icon: Users,
-        textColor: "text-purple-700",
+        label: "Screen Capture",
+        dotColor: "bg-rose-600 border-rose-800 ring-rose-200",
+        badgeBg: "bg-rose-50 text-rose-800 border-rose-200",
+        icon: EyeOff,
+        textColor: "text-rose-700",
       };
-    case "PHONE_DETECTED":
+    case "KEYBOARD_SHORTCUT":
       return {
-        label: "Phone Detected",
-        dotColor: "bg-purple-600 border-purple-800 ring-purple-200",
-        badgeBg: "bg-purple-50 text-purple-800 border-purple-200",
-        icon: Smartphone,
-        textColor: "text-purple-700",
+        label: "Suspicious Keyboard Shortcut",
+        dotColor: "bg-sky-500 border-sky-700 ring-sky-200",
+        badgeBg: "bg-sky-50 text-sky-800 border-sky-200",
+        icon: AlertTriangle,
+        textColor: "text-sky-700",
       };
     default:
       return {
@@ -134,13 +160,10 @@ export function ProctoringTimeline({
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400 border border-amber-600" /> Tab Switch
           </span>
           <span className="flex items-center gap-1.5 text-slate-700">
-            <span className="h-2.5 w-2.5 rounded-full bg-orange-500 border border-orange-700" /> Face Lost
+            <span className="h-2.5 w-2.5 rounded-full bg-red-600 border border-red-800" /> DevTools
           </span>
           <span className="flex items-center gap-1.5 text-slate-700">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-600 border border-red-800" /> Fullscreen Exit
-          </span>
-          <span className="flex items-center gap-1.5 text-slate-700">
-            <span className="h-2.5 w-2.5 rounded-full bg-purple-600 border border-purple-800" /> Multiple Faces / Phone
+            <span className="h-2.5 w-2.5 rounded-full bg-purple-600 border border-purple-800" /> Mobile / AI / Capture
           </span>
         </div>
       </div>
@@ -160,7 +183,7 @@ export function ProctoringTimeline({
 
         {/* Timeline Event Dots */}
         {events.map((evt) => {
-          const eventTimeMs = new Date(evt.timestamp).getTime();
+          const eventTimeMs = new Date(evt.occurred_at).getTime();
           const diffMs = eventTimeMs - startTimeMs;
           const percentage = Math.max(0, Math.min(100, (diffMs / totalDurationMs) * 100));
           const config = getEventConfig(evt.type);

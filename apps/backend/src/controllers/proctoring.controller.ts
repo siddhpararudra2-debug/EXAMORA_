@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, SessionStatus, EventType } from '@prisma/client';
+import { PrismaClient, SubmissionStatus, ViolationType } from '@prisma/client';
 import { MAX_WARNINGS } from '../socket/proctoring.handler.js';
 
 const prisma = new PrismaClient();
 
 export interface LogProctoringEventBody {
   sessionToken: string;
-  eventType: EventType | string;
+  eventType: ViolationType | string;
   reason?: string;
   metadata?: Record<string, unknown>;
 }
@@ -15,10 +15,10 @@ export interface LogProctoringEventBody {
  * POST /api/exams/:id/proctoring-event
  * Public route — authenticated by the anonymous student session token.
  *
- * Persists a ProctoringEvent for the session and enforces the 3-warning rule:
- * every event increments warningsCount; at MAX_WARNINGS the session is
- * automatically TERMINATED (mirrors the Socket.io handler for REST-only
- * clients that cannot maintain a socket connection).
+ * Persists a Violation for the session and enforces the 3-warning rule:
+ * every violation is counted; at MAX_WARNINGS the session is automatically
+ * TERMINATED (mirrors the Socket.io handler for REST-only clients that
+ * cannot maintain a socket connection).
  */
 export const logProctoringEvent = async (
   req: Request,
@@ -29,9 +29,9 @@ export const logProctoringEvent = async (
     const { id: examId } = req.params;
     const { sessionToken, eventType, reason, metadata }: LogProctoringEventBody = req.body;
 
-    const session = await prisma.studentSession.findFirst({
-      where: { sessionToken, examId },
-      select: { id: true, warningsCount: true, status: true },
+    const session = await prisma.examSession.findFirst({
+      where: { session_token: sessionToken, exam_id: examId },
+      select: { id: true, status: true },
     });
 
     if (!session) {
@@ -39,7 +39,7 @@ export const logProctoringEvent = async (
       return;
     }
 
-    if (session.status !== SessionStatus.ACTIVE) {
+    if (session.status !== SubmissionStatus.IN_PROGRESS) {
       res.status(400).json({
         status: 'error',
         message: `Session is already ${session.status.toLowerCase()}`,
@@ -47,32 +47,31 @@ export const logProctoringEvent = async (
       return;
     }
 
-    const normalizedType = mapEventType(eventType, reason);
+    const normalizedType = mapViolationType(eventType, reason);
 
-    const event = await prisma.proctoringEvent.create({
+    const event = await prisma.violation.create({
       data: {
-        sessionId: session.id,
-        eventType: normalizedType,
+        session_id: session.id,
+        type: normalizedType,
+        description: reason ?? 'Proctoring violation',
         metadata: {
           reason: reason ?? 'Proctoring violation',
           ...(metadata ?? {}),
         },
       },
-      select: { id: true, eventType: true, timestamp: true },
+      select: { id: true, type: true, occurred_at: true },
     });
 
-    const updated = await prisma.studentSession.update({
-      where: { id: session.id },
-      data: { warningsCount: { increment: 1 } },
-      select: { id: true, warningsCount: true },
+    const warningsCount = await prisma.violation.count({
+      where: { session_id: session.id },
     });
 
-    const terminated = updated.warningsCount >= MAX_WARNINGS;
+    const terminated = warningsCount >= MAX_WARNINGS;
 
     if (terminated) {
-      await prisma.studentSession.update({
+      await prisma.examSession.update({
         where: { id: session.id },
-        data: { status: SessionStatus.TERMINATED, submittedAt: new Date() },
+        data: { status: SubmissionStatus.TERMINATED, submitted_at: new Date() },
         select: { id: true },
       });
     }
@@ -80,8 +79,12 @@ export const logProctoringEvent = async (
     res.status(201).json({
       status: 'success',
       data: {
-        event,
-        warningsCount: updated.warningsCount,
+        event: {
+          id: event.id,
+          type: event.type,
+          occurred_at: event.occurred_at,
+        },
+        warningsCount,
         warningsLimit: MAX_WARNINGS,
         terminated,
         reason,
@@ -92,14 +95,17 @@ export const logProctoringEvent = async (
   }
 };
 
-/** Maps arbitrary event type strings to the Prisma EventType enum. */
-function mapEventType(typeStr: EventType | string | undefined, reason?: string): EventType {
+/** Maps arbitrary event type strings to the Prisma ViolationType enum. */
+function mapViolationType(typeStr: ViolationType | string | undefined, reason?: string): ViolationType {
   const lowerReason = reason?.toLowerCase() ?? '';
   const type = (typeStr ?? '').toUpperCase();
 
-  if (type === 'FACE_LOST' || (!type && lowerReason.includes('face lost'))) return EventType.FACE_LOST;
-  if (type === 'FULLSCREEN_EXIT' || (!type && lowerReason.includes('fullscreen'))) return EventType.FULLSCREEN_EXIT;
-  if (type === 'MULTIPLE_FACES' || (!type && lowerReason.includes('multiple faces'))) return EventType.MULTIPLE_FACES;
-  if (type === 'PHONE_DETECTED' || (!type && lowerReason.includes('phone'))) return EventType.PHONE_DETECTED;
-  return EventType.TAB_SWITCH;
+  if (type === 'FACE_LOST' || type === 'AI_OVERLAY' || (!type && lowerReason.includes('face lost'))) return ViolationType.AI_OVERLAY;
+  if (type === 'FULLSCREEN_EXIT' || type === 'MINIMIZE' || (!type && lowerReason.includes('fullscreen'))) return ViolationType.MINIMIZE;
+  if (type === 'MULTIPLE_FACES' || (!type && lowerReason.includes('multiple faces'))) return ViolationType.SCREEN_CAPTURE;
+  if (type === 'PHONE_DETECTED' || type === 'APP_SWITCH' || (!type && lowerReason.includes('phone'))) return ViolationType.APP_SWITCH;
+  if (type === 'MOBILE_BUTTON') return ViolationType.MOBILE_BUTTON;
+  if (type === 'DEVTOOLS') return ViolationType.DEVTOOLS;
+  if (type === 'KEYBOARD_SHORTCUT') return ViolationType.KEYBOARD_SHORTCUT;
+  return ViolationType.TAB_SWITCH;
 }

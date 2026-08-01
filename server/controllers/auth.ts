@@ -26,8 +26,8 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
     const { name, email, password } = validation.data!;
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    // Check if teacher already exists
+    const existingUser = await prisma.teacher.findUnique({ where: { email } });
     if (existingUser) {
       res.status(409).json({ status: 'error', message: 'Email already registered' });
       return;
@@ -36,10 +36,10 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user (teacher)
-    const user = await prisma.user.create({
-      data: { name, email, passwordHash: hashedPassword },
-      select: { id: true, name: true, email: true, createdAt: true },
+    // Create teacher
+    const user = await prisma.teacher.create({
+      data: { name, email, password_hash: hashedPassword },
+      select: { id: true, name: true, email: true, created_at: true },
     });
 
     // Generate JWT
@@ -68,15 +68,15 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     const { email, password } = validation.data!;
 
-    // Find user
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    // Find teacher
+    const user = await prisma.teacher.findUnique({ where: { email } });
+    if (!user || !user.password_hash) {
       res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       return;
     }
 
     // Verify password
-    const isValid = await bcrypt.compare(password, user.passwordHash);
+    const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
       res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       return;

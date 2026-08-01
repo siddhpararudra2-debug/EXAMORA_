@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "declaration": false,
+    "isolatedModules": true,
+    "types": ["node"]
+  },
+  "include": [
+    "server.ts",
+    "server/**/*.ts",
+    "apps/backend/src/**/*.ts",
+    "packages/database/src/**/*.ts",
+    "prisma/client.ts"
+  ],
+  "exclude": ["node_modules", "dist", "apps/backend/tests", "e2e"]
+}

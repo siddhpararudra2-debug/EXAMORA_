@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, SessionStatus, ExamStatus } from '@prisma/client';
+import { PrismaClient, SubmissionStatus, ExamStatus } from '@prisma/client';
 import { ZodType, ZodTypeDef } from 'zod';
 
 import { AuthenticatedRequest } from '../middleware/auth.js';
@@ -96,8 +96,8 @@ export const getStudentView = async (
     }
 
     // Validate the session belongs to this exam and is still active
-    const session = await prisma.studentSession.findFirst({
-      where: { sessionToken, examId },
+    const session = await prisma.examSession.findFirst({
+      where: { session_token: sessionToken, exam_id: examId },
     });
 
     if (!session) {
@@ -108,7 +108,7 @@ export const getStudentView = async (
       return;
     }
 
-    if (session.status === SessionStatus.SUBMITTED || session.status === SessionStatus.TERMINATED) {
+    if (session.status === SubmissionStatus.SUBMITTED || session.status === SubmissionStatus.TERMINATED) {
       res.status(403).json({
         status: 'error',
         message: `Exam session is already ${session.status.toLowerCase()}`,
@@ -131,15 +131,19 @@ export const getStudentView = async (
       return;
     }
 
+    const warningsCount = await prisma.violation.count({
+      where: { session_id: session.id },
+    });
+
     res.json({
       status: 'success',
       data: {
         exam,
         session: {
           id: session.id,
-          studentName: session.studentName,
-          startedAt: session.startedAt,
-          warningsCount: session.warningsCount,
+          studentName: session.student_name,
+          startedAt: session.started_at,
+          warningsCount,
         },
       },
     });
@@ -170,8 +174,8 @@ export const submitExam = async (
     const { sessionToken, answers } = parsed.data;
 
     // Validate session
-    const session = await prisma.studentSession.findFirst({
-      where: { sessionToken, examId },
+    const session = await prisma.examSession.findFirst({
+      where: { session_token: sessionToken, exam_id: examId },
     });
 
     if (!session) {
@@ -182,7 +186,7 @@ export const submitExam = async (
       return;
     }
 
-    if (session.status !== SessionStatus.ACTIVE) {
+    if (session.status !== SubmissionStatus.IN_PROGRESS) {
       res.status(400).json({
         status: 'error',
         message: `Cannot submit — session is already ${session.status.toLowerCase()}`,
@@ -217,21 +221,21 @@ export const submitExam = async (
     // Persist submissions + mark session SUBMITTED in a single transaction
     await prisma.$transaction(async (tx) => {
       // Write answers (skipDuplicates handles accidental re-submission of same Q)
-      await tx.submission.createMany({
+      await tx.answer.createMany({
         data: answers.map(({ questionId, answerText }) => ({
-          sessionId: session.id,
-          questionId,
-          answerText,
+          session_id: session.id,
+          question_id: questionId,
+          answer_text: answerText,
         })),
         skipDuplicates: true,
       });
 
       // Close the session
-      await tx.studentSession.update({
+      await tx.examSession.update({
         where: { id: session.id },
         data: {
-          status: SessionStatus.SUBMITTED,
-          submittedAt: new Date(),
+          status: SubmissionStatus.SUBMITTED,
+          submitted_at: new Date(),
         },
       });
     });
@@ -264,7 +268,7 @@ export const gradeAllSessions = async (
 
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { id: true, createdBy: true },
+      select: { id: true, created_by: true },
     });
 
     if (!exam) {
@@ -272,7 +276,7 @@ export const gradeAllSessions = async (
       return;
     }
 
-    if (exam.createdBy !== teacher.userId) {
+    if (exam.created_by !== teacher.userId) {
       res.status(403).json({
         status: 'error',
         message: 'You do not have access to this exam',
@@ -307,8 +311,8 @@ export const listExams = async (
     const { teacher } = req as AuthenticatedRequest;
 
     const exams = await prisma.exam.findMany({
-      where: { createdBy: teacher.userId },
-      orderBy: { createdAt: 'desc' },
+      where: { created_by: teacher.userId },
+      orderBy: { created_at: 'desc' },
       include: {
         _count: { select: { questions: true, sessions: true } },
       },
@@ -372,7 +376,7 @@ export const publishExam = async (
 
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { id: true, title: true, status: true, createdBy: true },
+      select: { id: true, title: true, status: true, created_by: true },
     });
 
     if (!exam) {
@@ -380,7 +384,7 @@ export const publishExam = async (
       return;
     }
 
-    if (exam.createdBy !== teacher.userId) {
+    if (exam.created_by !== teacher.userId) {
       res.status(403).json({
         status: 'error',
         message: 'You do not have access to this exam',
@@ -431,7 +435,7 @@ export const deleteExam = async (
 
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { id: true, createdBy: true },
+      select: { id: true, created_by: true },
     });
 
     if (!exam) {
@@ -439,7 +443,7 @@ export const deleteExam = async (
       return;
     }
 
-    if (exam.createdBy !== teacher.userId) {
+    if (exam.created_by !== teacher.userId) {
       res.status(403).json({
         status: 'error',
         message: 'You do not have access to this exam',
@@ -460,7 +464,7 @@ export const deleteExam = async (
 
 // ── GET /api/exams/:examId/sessions/:sessionId/events ───────────────────────────
 // Protected: requires valid teacher JWT (applied at router level).
-// Returns all ProctoringEvents for that session, ordered by timestamp ascending.
+// Returns all Violations for that session, ordered by occurred_at ascending.
 
 export const getSessionEvents = async (
   req: Request,
@@ -471,10 +475,10 @@ export const getSessionEvents = async (
     const { teacher } = req as AuthenticatedRequest;
     const { examId, sessionId } = req.params;
 
-    const session = await prisma.studentSession.findFirst({
-      where: { id: sessionId, examId },
+    const session = await prisma.examSession.findFirst({
+      where: { id: sessionId, exam_id: examId },
       include: {
-        exam: { select: { createdBy: true } },
+        exam: { select: { created_by: true } },
       },
     });
 
@@ -483,19 +487,115 @@ export const getSessionEvents = async (
       return;
     }
 
-    if (session.exam.createdBy !== teacher.userId) {
+    if (session.exam.created_by !== teacher.userId) {
       res.status(403).json({ status: 'error', message: 'Access denied' });
       return;
     }
 
-    const events = await prisma.proctoringEvent.findMany({
-      where: { sessionId },
-      orderBy: { timestamp: 'asc' },
+    const events = await prisma.violation.findMany({
+      where: { session_id: sessionId },
+      orderBy: { occurred_at: 'asc' },
     });
 
     res.json({
       status: 'success',
       data: { events },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── GET /api/exams/:examId/results ────────────────────────────────────────────
+// Protected: requires valid teacher JWT (applied at router level). Owner only.
+// Returns graded sessions (SUBMITTED / AUTO_SUBMITTED) with per-question answers
+// plus the question paper, so the results dashboard can render analytics, the
+// distribution histogram and per-student answer sheets.
+
+const GRADED_STATUSES = [SubmissionStatus.SUBMITTED, SubmissionStatus.AUTO_SUBMITTED];
+
+export const getExamResults = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { examId } = req.params;
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { id: true, title: true, created_by: true },
+    });
+
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    if (exam.created_by !== teacher.userId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'You do not have access to this exam',
+      });
+      return;
+    }
+
+    const [sessions, questions] = await Promise.all([
+      prisma.examSession.findMany({
+        where: { exam_id: examId, status: { in: GRADED_STATUSES } },
+        select: {
+          id: true,
+          student_name: true,
+          enrollment_number: true,
+          student_email: true,
+          status: true,
+          submitted_at: true,
+          total_score: true,
+          percentage: true,
+          answers: {
+            select: {
+              question_id: true,
+              answer_text: true,
+              is_correct: true,
+              marks_awarded: true,
+            },
+            orderBy: { created_at: 'asc' },
+          },
+        },
+        orderBy: { student_name: 'asc' },
+      }),
+      prisma.question.findMany({
+        where: { exam_id: examId },
+        select: {
+          id: true,
+          question_text: true,
+          type: true,
+          marks: true,
+          correct_answer: true,
+          order_index: true,
+        },
+        orderBy: { order_index: 'asc' },
+      }),
+    ]);
+
+    res.json({
+      status: 'success',
+      data: {
+        exam: { id: exam.id, title: exam.title },
+        questions,
+        results: sessions.map((session) => ({
+          id: session.id,
+          studentName: session.student_name,
+          enrollmentNumber: session.enrollment_number,
+          email: session.student_email,
+          status: session.status,
+          submittedAt: session.submitted_at,
+          totalScore: session.total_score !== null && session.total_score !== undefined ? Number(session.total_score) : null,
+          percentage: session.percentage !== null && session.percentage !== undefined ? Number(session.percentage) : null,
+          answers: session.answers,
+        })),
+      },
     });
   } catch (err) {
     next(err);

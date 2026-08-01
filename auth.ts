@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
@@ -31,23 +32,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const { email, password } = parsed.data;
 
-        const user = await prisma.user.findUnique({
+        const teacher = await prisma.teacher.findUnique({
           where: { email: email.toLowerCase() },
         });
 
-        if (!user || user.role !== "TEACHER") return null;
+        if (!teacher || !teacher.password_hash) return null;
 
-        const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+        const isPasswordValid = await bcrypt.compare(password, teacher.password_hash);
         if (!isPasswordValid) return null;
 
         return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
+          id: teacher.id,
+          name: teacher.name,
+          email: teacher.email,
+          role: "TEACHER",
         };
       },
     }),
+    // Optional Google OAuth — active only when GOOGLE_CLIENT_ID/SECRET are set.
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [
+          Google({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            allowDangerousEmailAccountLinking: true,
+          }),
+        ]
+      : []),
   ],
   callbacks: {
     async jwt({ token, user }) {
@@ -63,6 +74,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role;
       }
       return session;
+    },
+    async signIn({ user, account }) {
+      // Google sign-in: create or link a Teacher record by email.
+      if (account?.provider === "google" && user.email) {
+        const existing = await prisma.teacher.findUnique({
+          where: { email: user.email.toLowerCase() },
+        });
+        if (!existing) {
+          await prisma.teacher.create({
+            data: {
+              email: user.email.toLowerCase(),
+              name: user.name ?? "Teacher",
+              google_id: account.providerAccountId,
+            },
+          });
+        } else if (!existing.google_id) {
+          await prisma.teacher.update({
+            where: { id: existing.id },
+            data: { google_id: account.providerAccountId },
+          });
+        }
+      }
+      return true;
     },
   },
 });

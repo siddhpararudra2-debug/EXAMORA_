@@ -55,14 +55,14 @@ import { AIQuestionGenerator, GeneratedQuestion } from "@/components/exams/AIQue
 // ---------- Types & Schemas ----------
 
 const QUESTION_TYPE_LABEL: Record<QuestionTypeValue, string> = {
-  MCQ: "Multiple choice (MCQ)",
+  MCQ_SINGLE: "Multiple choice (MCQ)",
   TRUE_FALSE: "True / False",
   SHORT_ANSWER: "Short answer",
 };
 
-type QuestionTypeValue = "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER";
+type QuestionTypeValue = "MCQ_SINGLE" | "TRUE_FALSE" | "SHORT_ANSWER";
 
-const questionTypeValues = z.enum(["MCQ", "TRUE_FALSE", "SHORT_ANSWER"]);
+const questionTypeValues = z.enum(["MCQ_SINGLE", "TRUE_FALSE", "SHORT_ANSWER"]);
 
 const baseQuestion = z.object({
   type: questionTypeValues,
@@ -79,7 +79,7 @@ const baseQuestion = z.object({
 });
 
 const mcqQuestion = baseQuestion.extend({
-  type: z.literal("MCQ"),
+  type: z.literal("MCQ_SINGLE"),
   options: z
     .array(z.string().min(1, { message: "Option cannot be empty." }))
     .min(2, { message: "Add at least 2 options." })
@@ -129,7 +129,7 @@ type ExamFormValues = z.infer<typeof examSchema>;
 // ---------- Defaults ----------
 
 const DEFAULT_QUESTION = (i: number): QuestionFormValue => ({
-  type: "MCQ",
+  type: "MCQ_SINGLE",
   questionText: "",
   marks: 2,
   options: ["", ""],
@@ -152,7 +152,7 @@ const STEPS = [
 // ---------- Helpers ----------
 
 function QuestionIcon({ type }: { type: QuestionTypeValue }) {
-  if (type === "MCQ") return <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-700 ring-1 ring-inset ring-indigo-100">MCQ</span>;
+  if (type === "MCQ_SINGLE") return <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-700 ring-1 ring-inset ring-indigo-100">MCQ</span>;
   if (type === "TRUE_FALSE") return <span className="rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-700 ring-1 ring-inset ring-sky-100">T/F</span>;
   return <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 ring-1 ring-inset ring-emerald-100">Short</span>;
 }
@@ -169,9 +169,9 @@ export default function CreateExamPage() {
   const handleAIQuestionsAdded = (questions: GeneratedQuestion[]) => {
     questions.forEach((q) => {
       const formatted: QuestionFormValue =
-        q.type === "MCQ"
+        q.type === "MCQ_SINGLE"
           ? {
-              type: "MCQ",
+              type: "MCQ_SINGLE",
               questionText: q.questionText,
               marks: q.marks || 2,
               options: q.options && q.options.length >= 2 ? q.options : ["Option A", "Option B"],
@@ -266,7 +266,7 @@ export default function CreateExamPage() {
     const current = getValues(`questions.${index}` as const) as QuestionFormValue;
     insert(index + 1, {
       ...current,
-      options: current.type === "MCQ" ? [...(current.options ?? [])] : current.type === "TRUE_FALSE" ? ["True", "False"] : [],
+      options: current.type === "MCQ_SINGLE" ? [...(current.options ?? [])] : current.type === "TRUE_FALSE" ? ["True", "False"] : [],
       questionText: current.questionText
         ? `${current.questionText} (copy)`
         : "",
@@ -277,12 +277,12 @@ export default function CreateExamPage() {
     const path = `questions.${index}` as const;
     const current = getValues(path) as QuestionFormValue;
     const nextValue: QuestionFormValue =
-      next === "MCQ"
+      next === "MCQ_SINGLE"
         ? {
-            type: "MCQ",
+            type: "MCQ_SINGLE",
             questionText: current.questionText,
             marks: current.marks,
-            options: current.type === "MCQ" ? current.options : ["", ""],
+            options: current.type === "MCQ_SINGLE" ? current.options : ["", ""],
             correctAnswer: "",
           }
         : next === "TRUE_FALSE"
@@ -341,7 +341,7 @@ export default function CreateExamPage() {
           type: q.type,
           questionText: q.questionText.trim(),
           options:
-            q.type === "MCQ"
+            q.type === "MCQ_SINGLE"
               ? (q as z.infer<typeof mcqQuestion>).options.map((o) => o.trim())
               : q.type === "TRUE_FALSE"
               ? ["True", "False"]
@@ -596,7 +596,7 @@ export default function CreateExamPage() {
                 {fields.map((field, index) => {
                   const qPath = `questions.${index}` as const;
                   const qType = (watch(`${qPath}.type`) ??
-                    "MCQ") as QuestionTypeValue;
+                    "MCQ_SINGLE") as QuestionTypeValue;
                   const options = (watch(`${qPath}.options`) as
                     | string[]
                     | undefined) ?? ["", ""];
@@ -751,7 +751,7 @@ export default function CreateExamPage() {
                         </div>
 
                         {/* Options (MCQ / TF / Correct answer SA) */}
-                        {qType === "MCQ" && (
+                        {qType === "MCQ_SINGLE" && (
                           <div className="md:col-span-6 space-y-3">
                             <div className="flex items-end justify-between gap-3">
                               <Label className="text-sm font-medium text-slate-700">

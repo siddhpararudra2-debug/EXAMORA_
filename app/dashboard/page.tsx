@@ -36,16 +36,16 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { authHeaders } from "@/lib/auth-token";
 
-type ExamStatus = "DRAFT" | "ACTIVE" | "COMPLETED";
+type ExamStatus = "DRAFT" | "PUBLISHED" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
 
 interface ExamListItem {
   id: string;
   title: string;
   description?: string | null;
-  durationMinutes: number;
-  totalMarks: number;
+  duration_minutes: number;
+  total_marks: number;
   status: ExamStatus;
-  createdAt: string;
+  created_at: string;
   _count: {
     questions: number;
     sessions: number;
@@ -57,40 +57,40 @@ const DEMO_EXAMS: ExamListItem[] = [
     id: "demo_active_1",
     title: "Midterm — Data Structures",
     description: "Chapters 1–5",
-    durationMinutes: 60,
-    totalMarks: 40,
+    duration_minutes: 60,
+    total_marks: 40,
     status: "ACTIVE",
-    createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     _count: { questions: 20, sessions: 58 },
   },
   {
     id: "demo_completed_1",
     title: "Final — Intro to Algorithms",
     description: "Full syllabus",
-    durationMinutes: 120,
-    totalMarks: 100,
+    duration_minutes: 120,
+    total_marks: 100,
     status: "COMPLETED",
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     _count: { questions: 30, sessions: 124 },
   },
   {
     id: "demo_draft_1",
     title: "Assignment 2 — Database Design",
     description: "ER diagrams + SQL",
-    durationMinutes: 45,
-    totalMarks: 25,
+    duration_minutes: 45,
+    total_marks: 25,
     status: "DRAFT",
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     _count: { questions: 12, sessions: 0 },
   },
 ];
 
 function StatusBadge({ status }: { status: ExamStatus }) {
-  if (status === "ACTIVE") {
+  if (status === "ACTIVE" || status === "PUBLISHED") {
     return (
       <Badge className="gap-1 bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100 hover:bg-emerald-50">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-        ACTIVE
+        {status}
       </Badge>
     );
   }
@@ -384,7 +384,7 @@ export default function DashboardHomePage() {
                         </div>
                         <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                           <Clock className="h-3.5 w-3.5" />
-                          {e.durationMinutes} min · {e.totalMarks} marks
+                          {e.duration_minutes} min · {e.total_marks} marks
                           <span className="text-slate-300">·</span>
                           <Users2 className="h-3.5 w-3.5" />
                           {e._count.sessions} session

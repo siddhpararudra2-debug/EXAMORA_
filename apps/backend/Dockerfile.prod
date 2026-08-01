@@ -1,0 +1,53 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Examora Backend — Production Dockerfile
+# Multi-stage build: builder (compile + prisma generate) → slim runner.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install dependencies first (cached layer — only invalidated on lockfile change)
+COPY package*.json ./
+COPY prisma ./prisma/
+
+RUN npm ci
+
+# Copy the full source tree (server, apps, packages, tsconfigs)
+COPY . .
+
+# Generate the Prisma client (alpine/musl binary) and compile TypeScript → dist/
+RUN npx prisma generate
+RUN npm run server:build
+
+# ── Stage 2: Production runner (minimal image) ────────────────────────────────
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=4000
+
+# Runtime deps only — dev dependencies are pruned.
+# Scripts are ignored: the Prisma client + engines are copied from the builder.
+COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts
+
+# Copy only what is needed to run: compiled output, Prisma schema + client engines
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Non-root user for defense in depth
+RUN addgroup -S examora && adduser -S examora -G examora \
+    && chown -R examora:examora /app
+USER examora
+
+EXPOSE 4000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://localhost:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/server.js"]

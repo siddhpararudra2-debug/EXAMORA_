@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { SessionStatus, EventType } from '@prisma/client';
+import { SubmissionStatus, ViolationType } from '@prisma/client';
 import prisma from '../../../../prisma/client.js';
 
 export const MAX_WARNINGS = 3;
@@ -24,7 +24,7 @@ export interface StudentWarningPayload {
   sessionToken?: string;
   sessionId?: string;
   examId: string;
-  eventType?: EventType | string;
+  eventType?: ViolationType | string;
   reason?: string;
   metadata?: Record<string, unknown>;
 }
@@ -39,7 +39,7 @@ export interface StudentStatusUpdatePayload {
   studentName: string;
   studentEmail: string;
   enrollmentNo: string;
-  status: SessionStatus;
+  status: SubmissionStatus;
   warnings: number;
   warningsLimit: number;
   terminated: boolean;
@@ -62,30 +62,38 @@ export type JoinExamRoomResponse =
 
 export const roomName = (examId: string): string => `exam_${examId}`;
 
-/** Maps arbitrary event type strings to Prisma EventType enum */
-function mapEventType(typeStr?: string, reason?: string): EventType {
+/**
+ * Maps arbitrary event type strings to the Prisma ViolationType enum.
+ * Camera-era event names (FACE_LOST, FULLSCREEN_EXIT, ...) are folded into the
+ * closest modern ViolationType; anything unrecognized falls back to TAB_SWITCH.
+ */
+function mapViolationType(typeStr?: string, reason?: string): ViolationType {
+  const lowerReason = reason?.toLowerCase() ?? '';
   if (!typeStr) {
-    if (reason?.toLowerCase().includes("face lost") || reason?.toLowerCase().includes("no face")) {
-      return EventType.FACE_LOST;
+    if (lowerReason.includes('face lost') || lowerReason.includes('no face')) {
+      return ViolationType.AI_OVERLAY;
     }
-    if (reason?.toLowerCase().includes("fullscreen")) {
-      return EventType.FULLSCREEN_EXIT;
+    if (lowerReason.includes('fullscreen')) {
+      return ViolationType.MINIMIZE;
     }
-    if (reason?.toLowerCase().includes("multiple faces")) {
-      return EventType.MULTIPLE_FACES;
+    if (lowerReason.includes('multiple faces')) {
+      return ViolationType.SCREEN_CAPTURE;
     }
-    if (reason?.toLowerCase().includes("phone")) {
-      return EventType.PHONE_DETECTED;
+    if (lowerReason.includes('phone')) {
+      return ViolationType.APP_SWITCH;
     }
-    return EventType.TAB_SWITCH;
+    return ViolationType.TAB_SWITCH;
   }
 
   const upper = typeStr.toUpperCase();
-  if (upper === "FACE_LOST") return EventType.FACE_LOST;
-  if (upper === "FULLSCREEN_EXIT") return EventType.FULLSCREEN_EXIT;
-  if (upper === "MULTIPLE_FACES") return EventType.MULTIPLE_FACES;
-  if (upper === "PHONE_DETECTED") return EventType.PHONE_DETECTED;
-  return EventType.TAB_SWITCH;
+  if (upper === 'FACE_LOST' || upper === 'AI_OVERLAY') return ViolationType.AI_OVERLAY;
+  if (upper === 'FULLSCREEN_EXIT' || upper === 'MINIMIZE') return ViolationType.MINIMIZE;
+  if (upper === 'MULTIPLE_FACES') return ViolationType.SCREEN_CAPTURE;
+  if (upper === 'PHONE_DETECTED' || upper === 'APP_SWITCH') return ViolationType.APP_SWITCH;
+  if (upper === 'MOBILE_BUTTON') return ViolationType.MOBILE_BUTTON;
+  if (upper === 'DEVTOOLS') return ViolationType.DEVTOOLS;
+  if (upper === 'KEYBOARD_SHORTCUT') return ViolationType.KEYBOARD_SHORTCUT;
+  return ViolationType.TAB_SWITCH;
 }
 
 const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
@@ -94,11 +102,11 @@ const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
       const { sessionToken, sessionId, examId, reason, eventType, metadata } = payload;
 
       // Locate session by sessionToken or sessionId
-      const session = await prisma.studentSession.findFirst({
+      const session = await prisma.examSession.findFirst({
         where: {
           OR: [
-            ...(sessionToken ? [{ sessionToken, examId }] : []),
-            ...(sessionId ? [{ id: sessionId, examId }] : []),
+            ...(sessionToken ? [{ session_token: sessionToken, exam_id: examId }] : []),
+            ...(sessionId ? [{ id: sessionId, exam_id: examId }] : []),
           ],
         },
       });
@@ -110,16 +118,17 @@ const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
         return;
       }
 
-      if (session.status !== SessionStatus.ACTIVE) {
+      if (session.status !== SubmissionStatus.IN_PROGRESS) {
         return;
       }
 
-      // Step 2: Create ProctoringEvent record in database via Prisma
-      const mappedType = mapEventType(eventType as string, reason);
-      await prisma.proctoringEvent.create({
+      // Step 2: Create Violation record in database via Prisma
+      const mappedType = mapViolationType(eventType as string, reason);
+      await prisma.violation.create({
         data: {
-          sessionId: session.id,
-          eventType: mappedType,
+          session_id: session.id,
+          type: mappedType,
+          description: reason ?? 'Proctoring violation warning',
           metadata: {
             reason: reason ?? 'Proctoring violation warning',
             ...(metadata ?? {}),
@@ -127,25 +136,24 @@ const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
         },
       });
 
-      // Increment warningsCount
-      const updated = await prisma.studentSession.update({
-        where: { id: session.id },
-        data: { warningsCount: { increment: 1 } },
+      // Warning count = total violations recorded for the session
+      const warningsCount = await prisma.violation.count({
+        where: { session_id: session.id },
       });
 
-      const terminated = updated.warningsCount >= MAX_WARNINGS;
+      const terminated = warningsCount >= MAX_WARNINGS;
 
       if (terminated) {
-        await prisma.studentSession.update({
+        await prisma.examSession.update({
           where: { id: session.id },
-          data: { status: SessionStatus.TERMINATED, submittedAt: new Date() },
+          data: { status: SubmissionStatus.TERMINATED, submitted_at: new Date() },
         });
 
         socket.emit(PROCTORING_EVENTS.EXAM_TERMINATED, {
           examId,
           sessionId: session.id,
           reason: reason ?? 'warnings_limit',
-          warnings: updated.warningsCount,
+          warnings: warningsCount,
           warningsLimit: MAX_WARNINGS,
         } satisfies ExamTerminatedPayload);
       }
@@ -156,11 +164,11 @@ const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
         {
           examId,
           sessionId: session.id,
-          studentName: session.studentName,
-          studentEmail: session.studentEmail,
-          enrollmentNo: session.enrollmentNo,
-          status: terminated ? SessionStatus.TERMINATED : SessionStatus.ACTIVE,
-          warnings: updated.warningsCount,
+          studentName: session.student_name,
+          studentEmail: session.student_email ?? '',
+          enrollmentNo: session.enrollment_number ?? '',
+          status: terminated ? SubmissionStatus.TERMINATED : SubmissionStatus.IN_PROGRESS,
+          warnings: warningsCount,
           warningsLimit: MAX_WARNINGS,
           terminated,
           submitted: false,
@@ -187,8 +195,8 @@ const registerJoinExamRoomHandler = (socket: Socket): void => {
       try {
         const { sessionToken, examId } = payload;
 
-        const session = await prisma.studentSession.findFirst({
-          where: { sessionToken, examId },
+        const session = await prisma.examSession.findFirst({
+          where: { session_token: sessionToken, exam_id: examId },
         });
 
         if (!session) {
@@ -196,7 +204,7 @@ const registerJoinExamRoomHandler = (socket: Socket): void => {
           return;
         }
 
-        if (session.status === SessionStatus.TERMINATED) {
+        if (session.status === SubmissionStatus.TERMINATED) {
           ack?.({
             status: 'error',
             message: 'Session has been terminated and cannot rejoin',

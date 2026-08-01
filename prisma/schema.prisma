@@ -7,115 +7,245 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  TEACHER
-}
-
 enum ExamStatus {
   DRAFT
+  PUBLISHED
   ACTIVE
   COMPLETED
+  ARCHIVED
+
+  @@map("exam_status")
 }
 
 enum QuestionType {
-  MCQ
+  MCQ_SINGLE
+  MCQ_MULTI
   TRUE_FALSE
   SHORT_ANSWER
+  LONG_ANSWER
+  FILL_BLANK
+  DROPDOWN
+  LINEAR_SCALE
+  CHECKBOX_GRID
+  RADIO_GRID
+  DATE
+  FILE_UPLOAD
+
+  @@map("question_type")
 }
 
-enum SessionStatus {
-  ACTIVE
-  TERMINATED
+enum SubmissionStatus {
+  IN_PROGRESS
   SUBMITTED
-  GRADED
+  AUTO_SUBMITTED
+  TERMINATED
+
+  @@map("submission_status")
 }
 
-enum EventType {
+enum ViolationType {
   TAB_SWITCH
-  FACE_LOST
-  FULLSCREEN_EXIT
-  MULTIPLE_FACES
-  PHONE_DETECTED
+  APP_SWITCH
+  MINIMIZE
+  MOBILE_BUTTON
+  AI_OVERLAY
+  DEVTOOLS
+  SCREEN_CAPTURE
+  KEYBOARD_SHORTCUT
+
+  @@map("violation_type")
 }
 
-model User {
-  id           String   @id @default(cuid())
-  name         String
+enum CreationMode {
+  MANUAL
+  UPLOAD
+  AI_GENERATED
+
+  @@map("creation_mode")
+}
+
+enum GradedBy {
+  AUTO
+  AI
+  TEACHER
+
+  @@map("graded_by")
+}
+
+enum EmailLogStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@map("email_log_status")
+}
+
+model Teacher {
+  id           String   @id @default(uuid())
+  google_id    String?  @unique
   email        String   @unique
-  passwordHash String
-  role         Role     @default(TEACHER)
-  createdAt    DateTime @default(now())
+  name         String
+  password_hash String? @db.VarChar(255)
+  college_name String?
+  department   String?
+  phone        String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
   exams        Exam[]
+
+  @@map("teachers")
 }
 
 model Exam {
-  id             String        @id @default(cuid())
-  title          String
-  description    String?
-  durationMinutes Int
-  totalMarks     Int
-  status         ExamStatus    @default(DRAFT)
-  createdBy      String
-  creator        User          @relation(fields: [createdBy], references: [id])
-  createdAt      DateTime      @default(now())
-  questions      Question[]
-  sessions       StudentSession[]
+  id               String       @id @default(uuid())
+  title            String
+  description      String?
+  subject          String?
+  college_name     String?
+  duration_minutes Int
+  total_marks      Int
+  creation_mode    CreationMode @default(MANUAL)
+  access_uuid      String       @unique
+  qr_code_url      String?
+  start_time       DateTime?
+  end_time         DateTime?
+  settings         Json?        @db.JsonB
+  status           ExamStatus   @default(DRAFT)
+  published_at     DateTime?
+  created_by       String
+  creator          Teacher      @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+
+  sections         Section[]
+  questions        Question[]
+  sessions         ExamSession[]
+  email_logs       EmailLog[]
+
+  @@index([created_by])
+  @@index([status])
+  @@map("exams")
+}
+
+model Section {
+  id               String   @id @default(uuid())
+  exam_id          String
+  exam             Exam     @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  order_index      Int
+  duration_minutes Int?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  questions        Question[]
+
+  @@index([exam_id, order_index])
+  @@map("sections")
 }
 
 model Question {
-  id           String       @id @default(cuid())
-  examId       String
-  exam         Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
-  type         QuestionType
-  questionText String
-  options      Json?
-  correctAnswer String
-  marks        Int
-  submissions  Submission[]
+  id             String       @id @default(uuid())
+  exam_id        String
+  exam           Exam         @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  section_id     String?
+  section        Section?     @relation(fields: [section_id], references: [id], onDelete: SetNull)
+  type           QuestionType
+  question_text  String
+  options        Json?
+  correct_answer String?
+  image_url      String?
+  is_required    Boolean      @default(true)
+  order_index    Int          @default(0)
+  explanation    String?
+  metadata       Json?        @db.JsonB
+  marks          Int
+  negative_marks Decimal      @default(0) @db.Decimal(5, 2)
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @updatedAt
 
-  @@index([examId])
+  answers        Answer[]
+
+  @@index([exam_id])
+  @@index([section_id])
+  @@index([exam_id, order_index])
+  @@map("questions")
 }
 
-model StudentSession {
-  id            String        @id @default(cuid())
-  examId        String
-  exam          Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
-  studentName   String
-  studentEmail  String
-  enrollmentNo  String
-  sessionToken  String        @unique
-  warningsCount Int           @default(0)
-  status        SessionStatus @default(ACTIVE)
-  score         Int?
-  startedAt     DateTime      @default(now())
-  submittedAt   DateTime?
-  submissions   Submission[]
-  proctoringEvents ProctoringEvent[]
+model ExamSession {
+  id                String           @id @default(uuid())
+  exam_id           String
+  exam              Exam             @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  session_token     String           @unique
+  student_name      String
+  enrollment_number String?
+  student_email     String?
+  status            SubmissionStatus @default(IN_PROGRESS)
+  started_at        DateTime         @default(now())
+  submitted_at      DateTime?
+  total_score       Decimal?         @db.Decimal(10, 2)
+  percentage        Decimal?         @db.Decimal(5, 2)
+  created_at        DateTime         @default(now())
+  updated_at        DateTime         @updatedAt
 
-  @@index([examId])
-  @@index([examId, studentEmail, enrollmentNo])
+  answers           Answer[]
+  violations        Violation[]
+  email_logs        EmailLog[]
+
+  @@index([exam_id])
+  @@index([status])
+  @@index([exam_id, student_email, enrollment_number])
+  @@map("exam_sessions")
 }
 
-model ProctoringEvent {
-  id        String        @id @default(cuid())
-  sessionId String
-  session   StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  eventType EventType
-  timestamp DateTime      @default(now())
-  metadata  Json?
+model Answer {
+  id               String     @id @default(uuid())
+  session_id       String
+  session          ExamSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  question_id      String
+  question         Question   @relation(fields: [question_id], references: [id], onDelete: Cascade)
+  answer_text      String
+  is_correct       Boolean?
+  marks_awarded    Decimal?   @db.Decimal(10, 2)
+  graded_by        GradedBy?
+  teacher_feedback String?
+  ai_confidence    Decimal?   @db.Decimal(5, 4)
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
 
-  @@index([sessionId, timestamp])
+  @@unique([session_id, question_id])
+  @@index([question_id])
+  @@map("answers")
 }
 
-model Submission {
-  id          String @id @default(cuid())
-  sessionId   String
-  session     StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  questionId  String
-  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  answerText  String
-  createdAt   DateTime @default(now())
+model Violation {
+  id          String        @id @default(uuid())
+  session_id  String
+  session     ExamSession   @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  type        ViolationType
+  description String?
+  metadata    Json?         @db.JsonB
+  occurred_at DateTime      @default(now())
 
-  @@unique([sessionId, questionId])
-  @@index([sessionId])
+  @@index([session_id, occurred_at])
+  @@map("violations")
+}
+
+model EmailLog {
+  id              String         @id @default(uuid())
+  exam_id         String
+  exam            Exam           @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  session_id      String?
+  session         ExamSession?   @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  recipient_email String
+  pdf_url         String?
+  status          EmailLogStatus @default(PENDING)
+  sent_at         DateTime?
+  created_at      DateTime       @default(now())
+
+  @@index([exam_id])
+  @@index([session_id])
+  @@index([status])
+  @@map("email_log")
 }

@@ -1,6 +1,7 @@
 import { Exam, ExamStatus, Prisma, QuestionType } from '@prisma/client';
 import prisma from '../../../prisma/client.js';
 
+/** Camel-case API input shape (what the REST layer accepts). */
 export interface ExamCreationData {
   title: string;
   description?: string | null;
@@ -24,7 +25,7 @@ export interface SubmissionCreationData {
 
 const STUDENT_QUESTION_SELECT = {
   id: true,
-  questionText: true,
+  question_text: true,
   type: true,
   options: true,
   marks: true,
@@ -38,11 +39,21 @@ export async function createExamWithQuestions(
   return prisma.$transaction(async (tx) => {
     return tx.exam.create({
       data: {
-        ...examData,
-        createdBy: teacherId,
+        title: examData.title,
+        description: examData.description ?? null,
+        duration_minutes: examData.durationMinutes,
+        total_marks: examData.totalMarks,
         status: examData.status ?? ExamStatus.DRAFT,
+        created_by: teacherId,
+        access_uuid: crypto.randomUUID(),
         questions: {
-          create: questionsData,
+          create: questionsData.map((q) => ({
+            type: q.type,
+            question_text: q.questionText,
+            options: q.options ?? undefined,
+            correct_answer: q.correctAnswer,
+            marks: q.marks,
+          })),
         },
       },
     });
@@ -56,8 +67,8 @@ export async function getExamForStudent(examId: string) {
       id: true,
       title: true,
       description: true,
-      durationMinutes: true,
-      totalMarks: true,
+      duration_minutes: true,
+      total_marks: true,
       status: true,
       questions: {
         select: STUDENT_QUESTION_SELECT,
@@ -70,11 +81,11 @@ export async function recordSubmissions(
   sessionId: string,
   submissions: SubmissionCreationData[],
 ) {
-  return prisma.submission.createMany({
+  return prisma.answer.createMany({
     data: submissions.map(({ questionId, answerText }) => ({
-      sessionId,
-      questionId,
-      answerText,
+      session_id: sessionId,
+      question_id: questionId,
+      answer_text: answerText,
     })),
     skipDuplicates: true,
   });

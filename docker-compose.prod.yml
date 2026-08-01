@@ -1,11 +1,25 @@
 version: '3.8'
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Examora — Production deployment
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Required variables (set in your shell or a .env file next to this file):
+#   DOMAIN_NAME         e.g. exam.example.com
+#   LETSENCRYPT_EMAIL   for certificate expiry notices
+#   POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
+#   JWT_SECRET / SESSION_SECRET / AUTH_SECRET
+#   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM
+#   GROQ_API_KEY        (optional — enables AI question generation)
+# ──────────────────────────────────────────────────────────────────────────────
+
 services:
   # 1. PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: examora_postgres_prod
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-examora}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-examora_secure_pass}
@@ -13,81 +27,138 @@ services:
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-examora}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-examora} -d ${POSTGRES_DB:-examora_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - examora_net
+
+  # 2. Redis — Socket.io adapter & cache
+  redis:
+    image: redis:7-alpine
+    container_name: examora_redis_prod
+    restart: unless-stopped
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - examora_net
 
-  # 2. Redis Adapter & Cache
-  redis:
-    image: redis:7-alpine
-    container_name: examora_redis_prod
-    restart: always
-    volumes:
-      - redis_prod_data:/data
-    networks:
-      - examora_net
-
-  # 3. Express Node.js Backend API & Socket.io Server
+  # 3. Express Backend API + Socket.io server
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: apps/backend/Dockerfile.prod
     container_name: examora_backend_prod
-    restart: always
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-examora}:${POSTGRES_PASSWORD:-examora_secure_pass}@postgres:5432/${POSTGRES_DB:-examora_prod}?schema=public
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-examora_production_jwt_secret_key_2026}
-      FRONTEND_URL: http://localhost
+      SESSION_SECRET: ${SESSION_SECRET:-examora_production_session_secret_2026}
+      FRONTEND_URL: ${FRONTEND_URL:-https://${DOMAIN_NAME:-localhost}}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    volumes:
+      # Persistent storage for any uploaded files (e.g. CSV invites, exports)
+      - uploads_prod_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - examora_net
 
-  # 4. Next.js Frontend App
+  # 4. Next.js Frontend
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
     container_name: examora_frontend_prod
-    restart: always
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
-      NEXT_PUBLIC_SOCKET_URL: http://localhost
-      NEXT_PUBLIC_API_URL: http://localhost/api
+      NEXT_PUBLIC_SOCKET_URL: ${FRONTEND_URL:-https://${DOMAIN_NAME:-localhost}}
+      NEXT_PUBLIC_API_URL: ${FRONTEND_URL:-https://${DOMAIN_NAME:-localhost}}/api
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - examora_net
 
-  # 5. Nginx Reverse Proxy (Routes /api and /socket.io to backend, / to frontend)
+  # 5. Nginx reverse proxy — SSL termination
   nginx:
     image: nginx:1.25-alpine
     container_name: examora_nginx_prod
-    restart: always
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - certbot_webroot:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
     depends_on:
       - frontend
       - backend
+    healthcheck:
+      test: ["CMD", "sh", "-c", "test -f /var/run/nginx.pid"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - examora_net
+
+  # 6. Let's Encrypt certificate issuance + renewal
+  certbot:
+    image: certbot/certbot
+    container_name: examora_certbot
+    restart: unless-stopped
+    volumes:
+      - certbot_webroot:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    command: >-
+      certonly --webroot --webroot-path=/var/www/certbot
+      --email ${LETSENCRYPT_EMAIL:-admin@example.com}
+      --agree-tos --no-eff-email
+      -d ${DOMAIN_NAME:-example.com}
+    depends_on:
+      - nginx
     networks:
       - examora_net
 
 volumes:
   postgres_prod_data:
   redis_prod_data:
+  uploads_prod_data:
+  certbot_webroot:
+  certbot_certs:
 
 networks:
   examora_net:

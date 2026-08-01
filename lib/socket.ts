@@ -59,11 +59,10 @@ export function getSocketUrl(): string {
 }
 
 export type SessionStatus =
-  | "ACTIVE"
-  | "TERMINATED"
+  | "IN_PROGRESS"
   | "SUBMITTED"
-  | "GRADED"
-  | "JOINED";
+  | "AUTO_SUBMITTED"
+  | "TERMINATED";
 
 export interface StudentSessionView {
   id: string;

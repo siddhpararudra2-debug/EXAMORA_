@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { PrismaClient, SessionStatus } from "@prisma/client";
+import { PrismaClient, SubmissionStatus } from "@prisma/client";
 import { Readable } from "stream";
 import csvParser from "csv-parser";
 import { AuthenticatedRequest } from "../../../../server/middleware/auth.js";
@@ -35,7 +35,7 @@ export const inviteBulkStudents = async (
     // Verify teacher owns the exam
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { id: true, title: true, createdBy: true },
+      select: { id: true, title: true, created_by: true },
     });
 
     if (!exam) {
@@ -43,7 +43,7 @@ export const inviteBulkStudents = async (
       return;
     }
 
-    if (exam.createdBy !== teacher.userId) {
+    if (exam.created_by !== teacher.userId) {
       res.status(403).json({ status: "error", message: "Access denied" });
       return;
     }
@@ -98,21 +98,21 @@ export const inviteBulkStudents = async (
       try {
         const sessionToken = crypto.randomUUID();
 
-        // Create or update StudentSession record
-        const session = await prisma.studentSession.upsert({
-          where: { sessionToken },
+        // Create or update ExamSession record
+        const session = await prisma.examSession.upsert({
+          where: { session_token: sessionToken },
           update: {},
           create: {
-            examId,
-            studentName: studentName || "Student",
-            studentEmail,
-            enrollmentNo,
-            sessionToken,
-            status: SessionStatus.ACTIVE,
+            exam_id: examId,
+            student_name: studentName || "Student",
+            student_email: studentEmail,
+            enrollment_number: enrollmentNo,
+            session_token: sessionToken,
+            status: SubmissionStatus.IN_PROGRESS,
           },
         });
 
-        const joinLink = `${frontendUrl}/exam/${examId}/take?token=${session.sessionToken}`;
+        const joinLink = `${frontendUrl}/exam/${examId}/take?token=${session.session_token}`;
 
         // Send email
         await sendExamInviteEmail({

@@ -1,4 +1,4 @@
-import { Question, QuestionType, SessionStatus } from '@prisma/client';
+import { Question, QuestionType, SubmissionStatus } from '@prisma/client';
 import prisma from '../../../prisma/client.js';
 
 export interface GradingResult {
@@ -12,15 +12,18 @@ export interface GradingResult {
 const normalize = (value: string): string => value.trim().toLowerCase();
 
 const isAnswerCorrect = (
-  question: Pick<Question, 'type' | 'correctAnswer'>,
+  question: Pick<Question, 'type' | 'correct_answer'>,
   answerText: string
 ): boolean => {
   const submitted = answerText.trim();
-  const correct = question.correctAnswer.trim();
+  const correct = question.correct_answer?.trim() ?? '';
 
   if (
-    question.type === QuestionType.MCQ ||
-    question.type === QuestionType.TRUE_FALSE
+    question.type === QuestionType.MCQ_SINGLE ||
+    question.type === QuestionType.MCQ_MULTI ||
+    question.type === QuestionType.TRUE_FALSE ||
+    question.type === QuestionType.FILL_BLANK ||
+    question.type === QuestionType.DROPDOWN
   ) {
     return normalize(submitted) === normalize(correct);
   }
@@ -33,8 +36,8 @@ export async function gradeSubmission(
   sessionId: string,
 ): Promise<GradingResult> {
   return prisma.$transaction(async (tx) => {
-    const session = await tx.studentSession.findFirst({
-      where: { id: sessionId, examId },
+    const session = await tx.examSession.findFirst({
+      where: { id: sessionId, exam_id: examId },
       select: { id: true },
     });
 
@@ -42,14 +45,14 @@ export async function gradeSubmission(
       throw new Error(`Session ${sessionId} not found for exam ${examId}`);
     }
 
-    const [submissions, questions] = await Promise.all([
-      tx.submission.findMany({
-        where: { sessionId },
-        select: { questionId: true, answerText: true },
+    const [answers, questions] = await Promise.all([
+      tx.answer.findMany({
+        where: { session_id: sessionId },
+        select: { question_id: true, answer_text: true },
       }),
       tx.question.findMany({
-        where: { examId },
-        select: { id: true, type: true, correctAnswer: true, marks: true },
+        where: { exam_id: examId },
+        select: { id: true, type: true, correct_answer: true, marks: true, negative_marks: true },
       }),
     ]);
 
@@ -58,25 +61,29 @@ export async function gradeSubmission(
     let score = 0;
     let correctAnswers = 0;
 
-    for (const submission of submissions) {
-      const question = questionById.get(submission.questionId);
+    for (const answer of answers) {
+      const question = questionById.get(answer.question_id);
       if (!question) {
         continue;
       }
 
-      if (isAnswerCorrect(question, submission.answerText)) {
+      if (isAnswerCorrect(question, answer.answer_text)) {
         score += question.marks;
         correctAnswers += 1;
       }
     }
 
     const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+    const percentage = totalMarks > 0 ? (score / totalMarks) * 100 : 0;
 
-    await tx.studentSession.update({
+    // Persist grading outcome on the session (score + percentage). The session
+    // status stays SUBMITTED / AUTO_SUBMITTED — "graded" is represented by
+    // total_score being set, which is what results/email dispatch rely on.
+    await tx.examSession.update({
       where: { id: sessionId },
       data: {
-        score,
-        status: SessionStatus.GRADED,
+        total_score: score,
+        percentage,
       },
     });
 
@@ -93,8 +100,11 @@ export async function gradeSubmission(
 export async function gradeAllSubmissionsForExam(
   examId: string,
 ): Promise<GradingResult[]> {
-  const sessions = await prisma.studentSession.findMany({
-    where: { examId, status: SessionStatus.SUBMITTED },
+  const sessions = await prisma.examSession.findMany({
+    where: {
+      exam_id: examId,
+      status: { in: [SubmissionStatus.SUBMITTED, SubmissionStatus.AUTO_SUBMITTED] },
+    },
     select: { id: true },
   });
 

@@ -6,14 +6,14 @@ export interface GenerateQuestionsBody {
   topic: string;
   count?: number;
   difficulty?: "easy" | "medium" | "hard" | "Easy" | "Medium" | "Hard";
-  type?: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER";
+  type?: "MCQ_SINGLE" | "MCQ_MULTI" | "TRUE_FALSE" | "SHORT_ANSWER" | "LONG_ANSWER" | "FILL_BLANK";
 }
 
 // Zod validation schema for Groq AI responses
 const generatedQuestionSchema = z.object({
   id: z.string().optional().default(() => `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`),
   questionText: z.string().min(1, "Question text is required"),
-  type: z.enum(["MCQ", "TRUE_FALSE", "SHORT_ANSWER"]).default("MCQ"),
+  type: z.enum(["MCQ_SINGLE", "MCQ_MULTI", "TRUE_FALSE", "SHORT_ANSWER", "LONG_ANSWER", "FILL_BLANK"]).default("MCQ_SINGLE"),
   options: z.array(z.string()).optional(),
   correctAnswer: z.string().min(1, "Correct answer is required"),
   marks: z.number().default(2),
@@ -33,7 +33,7 @@ export const generateAIQuestions = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { topic, count = 5, difficulty = "medium", type = "MCQ" }: GenerateQuestionsBody = req.body;
+    const { topic, count = 5, difficulty = "medium", type = "MCQ_SINGLE" }: GenerateQuestionsBody = req.body;
 
     if (!topic || typeof topic !== "string" || !topic.trim()) {
       res.status(400).json({ status: "error", message: "topic is required" });
@@ -66,7 +66,7 @@ JSON Schema:
 }
 
 Rules:
-1. For MCQ: options must be an array of 4 distinct choices, and correctAnswer must exactly match one of the options.
+1. For MCQ_SINGLE/MCQ_MULTI: options must be an array of 4 distinct choices, and correctAnswer must exactly match one of the options.
 2. For TRUE_FALSE: options must be ["True", "False"], and correctAnswer must be "True" or "False".
 3. For SHORT_ANSWER: options can be omitted or empty array, and correctAnswer is a sample model answer.
 4. Exactly generate ${count} questions.
@@ -132,13 +132,13 @@ function generateFallbackQuestions(
   type: string
 ) {
   const result = [];
-  const normalizedType = type === "TRUE_FALSE" ? "TRUE_FALSE" : type === "SHORT_ANSWER" ? "SHORT_ANSWER" : "MCQ";
+  const normalizedType = type === "TRUE_FALSE" ? "TRUE_FALSE" : type === "SHORT_ANSWER" ? "SHORT_ANSWER" : "MCQ_SINGLE";
 
   for (let i = 1; i <= count; i++) {
-    if (normalizedType === "MCQ") {
+    if (normalizedType === "MCQ_SINGLE") {
       result.push({
         id: `q_${Date.now()}_${i}`,
-        type: "MCQ",
+        type: "MCQ_SINGLE",
         questionText: `What is the primary function of ${topic} in a ${difficulty} application architecture?`,
         options: [
           `Optimizes core runtime execution of ${topic}`,

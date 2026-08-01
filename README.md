@@ -18,7 +18,13 @@ Examora is a 100% free and open-source AI-proctored online exam platform. Teache
   <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss" />
   <img alt="Playwright" src="https://img.shields.io/badge/Playwright-E2E-2EAD33?logo=playwright" />
   <img alt="TensorFlow.js" src="https://img.shields.io/badge/TensorFlow.js-4-FF6F00?logo=tensorflow" />
+  <img alt="Build" src="https://img.shields.io/badge/build-passing-brightgreen" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-jest+playwright-important" />
+  <img alt="Coverage" src="https://img.shields.io/badge/coverage-API+unit-9cf" />
+  <img alt="Docs" src="https://img.shields.io/badge/docs-API_Reference-blueviolet" />
 </p>
+
+> 📖 Full endpoint documentation (Zod schemas, curl examples, error codes): **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)**
 
 ---
 
@@ -175,6 +181,99 @@ The happy-path suite (`e2e/exam-flow.spec.ts`) walks the entire product:
 
 ---
 
+## Testing
+
+| Command | What it runs |
+| --- | --- |
+| `npm test` | Unit tests (Jest) — grading logic with a mocked Prisma client |
+| `npm run test:api` | API integration tests (Jest + Supertest) — full request/response flows against the real app |
+| `npm run test:coverage` | All tests with a coverage report (`text` + `lcov` + `html`) |
+| `npm run test:e2e` | Playwright browser tests — the full product happy path |
+
+The API suite (`apps/backend/tests/api.test.ts`) covers:
+
+- Teacher registration & login (JWT verification)
+- Exam creation + **transaction rollback** when a question is invalid
+- Student join flow (UUID session token generation, reuse, DRAFT rejection)
+- Submission + **auto-grading** score verification
+- **Proctoring event logging** (REST) + the 3-warning termination rule
+- Bulk email invite with **mocked Nodemailer** (JSON + CSV upload)
+- AI question generation with **mocked Groq SDK** + built-in fallback
+
+> The API suite needs PostgreSQL running with the schema applied (`docker compose up -d` + `npx prisma migrate dev`). It truncates the `User`, `Exam`, `Question`, `StudentSession`, `Submission`, and `ProctoringEvent` tables at startup — do not point it at a database you care about.
+
+---
+
+## Production Deployment
+
+### Option A — Docker Compose (self-hosted, recommended)
+
+```bash
+# 1. Configure the required variables (see .env.example)
+export DOMAIN_NAME=exam.example.com
+export LETSENCRYPT_EMAIL=admin@example.com
+export POSTGRES_PASSWORD=change-me
+export JWT_SECRET=change-me
+export SMTP_USER=youraddress@gmail.com
+export SMTP_PASS=your-gmail-app-password
+export GROQ_API_KEY=your-groq-key
+
+# 2. Start the full stack (Postgres + Redis + backend + frontend + nginx)
+docker compose -f docker-compose.prod.yml up -d --build
+
+# 3. Obtain a Let's Encrypt certificate (once)
+docker compose -f docker-compose.prod.yml run --rm certbot
+```
+
+All services run with `restart: unless-stopped` and health checks. Certificates auto-renew via the `certbot` service. Data persists in named volumes (`postgres_prod_data`, `uploads_prod_data`, …).
+
+> Before first build, set `ssl_certificate` paths + `server_name` in `nginx.prod.conf` to your domain.
+
+### Option B — Render.com (managed)
+
+Deploy the backend blueprint (`apps/backend/render.yaml` or root `render.yaml`) directly from the Render dashboard:
+
+1. Create a free PostgreSQL instance and copy its connection string.
+2. Create a **Blueprint** pointing at this repo's `render.yaml`.
+3. Fill in the `sync: false` env vars (`DATABASE_URL`, `FRONTEND_URL`, SMTP, Groq).
+4. Deploy a separate frontend service (or host the Next.js app on Vercel).
+
+Health checks hit `/health` on the backend and `/` on the frontend.
+
+---
+
+## Troubleshooting
+
+### CORS errors in the browser console
+
+- Ensure `FRONTEND_URL` (backend `.env`) exactly matches your frontend origin (`http://localhost:3000` locally).
+- Behind Nginx, set `X-Forwarded-Proto`/`Host` headers (already configured in `nginx.conf` / `nginx.prod.conf`).
+- Socket.io errors like `Cross-Origin Request Blocked` → check the `io` CORS origin in `server/app.ts` mirrors `FRONTEND_URL`.
+
+### WebSocket / Socket.io won't connect
+
+- Confirm the Express server (`npm run server`) is running on port `4000` and `NEXT_PUBLIC_SOCKET_URL` points at it.
+- Behind a reverse proxy, `/socket.io/` must be proxied with `Upgrade`/`Connection: upgrade` headers (both configs included).
+- Redis must be reachable for multi-instance scaling; without it the server falls back to the in-memory adapter with a warning.
+
+### Webcam / proctoring doesn't start
+
+- The browser must be served over `http://localhost` (or HTTPS) — camera access is blocked on plain LAN IPs.
+- CSP allows `media-src 'self' blob:` — if you customize Helmet directives, keep `blob:` for the webcam stream.
+- Playwright tests auto-grant camera via fake media stream flags (`--use-fake-device-for-media-stream`).
+
+### Database connection failures (`P1001`)
+
+- Start Postgres: `docker compose up -d postgres` and verify `DATABASE_URL` in `.env`.
+- Run `npx prisma migrate dev` (or `npx prisma db push`) to apply the schema before starting the server.
+
+### Rate limiting (HTTP 429)
+
+- Auth routes: 15 attempts/15 min per IP. Join route: 10/min per IP. Global API: 100/min per IP.
+- Behind Nginx, ensure `X-Forwarded-For` is set (configured) so limits apply to real client IPs.
+
+---
+
 ## Project Structure
 
 ```
@@ -219,6 +318,10 @@ examora/
 | POST | `/api/exams/:id/submit` | Session token | Submit answers |
 | POST | `/api/exams/:id/grade-all` | Teacher JWT | Grade all submitted sessions |
 | POST | `/api/exams/:id/publish` | Teacher JWT | Publish a DRAFT exam |
+| POST | `/api/exams/:id/proctoring-event` | Session token | Log a violation; enforces the 3-warning rule |
+| GET | `/api/exams/:examId/sessions/:sessionId/events` | Teacher JWT | Proctoring event timeline |
+| POST | `/api/exams/generate-questions` | Teacher JWT | AI question generation (Groq free tier + fallback) |
+| POST | `/api/exams/:examId/invite-bulk` | Teacher JWT | Bulk invite via CSV upload or JSON (email join links) |
 | DELETE | `/api/exams/:id` | Teacher JWT | Delete exam + cascade |
 
 Socket.io events: `join_exam_room`, `student_warning`, `student_status_update`, `exam_terminated`, `teacher_join_exam_room` / `teacher_leave_exam_room`.

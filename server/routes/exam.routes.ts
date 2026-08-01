@@ -13,6 +13,7 @@ import {
   deleteExam,
   publishExam,
   getSessionEvents,
+  getExamResults,
 } from '../controllers/exam.controller.js';
 import { generateAIQuestions } from '../../apps/backend/src/controllers/ai.controller.js';
 import { inviteBulkStudents } from '../../apps/backend/src/controllers/invite.controller.js';
@@ -114,6 +115,13 @@ router.post('/:id/publish', requireTeacher, publishExam);
  * Protected — valid teacher JWT required (owner only).
  */
 router.post('/:id/grade-all', requireTeacher, gradeAllSessions);
+
+/**
+ * GET /api/exams/:examId/results
+ * Fetch graded sessions + questions for the results dashboard.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.get('/:examId/results', requireTeacher, getExamResults);
 
 /**
  * GET /api/exams/:examId/sessions/:sessionId/events

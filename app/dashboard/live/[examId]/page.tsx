@@ -11,7 +11,6 @@ import {
   Loader2,
   MonitorPlay,
   OctagonX,
-  Radio,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
@@ -54,12 +53,12 @@ function mockSessions(examId: string): StudentSessionView[] {
     { name: "Amelia Clark", email: "amelia.c@school.edu" },
   ];
   const statuses: SessionStatus[] = [
-    "ACTIVE",
-    "ACTIVE",
-    "ACTIVE",
-    "ACTIVE",
-    "ACTIVE",
-    "ACTIVE",
+    "IN_PROGRESS",
+    "IN_PROGRESS",
+    "IN_PROGRESS",
+    "IN_PROGRESS",
+    "IN_PROGRESS",
+    "IN_PROGRESS",
     "TERMINATED",
     "SUBMITTED",
   ];
@@ -78,35 +77,19 @@ function mockSessions(examId: string): StudentSessionView[] {
 }
 
 function StatusBadge({ status }: { status: SessionStatus }) {
-  if (status === "ACTIVE") {
+  if (status === "IN_PROGRESS") {
     return (
       <Badge className="gap-1 bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100 hover:bg-emerald-50">
         <CircleDot className="h-3 w-3 fill-emerald-500 text-emerald-500" />
-        In progress
+        In Progress
       </Badge>
     );
   }
-  if (status === "JOINED") {
-    return (
-      <Badge className="gap-1 bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-100 hover:bg-sky-50">
-        <Radio className="h-3 w-3" />
-        Joined
-      </Badge>
-    );
-  }
-  if (status === "SUBMITTED") {
+  if (status === "SUBMITTED" || status === "AUTO_SUBMITTED") {
     return (
       <Badge className="gap-1 bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-100 hover:bg-indigo-50">
         <ShieldCheck className="h-3 w-3" />
         Submitted
-      </Badge>
-    );
-  }
-  if (status === "GRADED") {
-    return (
-      <Badge className="gap-1 bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-100">
-        <ShieldCheck className="h-3 w-3" />
-        Graded
       </Badge>
     );
   }
@@ -210,7 +193,7 @@ export default function LiveProctoringDashboard() {
               id: ev.sessionId,
               examId: ev.examId,
               studentName: ev.studentName ?? "Unknown student",
-              status: (ev.status ?? "JOINED") as SessionStatus,
+              status: (ev.status ?? "IN_PROGRESS") as SessionStatus,
               warnings: ev.warnings ?? 0,
               warningsLimit: ev.warningsLimit ?? DEFAULT_WARNINGS_LIMIT,
               _new: true,
@@ -367,9 +350,9 @@ export default function LiveProctoringDashboard() {
     const c = { active: 0, terminated: 0, submitted: 0, total: 0, warnings: 0 };
     for (const s of sessions) {
       c.total += 1;
-      if (s.status === "ACTIVE" || s.status === "JOINED") c.active += 1;
+      if (s.status === "IN_PROGRESS") c.active += 1;
       if (s.status === "TERMINATED") c.terminated += 1;
-      if (s.status === "SUBMITTED" || s.status === "GRADED") c.submitted += 1;
+      if (s.status === "SUBMITTED" || s.status === "AUTO_SUBMITTED") c.submitted += 1;
       c.warnings += s.warnings;
     }
     return c;
@@ -541,7 +524,7 @@ export default function LiveProctoringDashboard() {
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sessions.map((s) => {
             const terminated = s.status === "TERMINATED";
-            const submitted = s.status === "SUBMITTED" || s.status === "GRADED";
+            const submitted = s.status === "SUBMITTED" || s.status === "AUTO_SUBMITTED";
             return (
               <Card
                 key={s.id}

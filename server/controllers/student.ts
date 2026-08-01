@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, ExamStatus } from '@prisma/client';
+import { PrismaClient, ExamStatus, SubmissionStatus } from '@prisma/client';
 import { studentJoinSchema, StudentJoinInput } from '../validators/student.js';
 
 const prisma = new PrismaClient();
@@ -43,12 +43,12 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
     }
 
     // Check if student already has an active session for this exam
-    const existingSession = await prisma.studentSession.findFirst({
-      where: { 
-        examId,
-        studentEmail,
-        enrollmentNo,
-        status: 'ACTIVE',
+    const existingSession = await prisma.examSession.findFirst({
+      where: {
+        exam_id: examId,
+        student_email: studentEmail,
+        enrollment_number: enrollmentNo,
+        status: SubmissionStatus.IN_PROGRESS,
       },
     });
 
@@ -57,10 +57,10 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
       res.json({
         status: 'success',
         data: {
-          sessionToken: existingSession.sessionToken,
-          studentName: existingSession.studentName,
-          studentEmail: existingSession.studentEmail,
-          enrollmentNo: existingSession.enrollmentNo,
+          sessionToken: existingSession.session_token,
+          studentName: existingSession.student_name,
+          studentEmail: existingSession.student_email,
+          enrollmentNo: existingSession.enrollment_number,
         },
       });
       return;
@@ -70,23 +70,23 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
     const sessionToken = crypto.randomUUID();
 
     // Create student session
-    const studentSession = await prisma.studentSession.create({
+    const studentSession = await prisma.examSession.create({
       data: {
-        examId,
-        studentName,
-        studentEmail,
-        enrollmentNo,
-        sessionToken,
+        exam_id: examId,
+        student_name: studentName,
+        student_email: studentEmail,
+        enrollment_number: enrollmentNo,
+        session_token: sessionToken,
       },
     });
 
     res.status(201).json({
       status: 'success',
       data: {
-        sessionToken: studentSession.sessionToken,
-        studentName: studentSession.studentName,
-        studentEmail: studentSession.studentEmail,
-        enrollmentNo: studentSession.enrollmentNo,
+        sessionToken: studentSession.session_token,
+        studentName: studentSession.student_name,
+        studentEmail: studentSession.student_email,
+        enrollmentNo: studentSession.enrollment_number,
       },
     });
   } catch (error) {

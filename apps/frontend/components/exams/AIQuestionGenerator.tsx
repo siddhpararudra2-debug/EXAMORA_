@@ -16,7 +16,13 @@ import {
 
 export interface GeneratedQuestion {
   id: string;
-  type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER";
+  type:
+    | "MCQ_SINGLE"
+    | "MCQ_MULTI"
+    | "TRUE_FALSE"
+    | "SHORT_ANSWER"
+    | "LONG_ANSWER"
+    | "FILL_BLANK";
   questionText: string;
   options?: string[];
   marks: number;
@@ -36,7 +42,7 @@ export function AIQuestionGenerator({
   const [topic, setTopic] = useState<string>("");
   const [count, setCount] = useState<number>(5);
   const [difficulty, setDifficulty] = useState<string>("Medium");
-  const [questionType, setQuestionType] = useState<string>("MCQ");
+  const [questionType, setQuestionType] = useState<string>("MCQ_SINGLE");
 
   const [loading, setLoading] = useState<boolean>(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
@@ -182,7 +188,7 @@ export function AIQuestionGenerator({
                 onChange={(e) => setQuestionType(e.target.value)}
                 className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="MCQ">Multiple Choice (MCQ)</option>
+                <option value="MCQ_SINGLE">Multiple Choice (MCQ)</option>
                 <option value="TRUE_FALSE">True / False</option>
                 <option value="SHORT_ANSWER">Short Answer</option>
               </select>
@@ -316,10 +322,10 @@ function generateMockQuestions(
 ): GeneratedQuestion[] {
   const result: GeneratedQuestion[] = [];
   for (let i = 1; i <= count; i++) {
-    if (type === "MCQ" || (type === "MIXED" && i % 2 === 1)) {
+    if (type === "MCQ_SINGLE" || (type === "MIXED" && i % 2 === 1)) {
       result.push({
         id: `ai-q-${Date.now()}-${i}`,
-        type: "MCQ",
+        type: "MCQ_SINGLE",
         questionText: `Which of the following best describes the core mechanism of ${topic} in ${difficulty.toLowerCase()} context?`,
         options: [
           `Primary optimization pattern for ${topic}`,

@@ -2,15 +2,23 @@ import { z } from 'zod';
 
 // ── Enums mirror prisma/schema.prisma ────────────────────────────────────────
 
-const QuestionTypeEnum = z.enum(['MCQ', 'TRUE_FALSE', 'SHORT_ANSWER']);
+const QuestionTypeEnum = z.enum([
+  'MCQ_SINGLE',
+  'MCQ_MULTI',
+  'TRUE_FALSE',
+  'SHORT_ANSWER',
+  'LONG_ANSWER',
+  'FILL_BLANK',
+  'DROPDOWN',
+]);
 
-const ExamStatusEnum = z.enum(['DRAFT', 'ACTIVE', 'COMPLETED']);
+const ExamStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'ARCHIVED']);
 
 // ── Question ──────────────────────────────────────────────────────────────────
 
 /**
  * A single question inside the exam-creation payload.
- * `options` is only required for MCQ / TRUE_FALSE; it is an array of strings.
+ * `options` is only required for MCQ_SINGLE / MCQ_MULTI / TRUE_FALSE; it is an array of strings.
  */
 export const questionSchema = z
   .object({
@@ -24,11 +32,11 @@ export const questionSchema = z
   })
   .superRefine((q, ctx) => {
     // MCQ and TRUE_FALSE must include options
-    if (q.type === 'MCQ' && (!q.options || q.options.length < 2)) {
+    if ((q.type === 'MCQ_SINGLE' || q.type === 'MCQ_MULTI') && (!q.options || q.options.length < 2)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['options'],
-        message: 'MCQ questions require at least 2 options',
+        message: `${q.type} questions require at least 2 options`,
       });
     }
     if (q.type === 'TRUE_FALSE' && (!q.options || q.options.length !== 2)) {
@@ -87,7 +95,7 @@ export const aiGenerateSchema = z.object({
     .enum(['easy', 'medium', 'hard', 'Easy', 'Medium', 'Hard'])
     .optional(),
   type: z
-    .enum(['MCQ', 'TRUE_FALSE', 'SHORT_ANSWER'])
+    .enum(['MCQ_SINGLE', 'MCQ_MULTI', 'TRUE_FALSE', 'SHORT_ANSWER', 'LONG_ANSWER', 'FILL_BLANK'])
     .optional(),
 });
 
@@ -97,10 +105,13 @@ export const proctoringEventSchema = z.object({
   sessionToken: z.string().uuid('sessionToken must be a valid UUID'),
   eventType: z.enum([
     'TAB_SWITCH',
-    'FACE_LOST',
-    'FULLSCREEN_EXIT',
-    'MULTIPLE_FACES',
-    'PHONE_DETECTED',
+    'APP_SWITCH',
+    'MINIMIZE',
+    'MOBILE_BUTTON',
+    'AI_OVERLAY',
+    'DEVTOOLS',
+    'SCREEN_CAPTURE',
+    'KEYBOARD_SHORTCUT',
   ]),
   reason: z.string().max(200, 'Reason must be at most 200 characters').optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),

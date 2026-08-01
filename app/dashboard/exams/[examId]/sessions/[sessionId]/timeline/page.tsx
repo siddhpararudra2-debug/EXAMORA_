@@ -33,7 +33,7 @@ interface StudentSessionDetail {
   warningsLimit: number;
   finalScore?: number;
   maxScore?: number;
-  status: "ACTIVE" | "SUBMITTED" | "TERMINATED" | "GRADED";
+  status: "IN_PROGRESS" | "SUBMITTED" | "AUTO_SUBMITTED" | "TERMINATED";
   examStartTime: string;
   examDurationMinutes: number;
   events: ProctoringEvent[];
@@ -53,7 +53,7 @@ export default function ProctoringTimelinePage() {
       setLoading(true);
       try {
         const res = await fetch(
-          `/api/exams/${params.examId}/sessions/${params.sessionId}/timeline`,
+          `/api/exams/${params.examId}/sessions/${params.sessionId}/events`,
           { credentials: "include" }
         );
 
@@ -83,20 +83,20 @@ export default function ProctoringTimelinePage() {
                 {
                   id: "e1",
                   type: "TAB_SWITCH",
-                  timestamp: new Date(new Date(start).getTime() + 4 * 60 * 1000).toISOString(),
+                  occurred_at: new Date(new Date(start).getTime() + 4 * 60 * 1000).toISOString(),
                   description: "Tab switch detected: switched to browser window.",
                 },
                 {
                   id: "e2",
-                  type: "FACE_LOST",
-                  timestamp: new Date(new Date(start).getTime() + 12 * 60 * 1000).toISOString(),
-                  description: "Face unverified for over 5 seconds (Grace period expired).",
+                  type: "AI_OVERLAY",
+                  occurred_at: new Date(new Date(start).getTime() + 12 * 60 * 1000).toISOString(),
+                  description: "AI overlay detected over the exam window.",
                 },
                 {
                   id: "e3",
-                  type: "FULLSCREEN_EXIT",
-                  timestamp: new Date(new Date(start).getTime() + 18 * 60 * 1000).toISOString(),
-                  description: "Exited fullscreen mode via ESC key.",
+                  type: "DEVTOOLS",
+                  occurred_at: new Date(new Date(start).getTime() + 18 * 60 * 1000).toISOString(),
+                  description: "Developer tools opened while answering.",
                 },
               ],
             });
@@ -231,7 +231,7 @@ export default function ProctoringTimelinePage() {
               {session.events.map((evt, idx) => {
                 const config = getEventConfig(evt.type);
                 const IconComponent = config.icon;
-                const eventTimeMs = new Date(evt.timestamp).getTime();
+                const eventTimeMs = new Date(evt.occurred_at).getTime();
                 const offsetStr = formatTimeOffset(eventTimeMs - startTimeMs);
 
                 return (
@@ -260,7 +260,7 @@ export default function ProctoringTimelinePage() {
                         ⏱ +{offsetStr}
                       </span>
                       <span className="text-[11px] text-slate-400 font-mono block mt-0.5">
-                        {new Date(evt.timestamp).toLocaleTimeString()}
+                        {new Date(evt.occurred_at).toLocaleTimeString()}
                       </span>
                     </div>
                   </div>

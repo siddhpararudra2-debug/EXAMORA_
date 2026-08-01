@@ -3,10 +3,9 @@ import { authHeaders } from "@/lib/auth-token";
 export interface ProctoringEvent {
   id: string;
   sessionId: string;
-  eventType: string;
   type: string;
   description?: string;
-  timestamp: string;
+  occurred_at: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -19,7 +18,13 @@ export interface InviteSummary {
 
 export interface Question {
   id: string;
-  type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER";
+  type:
+    | "MCQ_SINGLE"
+    | "MCQ_MULTI"
+    | "TRUE_FALSE"
+    | "SHORT_ANSWER"
+    | "LONG_ANSWER"
+    | "FILL_BLANK";
   questionText: string;
   options?: string[];
   correctAnswer: string;
@@ -93,7 +98,7 @@ export async function generateQuestions(
   topic: string,
   count: number = 5,
   difficulty: string = "medium",
-  type: string = "MCQ"
+  type: string = "MCQ_SINGLE"
 ): Promise<Question[]> {
   const res = await fetch(`${API_BASE}/exams/generate-questions`, {
     method: "POST",
