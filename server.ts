@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { connectDatabase } from './prisma/client.js';
 import authRoutes from './server/routes/auth.js';
 import studentRoutes from './server/routes/student.js';
+import examRoutes from './server/routes/exam.routes.js';
 
 // Load environment variables
 dotenv.config();
@@ -82,6 +83,7 @@ const setupMiddleware = () => {
 
   // API routes
   app.use('/api/auth', authRoutes);
+  app.use('/api/exams', examRoutes);
   app.use('/api', studentRoutes);
 };
 
