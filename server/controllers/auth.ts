@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 const validate = <T>(schema: any, data: unknown): { success: boolean; data?: T; error?: string } => {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const errors = result.error.errors.map(e => e.message).join(', ');
+    const errors = result.error.errors.map((e: { message: string }) => e.message).join(', ');
     return { success: false, error: errors };
   }
   return { success: true, data: result.data as T };

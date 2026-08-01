@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient, SessionStatus, ExamStatus } from '@prisma/client';
-import { ZodSchema } from 'zod';
+import { ZodType, ZodTypeDef } from 'zod';
 
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import {
@@ -20,7 +20,7 @@ const prisma = new PrismaClient();
 // ── Shared validation helper ──────────────────────────────────────────────────
 
 function validate<T>(
-  schema: ZodSchema<T>,
+  schema: ZodType<T, ZodTypeDef, unknown>,
   data: unknown,
 ): { success: true; data: T } | { success: false; error: string } {
   const result = schema.safeParse(data);
