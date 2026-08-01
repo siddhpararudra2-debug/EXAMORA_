@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { SessionStatus } from '@prisma/client';
+import { SessionStatus, EventType } from '@prisma/client';
 import prisma from '../../../../prisma/client.js';
 
 export const MAX_WARNINGS = 3;
@@ -21,9 +21,12 @@ export interface JoinExamRoomPayload {
 }
 
 export interface StudentWarningPayload {
-  sessionToken: string;
+  sessionToken?: string;
+  sessionId?: string;
   examId: string;
+  eventType?: EventType | string;
   reason?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TeacherJoinRoomPayload {
@@ -59,18 +62,50 @@ export type JoinExamRoomResponse =
 
 export const roomName = (examId: string): string => `exam_${examId}`;
 
+/** Maps arbitrary event type strings to Prisma EventType enum */
+function mapEventType(typeStr?: string, reason?: string): EventType {
+  if (!typeStr) {
+    if (reason?.toLowerCase().includes("face lost") || reason?.toLowerCase().includes("no face")) {
+      return EventType.FACE_LOST;
+    }
+    if (reason?.toLowerCase().includes("fullscreen")) {
+      return EventType.FULLSCREEN_EXIT;
+    }
+    if (reason?.toLowerCase().includes("multiple faces")) {
+      return EventType.MULTIPLE_FACES;
+    }
+    if (reason?.toLowerCase().includes("phone")) {
+      return EventType.PHONE_DETECTED;
+    }
+    return EventType.TAB_SWITCH;
+  }
+
+  const upper = typeStr.toUpperCase();
+  if (upper === "FACE_LOST") return EventType.FACE_LOST;
+  if (upper === "FULLSCREEN_EXIT") return EventType.FULLSCREEN_EXIT;
+  if (upper === "MULTIPLE_FACES") return EventType.MULTIPLE_FACES;
+  if (upper === "PHONE_DETECTED") return EventType.PHONE_DETECTED;
+  return EventType.TAB_SWITCH;
+}
+
 const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
   socket.on(PROCTORING_EVENTS.STUDENT_WARNING, async (payload: StudentWarningPayload) => {
     try {
-      const { sessionToken, examId, reason } = payload;
+      const { sessionToken, sessionId, examId, reason, eventType, metadata } = payload;
 
+      // Locate session by sessionToken or sessionId
       const session = await prisma.studentSession.findFirst({
-        where: { sessionToken, examId },
+        where: {
+          OR: [
+            ...(sessionToken ? [{ sessionToken, examId }] : []),
+            ...(sessionId ? [{ id: sessionId, examId }] : []),
+          ],
+        },
       });
 
       if (!session) {
         socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
-          message: 'Invalid session token for this exam',
+          message: 'Invalid session token or session ID for this exam',
         });
         return;
       }
@@ -79,6 +114,20 @@ const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
         return;
       }
 
+      // Step 2: Create ProctoringEvent record in database via Prisma
+      const mappedType = mapEventType(eventType as string, reason);
+      await prisma.proctoringEvent.create({
+        data: {
+          sessionId: session.id,
+          eventType: mappedType,
+          metadata: {
+            reason: reason ?? 'Proctoring violation warning',
+            ...(metadata ?? {}),
+          },
+        },
+      });
+
+      // Increment warningsCount
       const updated = await prisma.studentSession.update({
         where: { id: session.id },
         data: { warningsCount: { increment: 1 } },
@@ -101,6 +150,7 @@ const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
         } satisfies ExamTerminatedPayload);
       }
 
+      // Broadcast update to teacher live monitoring room
       io.to(roomName(examId)).emit(
         PROCTORING_EVENTS.STUDENT_STATUS_UPDATE,
         {

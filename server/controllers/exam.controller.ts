@@ -457,3 +457,47 @@ export const deleteExam = async (
     next(err);
   }
 };
+
+// ── GET /api/exams/:examId/sessions/:sessionId/events ───────────────────────────
+// Protected: requires valid teacher JWT (applied at router level).
+// Returns all ProctoringEvents for that session, ordered by timestamp ascending.
+
+export const getSessionEvents = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { examId, sessionId } = req.params;
+
+    const session = await prisma.studentSession.findFirst({
+      where: { id: sessionId, examId },
+      include: {
+        exam: { select: { createdBy: true } },
+      },
+    });
+
+    if (!session) {
+      res.status(404).json({ status: 'error', message: 'Student session not found' });
+      return;
+    }
+
+    if (session.exam.createdBy !== teacher.userId) {
+      res.status(403).json({ status: 'error', message: 'Access denied' });
+      return;
+    }
+
+    const events = await prisma.proctoringEvent.findMany({
+      where: { sessionId },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    res.json({
+      status: 'success',
+      data: { events },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
