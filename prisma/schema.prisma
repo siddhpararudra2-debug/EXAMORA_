@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TEACHER
+}
+
+enum ExamStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+}
+
+enum QuestionType {
+  MCQ
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+enum SessionStatus {
+  ACTIVE
+  TERMINATED
+  SUBMITTED
+  GRADED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(TEACHER)
+  createdAt    DateTime @default(now())
+  exams        Exam[]
+}
+
+model Exam {
+  id             String        @id @default(cuid())
+  title          String
+  description    String?
+  durationMinutes Int
+  totalMarks     Int
+  status         ExamStatus    @default(DRAFT)
+  createdBy      String
+  creator        User          @relation(fields: [createdBy], references: [id])
+  createdAt      DateTime      @default(now())
+  questions      Question[]
+  sessions       StudentSession[]
+}
+
+model Question {
+  id           String       @id @default(cuid())
+  examId       String
+  exam         Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  type         QuestionType
+  questionText String
+  options      Json?
+  correctAnswer String
+  marks        Int
+  submissions  Submission[]
+}
+
+model StudentSession {
+  id            String        @id @default(cuid())
+  examId        String
+  exam          Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentName   String
+  studentEmail  String
+  enrollmentNo  String
+  sessionToken  String        @unique
+  warningsCount Int           @default(0)
+  status        SessionStatus @default(ACTIVE)
+  score         Int?
+  startedAt     DateTime      @default(now())
+  submittedAt   DateTime?
+  submissions   Submission[]
+}
+
+model Submission {
+  id          String @id @default(cuid())
+  sessionId   String
+  session     StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answerText  String
+  createdAt   DateTime @default(now())
+
+  @@unique([sessionId, questionId])
+}
