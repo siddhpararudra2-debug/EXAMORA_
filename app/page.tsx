@@ -1,6 +1,7 @@
-import { GraduationCap, BookOpen, ClipboardCheck, ShieldCheck } from "lucide-react";
+import { GraduationCap, BookOpen, ClipboardCheck, ShieldCheck, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import Link from "next/link";
 
 const features = [
   {
@@ -31,76 +32,86 @@ const features = [
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-700 text-white">
-              <GraduationCap className="h-5 w-5" />
+    <main className="min-h-screen bg-background relative overflow-hidden">
+      {/* Subtle ambient background glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] opacity-30 pointer-events-none" 
+           style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.05) 0%, rgba(255,255,255,0) 70%)' }} />
+
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/60 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground">
+              <GraduationCap className="h-4 w-4" />
             </div>
-            <span className="text-lg font-semibold tracking-tight text-slate-900">
+            <span className="text-lg font-bold tracking-tight text-foreground">
               Examora
             </span>
           </div>
-          <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
-            <a href="#features">Features</a>
-            <a href="#exams">Exams</a>
-            <a href="#teachers">Teachers</a>
-            <a href="#students">Students</a>
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
+            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
+            <a href="https://github.com/siddhpararudra2-debug/EXAMORA_" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">Open Source</a>
           </nav>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm">
-              Log in
-            </Button>
-            <Button size="sm">Get started</Button>
+          <div className="flex items-center gap-4">
+            <Link href="/login">
+              <Button variant="ghost" className="hidden sm:flex text-sm font-medium">
+                Sign in
+              </Button>
+            </Link>
+            <Link href="/dashboard/exams/create">
+              <Button className="text-sm font-medium rounded-full px-6">
+                Get started
+              </Button>
+            </Link>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-            100% Free &amp; Open-Source
+      <section className="relative mx-auto max-w-5xl px-6 pt-32 pb-24 text-center">
+        <div className="animate-in slide-in-from-bottom-8 fade-in duration-1000">
+          <span className="inline-flex items-center rounded-full border border-border bg-secondary/50 px-4 py-1.5 text-xs font-semibold text-secondary-foreground mb-8">
+            100% Free & Open-Source
           </span>
-          <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-            A smarter way to run online exams.
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-foreground max-w-4xl mx-auto leading-[1.1]">
+            A smarter way to run <br className="hidden md:block" />
+            <span className="text-muted-foreground">online exams.</span>
           </h1>
-          <p className="mt-6 text-lg leading-8 text-slate-600">
-            Examora is a clean, modern exam platform built for educators and
-            students. Schedule assessments, enable AI proctoring, and review
-            results — all in one place.
+          <p className="mt-8 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            Examora is a beautifully minimal platform built for modern educators. 
+            Schedule assessments, enable AI proctoring, and review results with ease.
           </p>
-          <div className="mt-10 flex items-center justify-center gap-4">
-            <Button size="lg">Create your first exam</Button>
-            <Button size="lg" variant="secondary">
-              View on GitHub
-            </Button>
+          <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/dashboard/exams/create">
+              <Button size="lg" className="rounded-full px-8 h-12 text-base group">
+                Create an exam 
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </Link>
+            <a href="https://github.com/siddhpararudra2-debug/EXAMORA_" target="_blank" rel="noreferrer">
+              <Button size="lg" variant="outline" className="rounded-full px-8 h-12 text-base">
+                View Repository
+              </Button>
+            </a>
           </div>
         </div>
       </section>
 
-      <section id="features" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900">
-            Everything you need for fair, reliable exams
+      <section id="features" className="mx-auto max-w-5xl px-6 py-24 border-t border-border/50">
+        <div className="mb-16 text-center">
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">
+            Everything you need. Nothing you don&apos;t.
           </h2>
-          <p className="mt-4 text-slate-600">
-            Built with Next.js, TypeScript, Tailwind CSS, and shadcn/ui for a
-            professional and accessible educational experience.
-          </p>
         </div>
-
-        <div className="mt-14 grid gap-6 sm:grid-cols-2">
-          {features.map((feature) => (
-            <Card key={feature.title} className="border-slate-200 bg-white">
-              <CardContent className="p-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
+        <div className="grid gap-6 md:grid-cols-2">
+          {features.map((feature, i) => (
+            <Card key={feature.title} className="bg-card border-border/40 hover-lift group transition-all duration-300">
+              <CardContent className="p-8">
+                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-foreground group-hover:scale-110 transition-transform duration-300">
                   <feature.icon className="h-5 w-5" />
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-slate-900">
+                <h3 className="mb-3 text-xl font-semibold text-foreground tracking-tight">
                   {feature.title}
                 </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
+                <p className="text-muted-foreground leading-relaxed">
                   {feature.description}
                 </p>
               </CardContent>
@@ -109,15 +120,15 @@ export default function HomePage() {
         </div>
       </section>
 
-      <footer className="border-t bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6 lg:px-8">
-          <p className="text-sm text-slate-500">
-            © {new Date().getFullYear()} Examora. Released under the MIT License.
+      <footer className="border-t border-border/40 py-12">
+        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-6 px-6 md:flex-row">
+          <p className="text-sm text-muted-foreground">
+            © {new Date().getFullYear()} Examora. MIT License.
           </p>
-          <div className="flex items-center gap-6 text-sm text-slate-500">
-            <a href="#" className="hover:text-slate-900">Privacy</a>
-            <a href="#" className="hover:text-slate-900">Terms</a>
-            <a href="#" className="hover:text-slate-900">Docs</a>
+          <div className="flex gap-6 text-sm text-muted-foreground font-medium">
+            <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
+            <a href="#" className="hover:text-foreground transition-colors">Terms</a>
+            <a href="https://github.com/siddhpararudra2-debug/EXAMORA_" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">GitHub</a>
           </div>
         </div>
       </footer>
