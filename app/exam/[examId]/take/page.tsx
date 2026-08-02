@@ -328,22 +328,47 @@ function TakeExamContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft === null, submitted, terminated]);
 
+  // -------- Handlers --------
+  const doTerminate = useCallback(
+    (reason: ExamTerminatedEvent["reason"]) => {
+      setTerminated(true);
+      setTerminatedReason(reason);
+      setTerminatedCountdown(
+        Math.round(TERMINATED_REDIRECT_DELAY_MS / 1000)
+      );
+
+      if (!session?.sessionToken) return;
+
+      // Flush the in-memory answers via canonical REST API (best-effort).
+      // The /answer route accepts TERMINATED sessions, so the last answers
+      // are persisted before the student is redirected. A terminated session
+      // can no longer be submitted via /submit.
+      (async () => {
+        try {
+          for (const [questionId, answerData] of Object.entries(answers)) {
+            if (answerData && answerData.trim()) {
+              await fetch(`/api/v1/exam-session/${session.sessionToken}/answer`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${session.sessionToken}`,
+                },
+                body: JSON.stringify({ questionId, answerData }),
+              }).catch(() => {});
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      })();
+    },
+    [answers, session]
+  );
+
   // -------- Tab-switch proctoring --------
   const emitViolation = useCallback(
     async (reason: string) => {
       if (!session?.sessionToken || !exam) return;
-
-      if (socketRef.current) {
-        try {
-          socketRef.current.emit("student_warning", {
-            examId: exam.id,
-            sessionToken: session.sessionToken,
-            reason,
-          });
-        } catch {
-          /* ignore */
-        }
-      }
 
       try {
         const res = await fetch(
@@ -365,20 +390,27 @@ function TakeExamContent() {
           const payload = (await res.json()) as {
             data?: { terminated?: boolean; warningsCount?: number };
           };
-          if (
-            payload.data?.terminated ||
-            (payload.data?.warningsCount ?? 0) >= (exam.warningsLimit ?? DEFAULT_WARNINGS_LIMIT)
-          ) {
-            setTerminated(true);
-            setTerminatedReason("warnings_limit");
-            setTerminatedCountdown(Math.round(TERMINATED_REDIRECT_DELAY_MS / 1000));
+          const count = payload.data?.warningsCount ?? 0;
+          const limit = exam.warningsLimit ?? DEFAULT_WARNINGS_LIMIT;
+          const isTerminated = payload.data?.terminated || count >= limit;
+
+          setWarnings(count);
+
+          toast({
+            title: "Proctoring alert",
+            description: `Tab switch detected. Warning ${count}/${limit}.`,
+            variant: isTerminated ? "destructive" : "default",
+          });
+
+          if (isTerminated) {
+            doTerminate("warnings_limit");
           }
         }
       } catch {
         /* network failure handled gracefully */
       }
     },
-    [session, exam]
+    [session, exam, toast, doTerminate]
   );
 
   useEffect(() => {
@@ -386,28 +418,13 @@ function TakeExamContent() {
     const onVisibility = () => {
       if (document.hidden) {
         const reason = "Tab or window switch detected";
-        setWarnings((w) => {
-          const next = w + 1;
-          toast({
-            title: "Proctoring alert",
-            description: `Tab switch detected. Warning ${next}/${
-              exam?.warningsLimit ?? DEFAULT_WARNINGS_LIMIT
-            }.`,
-            variant: next >= DEFAULT_WARNINGS_LIMIT ? "destructive" : "default",
-          });
-          void emitViolation(reason);
-          if (next >= (exam?.warningsLimit ?? DEFAULT_WARNINGS_LIMIT)) {
-            doTerminate("warnings_limit");
-          }
-          return next;
-        });
+        void emitViolation(reason);
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () =>
       document.removeEventListener("visibilitychange", onVisibility);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted, loading, !!exam]);
+  }, [submitted, loading, exam, emitViolation]);
 
   // -------- Derived --------
   const totalQuestions = exam?.questions.length ?? 0;
@@ -425,48 +442,6 @@ function TakeExamContent() {
   );
   const warningLimit = exam?.warningsLimit ?? DEFAULT_WARNINGS_LIMIT;
   const warningsCritical = warnings >= warningLimit;
-
-  // -------- Handlers --------
-  const doTerminate = useCallback(
-    (reason: ExamTerminatedEvent["reason"]) => {
-      setTerminated(true);
-      setTerminatedReason(reason);
-      setTerminatedCountdown(
-        Math.round(TERMINATED_REDIRECT_DELAY_MS / 1000)
-      );
-
-      if (!session?.sessionToken) return;
-
-      // Save answers and submit session via canonical REST API
-      (async () => {
-        try {
-          for (const [questionId, answerData] of Object.entries(answers)) {
-            if (answerData && answerData.trim()) {
-              await fetch(`/api/v1/exam-session/${session.sessionToken}/answer`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${session.sessionToken}`,
-                },
-                body: JSON.stringify({ questionId, answerData }),
-              }).catch(() => {});
-            }
-          }
-
-          await fetch(`/api/v1/exam-session/${session.sessionToken}/submit`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.sessionToken}`,
-            },
-          });
-        } catch {
-          /* ignore */
-        }
-      })();
-    },
-    [answers, session]
-  );
 
   function setAnswer(qid: string, value: string) {
     setAnswers((prev) => ({ ...prev, [qid]: value }));
@@ -519,33 +494,34 @@ function TakeExamContent() {
 
   // -------- Submit --------
   async function handleSubmit(auto = false) {
-    if (!exam || submitting || submitted || terminated) return;
+    if (!session || !exam || submitting || submitted || terminated) return;
     setSubmitting(true);
     try {
-      if (session?.sessionToken) {
-        // Save answers via canonical REST API
-        for (const [questionId, answerData] of Object.entries(answers)) {
-          if (answerData && answerData.trim()) {
-            await fetch(`/api/v1/exam-session/${session.sessionToken}/answer`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session.sessionToken}`,
-              },
-              body: JSON.stringify({ questionId, answerData }),
-            }).catch(() => {});
-          }
+      // Save answers via canonical REST API
+      for (const [questionId, answerData] of Object.entries(answers)) {
+        if (answerData && answerData.trim()) {
+          await fetch(`/api/v1/exam-session/${session.sessionToken}/answer`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.sessionToken}`,
+            },
+            body: JSON.stringify({ questionId, answerData }),
+          }).catch(() => {});
         }
       }
 
-      const token = session?.sessionToken;
-      const res = await fetch(`/api/v1/exam-session/${token}/submit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
+      const res = await fetch(
+        `/api/v1/exam-session/${session.sessionToken}/submit`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({ sessionToken: session.sessionToken }),
+        }
+      );
 
       const data = (await res.json().catch(() => ({}))) as {
         submittedAt?: string;
@@ -553,20 +529,23 @@ function TakeExamContent() {
         data?: { message?: string };
       };
 
-      if (res.ok) {
+      if (!res.ok) {
         toast({
-          title: auto ? "Time's up — auto-submitted" : "Exam submitted",
+          title: auto ? "Auto-submit failed" : "Submission failed",
           description:
-            data?.data?.message ?? data?.message ?? "Your answers have been received.",
-        });
-      } else {
-        toast({
-          title: auto ? "Auto-submitted (local)" : "Answers saved locally",
-          description:
-            "Network unavailable; please confirm with your teacher.",
+            data?.data?.message ??
+            data?.message ??
+            "The server rejected the submission. Please try again.",
           variant: "destructive",
         });
+        return;
       }
+
+      toast({
+        title: auto ? "Time's up — auto-submitted" : "Exam submitted",
+        description:
+          data?.data?.message ?? data?.message ?? "Your answers have been received.",
+      });
 
       setSubmitted(true);
       setSubmittedViaAuto(auto);

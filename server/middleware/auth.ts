@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../config.js';
 
 /**
  * Shape of the decoded JWT payload for teachers.
@@ -43,8 +44,7 @@ export const requireTeacher = (
   const token = authHeader.split(' ')[1];
 
   try {
-    const secret = process.env.JWT_SECRET || 'dev-secret';
-    const payload = jwt.verify(token, secret) as TeacherPayload;
+    const payload = jwt.verify(token, JWT_SECRET) as TeacherPayload;
 
     // Attach to request for use in controllers
     (req as AuthenticatedRequest).teacher = {

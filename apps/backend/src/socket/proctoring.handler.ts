@@ -61,6 +61,7 @@ export type JoinExamRoomResponse =
   | { status: 'error'; message: string };
 
 export const roomName = (examId: string): string => `exam_${examId}`;
+export const sessionRoomName = (sessionId: string): string => `session_${sessionId}`;
 
 /**
  * Maps arbitrary event type strings to the Prisma ViolationType enum.
@@ -149,7 +150,7 @@ const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
           data: { status: SubmissionStatus.TERMINATED, submitted_at: new Date() },
         });
 
-        socket.emit(PROCTORING_EVENTS.EXAM_TERMINATED, {
+        io.to(sessionRoomName(session.id)).emit(PROCTORING_EVENTS.EXAM_TERMINATED, {
           examId,
           sessionId: session.id,
           reason: reason ?? 'warnings_limit',
@@ -213,6 +214,7 @@ const registerJoinExamRoomHandler = (socket: Socket): void => {
         }
 
         await socket.join(roomName(examId));
+        await socket.join(sessionRoomName(session.id));
 
         socket.data.sessionId = session.id;
         socket.data.examId = examId;

@@ -4,15 +4,16 @@ import { Server } from 'socket.io';
 
 import { AuthenticatedStudentRequest } from '../middleware/validateStudentSession.js';
 import { gradeSubmission } from '../../packages/database/src/grading.service.js';
+import {
+  MAX_WARNINGS,
+  roomName,
+  sessionRoomName,
+  PROCTORING_EVENTS,
+} from '../../apps/backend/src/socket/proctoring.handler.js';
 
 const prisma = new PrismaClient();
 
-export const MAX_WARNINGS = 3;
-
-/**
- * Room name helper matching proctoring socket room convention.
- */
-const roomName = (examId: string): string => `exam_${examId}`;
+export { MAX_WARNINGS };
 
 // ── POST /api/v1/exam-session/:token/answer ─────────────────────────────────────
 // Authenticated by validateStudentSession (Bearer session token).
@@ -129,7 +130,7 @@ export const reportViolation = async (
     }
 
     // 4. Broadcast update to teacher live monitoring room via Socket.io
-    const io = (req.app as unknown as { io?: Server }).io;
+    const io = (req.app as any).io as Server | null;
     if (io) {
       const sessionDetails = await prisma.examSession.findUnique({
         where: { id: studentSession.id },
@@ -144,7 +145,7 @@ export const reportViolation = async (
       const examRoom = roomName(studentSession.examId);
 
       // Broadcast student_status_update to teacher dashboard
-      io.to(examRoom).emit('student_status_update', {
+      io.to(examRoom).emit(PROCTORING_EVENTS.STUDENT_STATUS_UPDATE, {
         examId: studentSession.examId,
         sessionId: studentSession.id,
         studentName: sessionDetails?.student_name ?? 'Student',
@@ -159,9 +160,10 @@ export const reportViolation = async (
         reason: description ?? type,
       });
 
-      // If session is terminated, emit exam_terminated event
+      // If session is terminated, emit exam_terminated event ONLY to per-session room
       if (terminated) {
-        io.to(examRoom).emit('exam_terminated', {
+        const studentSessionRoom = sessionRoomName(studentSession.id);
+        io.to(studentSessionRoom).emit(PROCTORING_EVENTS.EXAM_TERMINATED, {
           examId: studentSession.examId,
           sessionId: studentSession.id,
           reason: description ?? 'warnings_limit',

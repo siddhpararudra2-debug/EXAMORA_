@@ -2,7 +2,9 @@ import { z } from 'zod';
 
 // ── Enums mirror prisma/schema.prisma ────────────────────────────────────────
 
-const QuestionTypeEnum = z.enum([
+// ── Enums mirror prisma/schema.prisma ────────────────────────────────────────
+
+export const QuestionTypeEnum = z.enum([
   'MCQ_SINGLE',
   'MCQ_MULTI',
   'TRUE_FALSE',
@@ -10,6 +12,11 @@ const QuestionTypeEnum = z.enum([
   'LONG_ANSWER',
   'FILL_BLANK',
   'DROPDOWN',
+  'LINEAR_SCALE',
+  'CHECKBOX_GRID',
+  'RADIO_GRID',
+  'DATE',
+  'FILE_UPLOAD',
 ]);
 
 const ExamStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'ARCHIVED']);
@@ -18,33 +25,96 @@ const ExamStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'ARC
 
 /**
  * A single question inside the exam-creation payload.
- * `options` is only required for MCQ_SINGLE / MCQ_MULTI / TRUE_FALSE; it is an array of strings.
+ * Validates options and metadata structure based on the specific QuestionType.
  */
 export const questionSchema = z
   .object({
     type: QuestionTypeEnum,
     questionText: z.string().min(1, 'Question text is required'),
-    options: z
-      .array(z.string().min(1, 'Option text must not be empty'))
-      .optional(),
-    correctAnswer: z.string().min(1, 'Correct answer is required'),
+    options: z.unknown().optional(),
+    correctAnswer: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
     marks: z.number().int().positive('Marks must be a positive integer'),
   })
   .superRefine((q, ctx) => {
-    // MCQ and TRUE_FALSE must include options
-    if ((q.type === 'MCQ_SINGLE' || q.type === 'MCQ_MULTI') && (!q.options || q.options.length < 2)) {
+    // 1. correctAnswer: required for all types except FILE_UPLOAD
+    if (q.type !== 'FILE_UPLOAD' && (!q.correctAnswer || q.correctAnswer.trim() === '')) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['options'],
-        message: `${q.type} questions require at least 2 options`,
+        path: ['correctAnswer'],
+        message: `Correct answer is required for ${q.type} questions`,
       });
     }
-    if (q.type === 'TRUE_FALSE' && (!q.options || q.options.length !== 2)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['options'],
-        message: 'TRUE_FALSE questions must have exactly 2 options',
-      });
+
+    // 2. MCQ_SINGLE / MCQ_MULTI: options must be an array with at least 2 options
+    if (q.type === 'MCQ_SINGLE' || q.type === 'MCQ_MULTI') {
+      const isArr = Array.isArray(q.options);
+      if (!isArr || (q.options as unknown[]).length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['options'],
+          message: `${q.type} questions require at least 2 options`,
+        });
+      }
+    }
+
+    // 3. TRUE_FALSE: options must be an array with exactly 2 options
+    if (q.type === 'TRUE_FALSE') {
+      const isArr = Array.isArray(q.options);
+      if (!isArr || (q.options as unknown[]).length !== 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['options'],
+          message: 'TRUE_FALSE questions must have exactly 2 options',
+        });
+      }
+    }
+
+    // 4. DROPDOWN: options must be an array with at least 1 option
+    if (q.type === 'DROPDOWN') {
+      const isArr = Array.isArray(q.options);
+      if (!isArr || (q.options as unknown[]).length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['options'],
+          message: 'DROPDOWN questions require at least 1 option',
+        });
+      }
+    }
+
+    // 5. CHECKBOX_GRID / RADIO_GRID: options must have grid structure (rows & columns arrays)
+    if (q.type === 'CHECKBOX_GRID' || q.type === 'RADIO_GRID') {
+      const opts = q.options as { rows?: unknown[]; columns?: unknown[] } | undefined;
+      const validGrid =
+        opts &&
+        typeof opts === 'object' &&
+        Array.isArray(opts.rows) &&
+        opts.rows.length >= 1 &&
+        Array.isArray(opts.columns) &&
+        opts.columns.length >= 1;
+
+      if (!validGrid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['options'],
+          message: `${q.type} questions require a grid structure with rows and columns arrays in options`,
+        });
+      }
+    }
+
+    // 6. LINEAR_SCALE: requires metadata with min, max numbers where max > min
+    if (q.type === 'LINEAR_SCALE') {
+      const meta = q.metadata;
+      const min = typeof meta?.min === 'number' ? meta.min : undefined;
+      const max = typeof meta?.max === 'number' ? meta.max : undefined;
+
+      if (min === undefined || max === undefined || max <= min) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['metadata'],
+          message: 'LINEAR_SCALE questions require metadata with numeric min and max where max > min',
+        });
+      }
     }
   });
 
@@ -94,9 +164,7 @@ export const aiGenerateSchema = z.object({
   difficulty: z
     .enum(['easy', 'medium', 'hard', 'Easy', 'Medium', 'Hard'])
     .optional(),
-  type: z
-    .enum(['MCQ_SINGLE', 'MCQ_MULTI', 'TRUE_FALSE', 'SHORT_ANSWER', 'LONG_ANSWER', 'FILL_BLANK'])
-    .optional(),
+  type: QuestionTypeEnum.optional(),
 });
 
 // ── Proctoring Event Logging ──────────────────────────────────────────────────

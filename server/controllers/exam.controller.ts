@@ -536,11 +536,15 @@ export const getSessionEvents = async (
 
 // ── GET /api/exams/:examId/results ────────────────────────────────────────────
 // Protected: requires valid teacher JWT (applied at router level). Owner only.
-// Returns graded sessions (SUBMITTED / AUTO_SUBMITTED) with per-question answers
-// plus the question paper, so the results dashboard can render analytics, the
-// distribution histogram and per-student answer sheets.
+// Returns graded sessions (SUBMITTED / AUTO_SUBMITTED / TERMINATED) with
+// per-question answers plus the question paper, so the results dashboard can
+// render analytics, the distribution histogram and per-student answer sheets.
 
-const GRADED_STATUSES = [SubmissionStatus.SUBMITTED, SubmissionStatus.AUTO_SUBMITTED];
+const GRADED_STATUSES = [
+  SubmissionStatus.SUBMITTED,
+  SubmissionStatus.AUTO_SUBMITTED,
+  SubmissionStatus.TERMINATED,
+];
 
 export const getExamResults = async (
   req: Request,

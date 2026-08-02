@@ -347,8 +347,11 @@ describe('POST /api/v1/exam-session/:token/violation', () => {
       .set('Authorization', `Bearer ${testToken}`)
       .send({ type: 'TAB_SWITCH' })
       .expect(403);
-  });
-});
+
+    const session = await prisma.examSession.findUnique({
+      where: { session_token: testToken },
+      select: { id: true },
+    });
 
     const eventsRes = await api
       .get(`/api/exams/${examId}/sessions/${session!.id}/events`)

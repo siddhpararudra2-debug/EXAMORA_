@@ -20,7 +20,7 @@ import {
   ProctoringEvent,
   getEventConfig,
   formatTimeOffset,
-} from "@/apps/frontend/components/proctoring/ProctoringTimeline";
+} from "@/components/proctoring/ProctoringTimeline";
 
 interface StudentSessionDetail {
   id: string;

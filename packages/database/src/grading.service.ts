@@ -39,6 +39,9 @@ const normalize = (value: string): string => value.trim().toLowerCase();
 const isSubjective = (type: QuestionType): boolean =>
   type === QuestionType.SHORT_ANSWER || type === QuestionType.LONG_ANSWER;
 
+const isManualGrading = (type: QuestionType): boolean =>
+  type === QuestionType.FILE_UPLOAD;
+
 const isAnswerCorrect = (
   question: Pick<Question, 'type' | 'correct_answer'>,
   answerText: string
@@ -46,17 +49,41 @@ const isAnswerCorrect = (
   const submitted = answerText.trim();
   const correct = question.correct_answer?.trim() ?? '';
 
+  if (!submitted || !correct) {
+    return false;
+  }
+
+  // Objective string/selection matching types
   if (
     question.type === QuestionType.MCQ_SINGLE ||
-    question.type === QuestionType.MCQ_MULTI ||
     question.type === QuestionType.TRUE_FALSE ||
     question.type === QuestionType.FILL_BLANK ||
-    question.type === QuestionType.DROPDOWN
+    question.type === QuestionType.DROPDOWN ||
+    question.type === QuestionType.DATE ||
+    question.type === QuestionType.LINEAR_SCALE
   ) {
     return normalize(submitted) === normalize(correct);
   }
 
-  return submitted === correct;
+  // Multi-choice: compare normalized set of options (comma-separated or JSON)
+  if (question.type === QuestionType.MCQ_MULTI) {
+    const normSub = normalize(submitted).split(',').map((s) => s.trim()).filter(Boolean).sort().join(',');
+    const normCorr = normalize(correct).split(',').map((s) => s.trim()).filter(Boolean).sort().join(',');
+    return normSub === normCorr;
+  }
+
+  // Grid types (RADIO_GRID, CHECKBOX_GRID): compare normalized JSON or string
+  if (question.type === QuestionType.RADIO_GRID || question.type === QuestionType.CHECKBOX_GRID) {
+    try {
+      const parsedSub = JSON.parse(submitted);
+      const parsedCorr = JSON.parse(correct);
+      return JSON.stringify(parsedSub) === JSON.stringify(parsedCorr);
+    } catch {
+      return normalize(submitted) === normalize(correct);
+    }
+  }
+
+  return normalize(submitted) === normalize(correct);
 };
 
 /**
@@ -154,6 +181,19 @@ export async function gradeSubmission(
   for (const answer of answers) {
     const question = questionById.get(answer.question_id);
     if (!question) {
+      continue;
+    }
+
+    // 1. FILE_UPLOAD questions require manual teacher grading
+    if (isManualGrading(question.type)) {
+      updates.push({
+        questionId: question.id,
+        isCorrect: null,
+        marksAwarded: null,
+        gradedBy: GradedBy.TEACHER,
+        teacherFeedback: 'File upload submission requires teacher grading.',
+        aiConfidence: null,
+      });
       continue;
     }
 
@@ -275,7 +315,13 @@ export async function gradeAllSubmissionsForExam(
   const sessions = await prisma.examSession.findMany({
     where: {
       exam_id: examId,
-      status: { in: [SubmissionStatus.SUBMITTED, SubmissionStatus.AUTO_SUBMITTED] },
+      status: {
+        in: [
+          SubmissionStatus.SUBMITTED,
+          SubmissionStatus.AUTO_SUBMITTED,
+          SubmissionStatus.TERMINATED,
+        ],
+      },
     },
     select: { id: true },
   });

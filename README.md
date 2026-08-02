@@ -137,8 +137,6 @@ cp .env.example .env
 | `REDIS_URL` | Redis connection string (optional) | `redis://localhost:6379` |
 | `JWT_SECRET` | Secret used to sign teacher JWTs | change in production |
 | `SESSION_SECRET` | Server-side session secret | change in production |
-| `AUTH_SECRET` | Auth.js (NextAuth v5) JWT secret | 32-byte base64 |
-| `AUTH_TRUST_HOST` | Trust the host header behind a proxy | `true` |
 
 ### 3. Install dependencies & prepare the database
 
@@ -281,18 +279,21 @@ examora/
 ├── app/                        # Next.js App Router (frontend)
 │   ├── (landing)/              # Marketing / landing pages
 │   ├── dashboard/              # Teacher dashboard, exam creation wizard
-│   ├── exam/[examId]/          # Student join + take + status pages
-│   └── api/auth/[...nextauth]/ # NextAuth route (session)
-├── components/                 # UI components (shadcn/ui + custom)
-├── lib/                        # Client helpers (auth token, utils)
+│   └── exam/[examId]/          # Student join + take + status pages
+├── components/                 # UI + feature components (canonical location)
+│   ├── proctoring/             # Proctoring engine: useExamLockdown, useAIFaceDetection, ProctoringWrapper, ProctoringTimeline
+│   ├── exams/                  # Exam creation wizards (AI question generator, bulk invite)
+│   ├── ui/                     # shadcn/ui primitives
+│   └── layout/                 # Dashboard shell (sidebar, top nav)
+├── hooks/                      # Client hooks (use-toast)
+├── lib/                        # Client helpers (auth token, socket, utils)
 ├── server/                     # Express API + Socket.io server
 │   ├── controllers/            # auth, exams, student routes
 │   ├── routes/                 # REST route definitions
 │   ├── middleware/             # JWT auth, rate limiting, security
 │   ├── validators/             # Zod schemas
-│   └── socket/                 # Proctoring socket handlers
+│   └── jobs/                   # Background jobs (auto-submit sweep)
 ├── apps/backend/src/           # Shared backend modules (proctoring handler, security)
-├── apps/frontend/src/          # Shared frontend modules (proctoring engine)
 ├── packages/database/src/      # Prisma-backed services (exams, grading)
 ├── prisma/                     # Prisma schema
 ├── e2e/                        # Playwright end-to-end tests

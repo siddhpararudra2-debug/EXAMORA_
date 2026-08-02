@@ -229,7 +229,13 @@ describe('grading.service', () => {
       expect(prisma.examSession.findMany).toHaveBeenCalledWith({
         where: {
           exam_id: examId,
-          status: { in: [SubmissionStatus.SUBMITTED, SubmissionStatus.AUTO_SUBMITTED] },
+          status: {
+            in: [
+              SubmissionStatus.SUBMITTED,
+              SubmissionStatus.AUTO_SUBMITTED,
+              SubmissionStatus.TERMINATED,
+            ],
+          },
         },
         select: { id: true },
       });

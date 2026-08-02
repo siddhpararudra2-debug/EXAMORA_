@@ -79,8 +79,6 @@ FRONTEND_URL="http://localhost:3000"
 | :--- | :--- | :--- |
 | `NEXT_PUBLIC_API_URL` | `https://examora-backend.onrender.com/api` | Render Express API base URL |
 | `NEXT_PUBLIC_SOCKET_URL` | `https://examora-backend.onrender.com` | Render Socket.io server URL |
-| `AUTH_SECRET` | `base64-random-secret` | NextAuth v5 session secret |
-| `AUTH_TRUST_HOST` | `true` | Proxy header trust setting |
 
 ---
 

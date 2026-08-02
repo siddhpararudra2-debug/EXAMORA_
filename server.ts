@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 
 import { connectDatabase } from './prisma/client.js';
 import { createApp, AppBundle } from './server/app.js';
+import { startAutoSubmitSweep } from './server/jobs/autoSubmit.sweep.js';
 
 // Load environment variables
 dotenv.config();
@@ -35,6 +36,11 @@ const setupRedisAdapter = async (): Promise<void> => {
 // Start server
 const PORT = process.env.PORT || 4000;
 
+// Periodic auto-submit sweep (closes IN_PROGRESS sessions whose exam end_time
+// has passed). Started after the HTTP server is listening so the first sweep
+// never races the boot sequence.
+let autoSubmitSweep: NodeJS.Timeout | null = null;
+
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database
@@ -48,6 +54,8 @@ const startServer = async (): Promise<void> => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📡 Socket.io ready for connections`);
       console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+      autoSubmitSweep = startAutoSubmitSweep();
+      console.log(`⏱️  Auto-submit sweep started (every 60s)`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -58,6 +66,7 @@ const startServer = async (): Promise<void> => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received. Shutting down gracefully...');
+  if (autoSubmitSweep) clearInterval(autoSubmitSweep);
   io?.close();
   await import('./prisma/client.js').then((m) => m.default.$disconnect());
   httpServer.close(() => {

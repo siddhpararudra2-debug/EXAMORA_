@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { registerSchema, loginSchema, RegisterInput, LoginInput } from '../validators/auth.js';
+import { JWT_SECRET } from '../config.js';
 
 const prisma = new PrismaClient();
 
@@ -45,7 +46,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     // Generate JWT
     const token = jwt.sign(
       { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || 'dev-secret',
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -85,7 +86,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     // Generate JWT
     const token = jwt.sign(
       { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || 'dev-secret',
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
