@@ -101,53 +101,60 @@ function TerminatedContent() {
 
   const toneClasses: Record<
     "emerald" | "amber" | "indigo" | "red",
-    { ring: string; bgTint: string; text: string; iconTint: string; badge: string }
+    { ring: string; bgTint: string; text: string; iconTint: string; badge: string; bgSoft: string }
   > = {
     emerald: {
-      ring: "ring-emerald-100",
-      bgTint: "bg-emerald-50",
-      text: "text-emerald-700",
-      iconTint: "text-emerald-600",
-      badge: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+      ring: "ring-emerald-500/20",
+      bgTint: "bg-emerald-500/5",
+      text: "text-emerald-500",
+      iconTint: "text-emerald-500",
+      badge: "bg-emerald-500/10 text-emerald-500",
+      bgSoft: "bg-emerald-500/10",
     },
     amber: {
-      ring: "ring-amber-100",
-      bgTint: "bg-amber-50",
-      text: "text-amber-800",
-      iconTint: "text-amber-600",
-      badge: "bg-amber-50 text-amber-800 ring-amber-100",
+      ring: "ring-amber-500/20",
+      bgTint: "bg-amber-500/5",
+      text: "text-amber-500",
+      iconTint: "text-amber-500",
+      badge: "bg-amber-500/10 text-amber-500",
+      bgSoft: "bg-amber-500/10",
     },
     indigo: {
-      ring: "ring-indigo-100",
-      bgTint: "bg-indigo-50",
-      text: "text-indigo-800",
-      iconTint: "text-indigo-600",
-      badge: "bg-indigo-50 text-indigo-700 ring-indigo-100",
+      ring: "ring-primary/20",
+      bgTint: "bg-primary/5",
+      text: "text-primary",
+      iconTint: "text-primary",
+      badge: "bg-primary/10 text-primary",
+      bgSoft: "bg-primary/10",
     },
     red: {
-      ring: "ring-red-100",
-      bgTint: "bg-red-50",
-      text: "text-red-700",
-      iconTint: "text-red-600",
-      badge: "bg-red-50 text-red-700 ring-red-100",
+      ring: "ring-destructive/20",
+      bgTint: "bg-destructive/5",
+      text: "text-destructive",
+      iconTint: "text-destructive",
+      badge: "bg-destructive/10 text-destructive",
+      bgSoft: "bg-destructive/10",
     },
   };
 
   const tone = toneClasses[info.tone];
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100/60 p-4 sm:p-8">
-      <Card className="w-full max-w-xl overflow-hidden border-slate-200 bg-white shadow-[0_12px_40px_-18px_rgba(15,23,42,0.2)] ring-1 ring-slate-100">
+    <main className="flex min-h-screen items-center justify-center bg-background relative overflow-hidden p-6">
+      {/* Subtle ambient background glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] opacity-20 pointer-events-none" 
+           style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
+
+      <Card className="glass-panel w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-500 relative z-10 border-border/40">
         <div
           className={cn(
-            "flex items-center justify-center border-b py-10",
-            tone.bgTint,
-            `border-slate-100`
+            "flex items-center justify-center border-b border-border/40 py-10 transition-colors",
+            tone.bgSoft
           )}
         >
           <div
             className={cn(
-              "relative flex h-20 w-20 items-center justify-center rounded-2xl bg-white shadow-sm ring-4",
+              "relative flex h-20 w-20 items-center justify-center rounded-2xl bg-background shadow-sm ring-1",
               tone.ring,
               tone.iconTint
             )}
@@ -156,11 +163,11 @@ function TerminatedContent() {
             <Icon className="h-10 w-10" />
           </div>
         </div>
-        <CardHeader className="pb-0 pt-6 text-center">
-          <div className="mb-3 flex items-center justify-center">
+        <CardHeader className="pb-0 pt-8 text-center">
+          <div className="mb-4 flex items-center justify-center">
             <span
               className={cn(
-                "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ring-1 ring-inset",
+                "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider",
                 tone.badge
               )}
             >
@@ -173,37 +180,37 @@ function TerminatedContent() {
                 : "Exam ended"}
             </span>
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <CardTitle className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {info.title}
           </CardTitle>
-          <CardDescription className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600 sm:text-base">
+          <CardDescription className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
             {info.subtitle}
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 p-6 sm:p-8">
-          <dl className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-5 ring-1 ring-inset ring-slate-100">
+        <CardContent className="grid grid-cols-1 gap-6 p-6 sm:p-8">
+          <dl className="grid grid-cols-2 gap-4 rounded-xl bg-secondary/30 p-6 border border-border/40">
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <dt className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Final warnings
               </dt>
               <dd
                 className={cn(
-                  "mt-1 text-2xl font-bold",
-                  info.tone === "red" ? "text-red-600" : "text-slate-900"
+                  "mt-2 text-2xl font-bold",
+                  info.tone === "red" ? "text-destructive" : "text-foreground"
                 )}
               >
                 {Number.isFinite(warnings) && warnings >= 0 ? warnings : "—"}
-                <span className="text-sm font-normal text-slate-500">
+                <span className="text-sm font-medium text-muted-foreground">
                   {" "}
                   / {limit}
                 </span>
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <dt className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Exam ID
               </dt>
-              <dd className="mt-1 truncate font-mono text-sm font-medium text-slate-800">
+              <dd className="mt-2 truncate font-mono text-sm font-medium text-foreground">
                 {examId ?? "—"}
               </dd>
             </div>
@@ -211,7 +218,7 @@ function TerminatedContent() {
 
           <div
             className={cn(
-              "rounded-2xl p-4 text-sm ring-1 ring-inset",
+              "rounded-xl p-5 text-sm font-medium border",
               tone.bgTint,
               tone.ring,
               tone.text
@@ -220,13 +227,13 @@ function TerminatedContent() {
           >
             {reason === "submitted" ? (
               <p>
-                <span className="font-semibold">Great work!</span> You can
+                <span className="font-bold">Great work!</span> You can
                 safely close this tab. Your teacher will notify you when
                 results are available.
               </p>
             ) : redirecting || countdown !== null ? (
               <p>
-                <span className="font-semibold">
+                <span className="font-bold">
                   Redirecting to the home page in{" "}
                   {countdown ?? 0}…
                 </span>{" "}
@@ -240,19 +247,21 @@ function TerminatedContent() {
             )}
           </div>
 
-          <div className="flex flex-col items-stretch justify-end gap-2 pt-2 sm:flex-row">
-            <Button asChild variant="outline">
+          <div className="flex flex-col items-stretch justify-center gap-3 pt-2 sm:flex-row">
+            <Button asChild variant="outline" className="h-12 border-border/40">
               <Link href="/">
-                <Home className="mr-2 h-4 w-4" />
+                <Home className="mr-2 h-5 w-5" />
                 Back to home
               </Link>
             </Button>
-            <Button asChild className="bg-indigo-700 hover:bg-indigo-800">
-              <Link href="/exam/join">
-                Have another code? Join another exam{" "}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+            {reason !== "submitted" && (
+              <Button asChild className="h-12">
+                <Link href="/exam/join">
+                  Join another exam
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -262,7 +271,7 @@ function TerminatedContent() {
 
 export default function TerminatedPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Loading...</div>}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading...</div>}>
       <TerminatedContent />
     </Suspense>
   );

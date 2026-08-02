@@ -88,22 +88,22 @@ const DEMO_EXAMS: ExamListItem[] = [
 function StatusBadge({ status }: { status: ExamStatus }) {
   if (status === "ACTIVE" || status === "PUBLISHED") {
     return (
-      <Badge className="gap-1 bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100 hover:bg-emerald-50">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      <Badge className="gap-1 bg-primary/10 text-primary border-none shadow-none">
+        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
         {status}
       </Badge>
     );
   }
   if (status === "COMPLETED") {
     return (
-      <Badge className="gap-1 bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-100 hover:bg-indigo-50">
+      <Badge className="gap-1 bg-secondary text-foreground border-none shadow-none">
         <CheckCircle2 className="h-3 w-3" />
         COMPLETED
       </Badge>
     );
   }
   return (
-    <Badge className="gap-1 bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50">
+    <Badge className="gap-1 bg-secondary/50 text-muted-foreground border-none shadow-none">
       <Clock className="h-3 w-3" />
       DRAFT
     </Badge>
@@ -142,6 +142,7 @@ export default function DashboardHomePage() {
       // Backend unavailable — fall back to demo data below.
     }
     setExams(DEMO_EXAMS);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -168,14 +169,14 @@ export default function DashboardHomePage() {
           message?: string;
         };
         toast({
-          title: "Couldn&apos;t delete exam",
+          title: "Couldn't delete exam",
           description: payload?.message ?? "The server returned an error.",
           variant: "destructive",
         });
       }
     } catch {
       toast({
-        title: "Couldn&apos;t delete exam",
+        title: "Couldn't delete exam",
         description: "Network unavailable. Please try again.",
         variant: "destructive",
       });
@@ -196,107 +197,95 @@ export default function DashboardHomePage() {
         value: String(total),
         delta: `${active} active now`,
         icon: ClipboardList,
-        tint: "indigo",
       },
       {
         label: "Active Students",
         value: String(totalSessions),
         delta: "sessions recorded",
         icon: Users2,
-        tint: "sky",
       },
       {
         label: "Live Now",
         value: String(active),
         delta: active === 1 ? "exam in progress" : "exams in progress",
         icon: Activity,
-        tint: "emerald",
       },
       {
         label: "Completed",
         value: String(completed),
         delta: "ready for grading",
         icon: TrendingUp,
-        tint: "amber",
       },
     ];
   }, [exams]);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-10">
       {/* Page header */}
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between animate-in slide-in-from-bottom-2 fade-in duration-500">
         <div className="flex flex-col">
-          <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Teacher workspace
           </span>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Your exams
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            Overview
           </h1>
-          <p className="mt-1.5 text-sm leading-6 text-slate-600 sm:text-base">
-            Here&apos;s an overview of your exams, students, and results today.
+          <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">
+            Manage exams, monitor active sessions, and review recent results.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="h-10 gap-1.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild variant="outline" className="h-10 gap-2 border-border/40">
             <Link href="/dashboard/live">
               <MonitorPlay className="h-4 w-4" />
-              Live exams
+              Live monitoring
             </Link>
           </Button>
-          <Button asChild className="h-10 gap-1.5 bg-indigo-700 hover:bg-indigo-800">
+          <Button asChild className="h-10 gap-2">
             <Link href="/dashboard/exams/create">
               <PlusCircle className="h-4 w-4" />
-              Create exam
+              New exam
             </Link>
           </Button>
         </div>
       </section>
 
       {/* Stats */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="border-slate-200/70 bg-white ring-1 ring-slate-100">
-                <CardContent className="p-5">
+              <Card key={i} className="glass-panel">
+                <CardContent className="p-6">
                   <div className="flex items-start justify-between">
-                    <Skeleton className="h-10 w-10 rounded-xl" />
-                    <Skeleton className="h-5 w-20 rounded-full" />
+                    <Skeleton className="h-12 w-12 rounded-xl" />
+                    <Skeleton className="h-5 w-24 rounded-full" />
                   </div>
-                  <Skeleton className="mt-5 h-4 w-24" />
-                  <Skeleton className="mt-2 h-8 w-16" />
+                  <Skeleton className="mt-6 h-4 w-24" />
+                  <Skeleton className="mt-3 h-10 w-16" />
                 </CardContent>
               </Card>
             ))
-          : stats.map((s) => {
+          : stats.map((s, idx) => {
               const Icon = s.icon;
-              const tint = {
-                indigo: "bg-indigo-50 text-indigo-700 ring-indigo-100",
-                sky: "bg-sky-50 text-sky-700 ring-sky-100",
-                emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-                amber: "bg-amber-50 text-amber-700 ring-amber-100",
-              }[s.tint];
               return (
                 <Card
                   key={s.label}
-                  className="border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(15,23,42,0.06)]"
+                  className="glass-panel hover-lift animate-in slide-in-from-bottom-4 fade-in"
+                  style={{ animationDelay: `${idx * 100}ms`, animationFillMode: 'both' }}
                 >
-                  <CardContent className="p-5">
+                  <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <div
-                        className={cn(
-                          "flex h-10 w-10 items-center justify-center rounded-xl ring-1 ring-inset",
-                          tint
-                        )}
+                        className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-foreground"
                       >
-                        <Icon className="h-5 w-5" aria-hidden />
+                        <Icon className="h-6 w-6" aria-hidden />
                       </div>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-secondary/50 px-2.5 py-1 text-xs font-medium text-muted-foreground">
                         {s.delta}
                       </span>
                     </div>
-                    <p className="mt-5 text-sm font-medium text-slate-500">{s.label}</p>
-                    <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+                    <p className="mt-6 text-sm font-medium text-muted-foreground">{s.label}</p>
+                    <p className="mt-2 text-4xl font-bold tracking-tight text-foreground">
                       {s.value}
                     </p>
                   </CardContent>
@@ -307,51 +296,53 @@ export default function DashboardHomePage() {
 
       {/* Main grid */}
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <Card className="border-slate-200/70 bg-white ring-1 ring-slate-100 xl:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 px-6 py-5">
+        <Card className="glass-panel xl:col-span-2 animate-in slide-in-from-bottom-8 fade-in duration-700">
+          <CardHeader className="border-b border-border/40 px-6 py-5">
             <div>
-              <CardTitle className="text-lg font-semibold tracking-tight text-slate-900">
-                Recent &amp; scheduled exams
+              <CardTitle className="text-xl font-bold tracking-tight text-foreground">
+                Recent Exams
               </CardTitle>
-              <CardDescription className="mt-0.5 text-sm text-slate-500">
-                Monitor activity or jump into grading.
+              <CardDescription className="mt-1 text-sm text-muted-foreground">
+                Track status and manage your ongoing assessments.
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="divide-y divide-slate-100 p-0">
+          <CardContent className="divide-y divide-border/40 p-0">
             {loading
               ? Array.from({ length: 3 }).map((_, i) => (
                   <div
                     key={i}
-                    className="flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <Skeleton className="mt-0.5 h-10 w-10 rounded-xl" />
-                      <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex min-w-0 flex-1 items-start gap-4">
+                      <Skeleton className="mt-0.5 h-12 w-12 rounded-xl" />
+                      <div className="min-w-0 flex-1 space-y-3">
                         <Skeleton className="h-5 w-2/3 max-w-[280px]" />
-                        <Skeleton className="h-3.5 w-1/2 max-w-[200px]" />
+                        <Skeleton className="h-4 w-1/2 max-w-[200px]" />
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Skeleton className="h-9 w-20 rounded-lg" />
-                      <Skeleton className="h-9 w-9 rounded-lg" />
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-10 w-24 rounded-lg" />
+                      <Skeleton className="h-10 w-10 rounded-lg" />
                     </div>
                   </div>
                 ))
               : exams.length === 0
               ? (
-                  <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200">
-                      <ClipboardList className="h-6 w-6" />
+                  <div className="flex flex-col items-center justify-center gap-4 p-12 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
+                      <ClipboardList className="h-8 w-8" />
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-900">No exams yet</h3>
-                    <p className="max-w-md text-sm text-slate-600">
-                      Create your first exam to get started.
-                    </p>
-                    <Button asChild className="mt-2 h-10 gap-1.5 bg-indigo-700 hover:bg-indigo-800">
+                    <div>
+                      <h3 className="text-xl font-bold text-foreground">No exams found</h3>
+                      <p className="mt-2 text-sm text-muted-foreground max-w-sm">
+                        You haven&apos;t created any exams yet. Start by creating a new assessment.
+                      </p>
+                    </div>
+                    <Button asChild className="mt-4 h-11 gap-2">
                       <Link href="/dashboard/exams/create">
                         <PlusCircle className="h-4 w-4" />
-                        Create exam
+                        Create your first exam
                       </Link>
                     </Button>
                   </div>
@@ -359,44 +350,47 @@ export default function DashboardHomePage() {
               : exams.map((e) => (
                   <div
                     key={e.id}
-                    className="flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between transition-colors hover:bg-secondary/20"
                   >
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-4">
                       <span
                         className={cn(
-                          "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset",
-                          e.status === "ACTIVE" &&
-                            "bg-emerald-50 text-emerald-600 ring-emerald-100",
-                          e.status === "COMPLETED" &&
-                            "bg-indigo-50 text-indigo-600 ring-indigo-100",
-                          e.status === "DRAFT" &&
-                            "bg-slate-50 text-slate-500 ring-slate-200"
+                          "mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+                          e.status === "ACTIVE"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-secondary text-muted-foreground"
                         )}
                       >
                         <StatusIcon status={e.status} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="truncate text-[15px] font-semibold leading-5 text-slate-900">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="truncate text-base font-semibold leading-6 text-foreground">
                             {e.title}
                           </h3>
                           <StatusBadge status={e.status} />
                         </div>
-                        <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                          <Clock className="h-3.5 w-3.5" />
-                          {e.duration_minutes} min · {e.total_marks} marks
-                          <span className="text-slate-300">·</span>
-                          <Users2 className="h-3.5 w-3.5" />
-                          {e._count.sessions} session
-                          {e._count.sessions === 1 ? "" : "s"}
-                          <span className="text-slate-300">·</span>
-                          {e._count.questions} questions
+                        <p className="mt-1.5 flex items-center gap-3 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="h-4 w-4" />
+                            {e.duration_minutes} min
+                          </span>
+                          <span className="text-border/60">|</span>
+                          <span className="flex items-center gap-1.5">
+                            <FileText className="h-4 w-4" />
+                            {e.total_marks} marks
+                          </span>
+                          <span className="text-border/60">|</span>
+                          <span className="flex items-center gap-1.5">
+                            <Users2 className="h-4 w-4" />
+                            {e._count.sessions} sessions
+                          </span>
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/dashboard/results/${e.id}`} className="gap-1">
+                    <div className="flex items-center gap-3 mt-2 sm:mt-0">
+                      <Button variant="outline" size="sm" asChild className="border-border/40">
+                        <Link href={`/dashboard/results/${e.id}`} className="gap-2">
                           {e.status === "COMPLETED" ? (
                             <>
                               <CheckCircle2 className="h-4 w-4" /> Grade
@@ -409,15 +403,15 @@ export default function DashboardHomePage() {
                         </Link>
                       </Button>
                       {e.status === "ACTIVE" && (
-                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" asChild>
-                          <Link href={`/dashboard/live/${e.id}`} className="gap-1">
+                        <Button size="sm" asChild>
+                          <Link href={`/dashboard/live/${e.id}`} className="gap-2">
                             <MonitorPlay className="h-4 w-4" /> Monitor
                           </Link>
                         </Button>
                       )}
                       {e.status === "DRAFT" && (
-                        <Button size="sm" className="bg-indigo-700 hover:bg-indigo-800" asChild>
-                          <Link href={`/dashboard/exams/create?from=${e.id}`} className="gap-1">
+                        <Button size="sm" asChild>
+                          <Link href={`/dashboard/exams/create?from=${e.id}`} className="gap-2">
                             <PlusCircle className="h-4 w-4" /> Edit
                           </Link>
                         </Button>
@@ -425,10 +419,10 @@ export default function DashboardHomePage() {
                       <Button
                         type="button"
                         size="icon"
-                        variant="outline"
+                        variant="ghost"
                         aria-label={`Delete ${e.title}`}
                         onClick={() => setDeleteTarget(e)}
-                        className="h-9 w-9 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -438,44 +432,40 @@ export default function DashboardHomePage() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/70 bg-white ring-1 ring-slate-100">
-          <CardHeader className="border-b border-slate-100 px-6 py-5">
-            <CardTitle className="text-lg font-semibold tracking-tight text-slate-900">
-              Quick actions
+        <Card className="glass-panel animate-in slide-in-from-bottom-8 fade-in duration-700 delay-150">
+          <CardHeader className="border-b border-border/40 px-6 py-5">
+            <CardTitle className="text-xl font-bold tracking-tight text-foreground">
+              Quick Actions
             </CardTitle>
-            <CardDescription className="mt-0.5 text-sm text-slate-500">
-              Jump into common tasks.
+            <CardDescription className="mt-1 text-sm text-muted-foreground">
+              Jump straight into common tasks.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-2.5 p-5">
+          <CardContent className="grid grid-cols-1 gap-3 p-5">
             {[
               {
                 href: "/dashboard/exams/create",
                 icon: PlusCircle,
-                title: "Create a new exam",
-                desc: "MCQ, True/False, Short Answer.",
-                tint: "text-indigo-600 bg-indigo-50",
+                title: "Create Exam",
+                desc: "MCQ, Short Answer.",
               },
               {
                 href: "/dashboard/live",
                 icon: MonitorPlay,
-                title: "Monitor live sessions",
-                desc: "Proctoring, warnings, snapshots.",
-                tint: "text-emerald-600 bg-emerald-50",
+                title: "Monitor Live",
+                desc: "Proctoring, warnings.",
               },
               {
                 href: "/dashboard/results",
                 icon: FileText,
-                title: "Review results",
-                desc: "Grade answers and export reports.",
-                tint: "text-sky-600 bg-sky-50",
+                title: "Review Results",
+                desc: "Grade and export.",
               },
               {
                 href: "/dashboard?tab=students",
                 icon: Users2,
-                title: "Student directory",
-                desc: "Sessions, history, and enrollment.",
-                tint: "text-amber-600 bg-amber-50",
+                title: "Directory",
+                desc: "Student history.",
               },
             ].map((a) => {
               const Icon = a.icon;
@@ -483,23 +473,20 @@ export default function DashboardHomePage() {
                 <Link
                   key={a.href}
                   href={a.href}
-                  className="group flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-3 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+                  className="group flex items-center gap-4 rounded-xl border border-border/20 bg-secondary/20 p-4 transition-all hover:bg-secondary/60 hover:border-border/60"
                 >
                   <span
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-lg",
-                      a.tint
-                    )}
+                    className="flex h-12 w-12 items-center justify-center rounded-lg bg-background text-foreground shadow-sm"
                   >
                     <Icon className="h-5 w-5" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-900 group-hover:text-indigo-800">
+                    <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
                       {a.title}
                     </p>
-                    <p className="truncate text-xs text-slate-500">{a.desc}</p>
+                    <p className="truncate text-xs text-muted-foreground mt-0.5">{a.desc}</p>
                   </div>
-                  <ArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:-translate-y-1 group-hover:text-foreground" />
                 </Link>
               );
             })}
@@ -514,11 +501,11 @@ export default function DashboardHomePage() {
           if (!open && !deleting) setDeleteTarget(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="glass-panel border-border/40">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this exam?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="font-semibold text-slate-700">
+            <AlertDialogDescription className="text-muted-foreground">
+              <span className="font-bold text-foreground">
                 &quot;{deleteTarget?.title}&quot;
               </span>{" "}
               and all of its questions, sessions, and submissions will be
@@ -526,13 +513,14 @@ export default function DashboardHomePage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting} className="border-border/40">Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={deleting}
               onClick={(e) => {
                 e.preventDefault();
                 void confirmDelete();
               }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? (
                 <>
@@ -540,7 +528,7 @@ export default function DashboardHomePage() {
                   Deleting…
                 </>
               ) : (
-                "Delete exam"
+                "Delete Exam"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

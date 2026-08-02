@@ -80,22 +80,22 @@ function mockSessions(examId: string): StudentSessionView[] {
 function StatusBadge({ status }: { status: SessionStatus }) {
   if (status === "IN_PROGRESS") {
     return (
-      <Badge className="gap-1 bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100 hover:bg-emerald-50">
-        <CircleDot className="h-3 w-3 fill-emerald-500 text-emerald-500" />
+      <Badge className="gap-1 bg-primary/10 text-primary border-none shadow-none font-semibold">
+        <CircleDot className="h-3 w-3 text-primary animate-pulse" />
         In Progress
       </Badge>
     );
   }
   if (status === "SUBMITTED" || status === "AUTO_SUBMITTED") {
     return (
-      <Badge className="gap-1 bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-100 hover:bg-indigo-50">
+      <Badge className="gap-1 bg-secondary text-foreground border-none shadow-none font-semibold">
         <ShieldCheck className="h-3 w-3" />
         Submitted
       </Badge>
     );
   }
   return (
-    <Badge className="gap-1 bg-red-50 text-red-700 ring-1 ring-inset ring-red-100 hover:bg-red-50">
+    <Badge className="gap-1 bg-destructive/10 text-destructive border-none shadow-none font-semibold">
       <OctagonX className="h-3 w-3" />
       Terminated
     </Badge>
@@ -113,7 +113,7 @@ function WarningsBadge({
 }) {
   if (terminated || warnings >= limit) {
     return (
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700 ring-1 ring-inset ring-red-100">
+      <div className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-bold text-destructive">
         <ShieldAlert className="h-3.5 w-3.5" />
         🚫 {warnings}/{limit} TERMINATED
       </div>
@@ -123,10 +123,10 @@ function WarningsBadge({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
         warn
-          ? "border-amber-200 bg-amber-50 text-amber-800 ring-amber-100"
-          : "border-emerald-200 bg-emerald-50 text-emerald-700 ring-emerald-100"
+          ? "bg-amber-100 text-amber-800"
+          : "bg-secondary/50 text-muted-foreground"
       )}
     >
       {warn ? (
@@ -178,7 +178,6 @@ export default function LiveProctoringDashboard() {
 
   const socketRef = useRef<Socket | null>(null);
 
-  // Re-render every ~30s so relative timestamps stay fresh
   useEffect(() => {
     const t = setInterval(() => setTick((x) => x + 1), 30_000);
     return () => clearInterval(t);
@@ -255,7 +254,6 @@ export default function LiveProctoringDashboard() {
     }
   }, [examId]);
 
-  // Initial fetch + socket setup
   useEffect(() => {
     let canceled = false;
     let socket: Socket | null = null;
@@ -333,19 +331,14 @@ export default function LiveProctoringDashboard() {
       if (socket) {
         try {
           socket.emit("teacher_leave_exam_room", { examId });
-        } catch {
-          /* ignore */
-        }
+        } catch {}
         socket.off("connect");
         socket.off("disconnect");
         socket.off("exam_room_joined");
         socket.off("student_status_update");
-        // Do NOT globally disconnect — another page might need the socket.
       }
     };
-    // Intentionally refresh only when examId changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examId]);
+  }, [examId, applyUpdate, loadInitial, toast]);
 
   const counts = useMemo(() => {
     const c = { active: 0, terminated: 0, submitted: 0, total: 0, warnings: 0 };
@@ -362,30 +355,30 @@ export default function LiveProctoringDashboard() {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
       {/* Header */}
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between animate-in slide-in-from-bottom-2 fade-in duration-500">
         <div>
           <Link
             href="/dashboard/exams/live"
-            className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-indigo-600"
+            className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Live exams
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to live exams
           </Link>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             {examMeta?.title ?? "Live proctoring"}
           </h1>
-          <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
             Real-time view of every student session. Warnings and status
-            updates stream in without a page refresh.
+            updates stream in instantly.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => loadInitial()}
             disabled={refreshing}
-            className="h-9 gap-1.5"
+            className="h-10 gap-2 border-border/40"
           >
             <RefreshCw
               className={cn("h-4 w-4", refreshing && "animate-spin")}
@@ -394,27 +387,27 @@ export default function LiveProctoringDashboard() {
           </Button>
           <span
             className={cn(
-              "inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold ring-1 ring-inset",
+              "inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors",
               connected && roomJoined
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700 ring-emerald-100"
+                ? "bg-primary/10 text-primary"
                 : connected
-                ? "border-amber-200 bg-amber-50 text-amber-800 ring-amber-100"
-                : "border-slate-200 bg-slate-50 text-slate-600 ring-slate-200"
+                ? "bg-amber-100 text-amber-800"
+                : "bg-secondary text-muted-foreground"
             )}
           >
             {connected && roomJoined ? (
               <>
-                <Wifi className="h-3.5 w-3.5" />
+                <Wifi className="h-4 w-4" />
                 Live
               </>
             ) : connected ? (
               <>
-                <Activity className="h-3.5 w-3.5" />
+                <Activity className="h-4 w-4 animate-pulse" />
                 Connecting…
               </>
             ) : (
               <>
-                <WifiOff className="h-3.5 w-3.5" />
+                <WifiOff className="h-4 w-4" />
                 Offline
               </>
             )}
@@ -423,74 +416,74 @@ export default function LiveProctoringDashboard() {
       </section>
 
       {/* Stats row */}
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Card className="border-slate-200/70 ring-1 ring-slate-100">
-          <CardContent className="p-5">
+      <section className="grid grid-cols-2 gap-5 sm:grid-cols-4">
+        <Card className="glass-panel animate-in slide-in-from-bottom-4 fade-in duration-700">
+          <CardContent className="p-6">
             <div className="flex items-start justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100">
-                <Users2 className="h-5 w-5" />
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-foreground">
+                <Users2 className="h-6 w-6" />
               </span>
               {examMeta?.startedAt && (
-                <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
+                <span className="rounded-full bg-secondary/50 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
                   Started {relativeTime(examMeta.startedAt)}
                 </span>
               )}
             </div>
-            <p className="mt-5 text-sm font-medium text-slate-500">
-              Students total
+            <p className="mt-6 text-sm font-medium text-muted-foreground">
+              Total Students
             </p>
-            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+            <p className="mt-1 text-4xl font-bold tracking-tight text-foreground">
               {counts.total}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/70 ring-1 ring-slate-100">
-          <CardContent className="p-5">
+        <Card className="glass-panel animate-in slide-in-from-bottom-4 fade-in duration-700 delay-75">
+          <CardContent className="p-6">
             <div className="flex items-start justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100">
-                <MonitorPlay className="h-5 w-5" />
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <MonitorPlay className="h-6 w-6" />
               </span>
-              <Sparkles className="h-4 w-4 text-emerald-500" />
+              <Sparkles className="h-5 w-5 text-primary" />
             </div>
-            <p className="mt-5 text-sm font-medium text-slate-500">
-              In progress
+            <p className="mt-6 text-sm font-medium text-muted-foreground">
+              In Progress
             </p>
-            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+            <p className="mt-1 text-4xl font-bold tracking-tight text-foreground">
               {counts.active}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/70 ring-1 ring-slate-100">
-          <CardContent className="p-5">
+        <Card className="glass-panel animate-in slide-in-from-bottom-4 fade-in duration-700 delay-150">
+          <CardContent className="p-6">
             <div className="flex items-start justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 ring-1 ring-inset ring-indigo-100">
-                <ShieldCheck className="h-5 w-5" />
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-foreground">
+                <ShieldCheck className="h-6 w-6" />
               </span>
             </div>
-            <p className="mt-5 text-sm font-medium text-slate-500">
+            <p className="mt-6 text-sm font-medium text-muted-foreground">
               Submitted
             </p>
-            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+            <p className="mt-1 text-4xl font-bold tracking-tight text-foreground">
               {counts.submitted}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/70 ring-1 ring-slate-100">
-          <CardContent className="p-5">
+        <Card className="glass-panel animate-in slide-in-from-bottom-4 fade-in duration-700 delay-200">
+          <CardContent className="p-6">
             <div className="flex items-start justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600 ring-1 ring-inset ring-red-100">
-                <ShieldAlert className="h-5 w-5" />
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+                <ShieldAlert className="h-6 w-6" />
               </span>
             </div>
-            <p className="mt-5 text-sm font-medium text-slate-500">
-              Terminated · Total warnings
+            <p className="mt-6 text-sm font-medium text-muted-foreground">
+              Terminated · Warnings
             </p>
-            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+            <p className="mt-1 text-4xl font-bold tracking-tight text-foreground">
               {counts.terminated}
-              <span className="ml-2 text-base font-normal text-slate-500">
+              <span className="ml-2 text-xl font-normal text-muted-foreground">
                 · {counts.warnings}⚠
               </span>
             </p>
@@ -500,29 +493,29 @@ export default function LiveProctoringDashboard() {
 
       {/* Grid */}
       {loading ? (
-        <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white">
-          <div className="flex items-center gap-3 text-slate-600">
-            <Loader2 className="h-5 w-5 animate-spin text-indigo-700" />
-            <span className="text-base">Loading student sessions…</span>
+        <div className="flex min-h-[400px] items-center justify-center rounded-2xl glass-panel">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span className="text-lg font-medium">Loading student sessions…</span>
           </div>
         </div>
       ) : sessions.length === 0 ? (
-        <Card className="border-dashed border-slate-300 bg-white/60 ring-1 ring-slate-100">
-          <CardContent className="flex flex-col items-center justify-center gap-3 p-10 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200">
-              <Users2 className="h-6 w-6" />
+        <Card className="glass-panel border-dashed border-border/60">
+          <CardContent className="flex flex-col items-center justify-center gap-4 p-16 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
+              <Users2 className="h-8 w-8" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900">
+            <h3 className="text-xl font-bold text-foreground">
               No students yet
             </h3>
-            <p className="max-w-md text-sm text-slate-600">
+            <p className="max-w-md text-base text-muted-foreground">
               Students haven&apos;t joined this exam. Their sessions will
               appear here the moment they start.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sessions.map((s) => {
             const terminated = s.status === "TERMINATED";
             const submitted = s.status === "SUBMITTED" || s.status === "AUTO_SUBMITTED";
@@ -530,76 +523,73 @@ export default function LiveProctoringDashboard() {
               <Card
                 key={s.id}
                 className={cn(
-                  "transition-shadow",
-                  terminated
-                    ? "border-red-200 bg-white shadow-[0_1px_2px_rgba(127,29,29,0.05)] ring-1 ring-inset ring-red-100"
-                    : submitted
-                    ? "border-indigo-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-inset ring-indigo-100"
-                    : "border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-100",
-                  s._new &&
-                    "animate-[fadeIn_300ms_ease-out] ring-2 ring-indigo-200"
+                  "glass-panel hover-lift transition-all",
+                  terminated && "border-destructive/30 bg-destructive/5 ring-1 ring-destructive/20",
+                  s._new && "animate-[fadeIn_300ms_ease-out] ring-2 ring-primary/30"
                 )}
               >
-                <CardHeader className="flex-row items-start justify-between gap-3 p-5 pb-0">
-                  <div className="flex min-w-0 items-start gap-3">
+                <CardHeader className="flex-row items-start justify-between gap-3 p-6 pb-2">
+                  <div className="flex min-w-0 items-start gap-4">
                     <div
                       aria-hidden
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600 to-indigo-800 text-sm font-semibold text-white shadow-sm ring-2 ring-white"
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-base font-bold text-primary-foreground shadow-sm ring-2 ring-background"
                     >
                       {initials(s.studentName)}
                     </div>
                     <div className="min-w-0">
-                      <CardTitle className="truncate text-[15px] font-semibold leading-5 text-slate-900">
+                      <CardTitle className="truncate text-base font-bold leading-5 text-foreground mt-1">
                         {s.studentName}
                       </CardTitle>
                       {s.studentEmail ? (
-                        <CardDescription className="mt-0.5 truncate text-xs text-slate-500">
+                        <CardDescription className="mt-1 truncate text-xs text-muted-foreground">
                           {s.studentEmail}
                         </CardDescription>
                       ) : null}
                     </div>
                   </div>
-                  <StatusBadge status={s.status} />
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-4 p-5">
+                <div className="px-6 py-2 flex justify-end">
+                    <StatusBadge status={s.status} />
+                </div>
+                <CardContent className="grid grid-cols-1 gap-5 p-6 pt-2">
                   <WarningsBadge
                     warnings={s.warnings}
                     limit={s.warningsLimit}
                     terminated={terminated}
                   />
-                  <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500">
+                  <div className="grid grid-cols-2 gap-4 border-t border-border/40 pt-5 text-xs text-muted-foreground">
                     <div>
-                      <p className="font-medium uppercase tracking-wider text-slate-400">
+                      <p className="font-semibold uppercase tracking-wider text-muted-foreground/60">
                         Joined
                       </p>
-                      <p className="mt-1 text-sm font-medium text-slate-700">
+                      <p className="mt-1.5 text-sm font-semibold text-foreground">
                         {relativeTime(s.joinedAt)}
                       </p>
                     </div>
                     <div>
-                      <p className="font-medium uppercase tracking-wider text-slate-400">
+                      <p className="font-semibold uppercase tracking-wider text-muted-foreground/60">
                         Last activity
                       </p>
-                      <p className="mt-1 text-sm font-medium text-slate-700">
+                      <p className="mt-1.5 text-sm font-semibold text-foreground">
                         {relativeTime(s.lastActivityAt)}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-                      {s.id.length > 12
-                        ? `…${s.id.slice(s.id.length - 12)}`
+                  <div className="flex items-center justify-between border-t border-border/40 pt-5 mt-1">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground/50">
+                      {s.id.length > 10
+                        ? `…${s.id.slice(s.id.length - 10)}`
                         : s.id}
                     </p>
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
-                      className="h-8 px-2.5 text-xs text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      className="h-8 px-3 text-xs font-semibold rounded-full"
                       asChild
                     >
                       <Link href={`/dashboard/results?examId=${encodeURIComponent(examId)}&sessionId=${encodeURIComponent(s.id)}`}>
-                        View session
+                        View Session
                       </Link>
                     </Button>
                   </div>

@@ -44,7 +44,6 @@ export default function JoinExamPage() {
   const [enrollmentNo, setEnrollmentNo] = useState("");
   const [joining, setJoining] = useState(false);
 
-  // Verify the exam exists and is ACTIVE before showing the join form.
   useEffect(() => {
     let canceled = false;
     (async () => {
@@ -70,7 +69,6 @@ export default function JoinExamPage() {
         }
         if (!canceled) setCheck({ state: "not-found" });
       } catch {
-        // Backend unreachable — still allow joining; the POST will validate.
         if (!canceled) setCheck({ state: "ready", title: "Exam" });
       }
     })();
@@ -107,7 +105,7 @@ export default function JoinExamPage() {
             return;
           }
           toast({
-            title: "Couldn&apos;t join",
+            title: "Couldn't join",
             description:
               payload?.message ?? "Something went wrong. Please try again.",
             variant: "destructive",
@@ -118,7 +116,7 @@ export default function JoinExamPage() {
         const token = payload.data?.sessionToken;
         if (!token) {
           toast({
-            title: "Couldn&apos;t join",
+            title: "Couldn't join",
             description: "No session was returned by the server.",
             variant: "destructive",
           });
@@ -132,7 +130,7 @@ export default function JoinExamPage() {
         toast({
           title: "Network unavailable",
           description:
-            "Couldn&apos;t reach the server. Check your connection and try again.",
+            "Couldn't reach the server. Check your connection and try again.",
           variant: "destructive",
         });
       } finally {
@@ -146,35 +144,39 @@ export default function JoinExamPage() {
   if (check.state === "not-found" || check.state === "inactive") {
     const inactive = check.state === "inactive";
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <Card className="w-full max-w-lg border-slate-200 bg-white text-center shadow-[0_8px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+      <div className="flex min-h-screen items-center justify-center bg-background relative overflow-hidden p-6">
+        {/* Subtle ambient background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
+             style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
+             
+        <Card className="glass-panel w-full max-w-lg text-center animate-in slide-in-from-bottom-8 fade-in duration-700 relative z-10">
           <CardHeader className="items-center gap-4 pt-10">
-            <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-red-50 to-red-100 ring-1 ring-inset ring-red-200">
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
               {inactive ? (
-                <CalendarX2 className="h-10 w-10 text-red-500" />
+                <CalendarX2 className="h-10 w-10" />
               ) : (
-                <SearchX className="h-10 w-10 text-red-500" />
+                <SearchX className="h-10 w-10" />
               )}
-              <span className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white shadow-sm">
+              <span className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm">
                 <AlertCircle className="h-4 w-4" />
               </span>
             </div>
             <div className="space-y-2">
-              <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-red-700 ring-1 ring-inset ring-red-100">
+              <span className="inline-flex items-center rounded-full bg-destructive/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-destructive">
                 Exam unavailable
               </span>
-              <CardTitle className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                {inactive ? "This exam isn&apos;t active yet" : "Exam not found"}
+              <CardTitle className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl mt-2">
+                {inactive ? "This exam isn't active yet" : "Exam not found"}
               </CardTitle>
-              <CardDescription className="mx-auto max-w-sm text-sm leading-6 text-slate-600 sm:text-base">
+              <CardDescription className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground sm:text-base">
                 {inactive
-                  ? "This exam is still a draft or hasn&apos;t been published yet. Check back once your teacher starts it."
-                  : "We couldn&apos;t find this exam. The link may be wrong, or the exam may have been removed."}
+                  ? "This exam is still a draft or hasn't been published yet. Check back once your teacher starts it."
+                  : "We couldn't find this exam. The link may be wrong, or the exam may have been removed."}
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="pb-10">
-            <Button asChild variant="outline" className="h-11 gap-2">
+          <CardContent className="pb-10 pt-4">
+            <Button asChild variant="outline" className="h-11 gap-2 border-border/40">
               <Link href="/">
                 <Home className="h-4 w-4" />
                 Back to home
@@ -188,36 +190,39 @@ export default function JoinExamPage() {
 
   if (check.state === "checking") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="flex items-center gap-3 text-slate-600">
-          <Loader2 className="h-6 w-6 animate-spin text-indigo-700" />
-          <span className="text-lg">Checking exam availability…</span>
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="flex items-center gap-3 text-muted-foreground animate-in fade-in duration-500">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <span className="text-lg font-medium">Checking exam availability…</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <Card className="w-full max-w-lg border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+    <div className="flex min-h-screen items-center justify-center bg-background relative overflow-hidden p-6">
+      {/* Subtle ambient background glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
+           style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
+
+      <Card className="glass-panel w-full max-w-lg animate-in slide-in-from-bottom-8 fade-in duration-700 relative z-10">
         <CardHeader className="items-center gap-4 pt-10 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-700 ring-1 ring-inset ring-indigo-200">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
             <ClipboardList className="h-8 w-8" />
           </div>
           <div className="space-y-2">
-            <CardTitle className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <CardTitle className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
               {check.title}
             </CardTitle>
-            <CardDescription className="mx-auto max-w-sm text-sm leading-6 text-slate-600 sm:text-base">
-              Enter your details to begin. Your session is anonymous — no
-              account is needed.
+            <CardDescription className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground sm:text-base">
+              Enter your details to begin. Your session is monitored — please ensure you are in a quiet environment.
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="pb-10">
-          <form onSubmit={handleJoin} className="flex flex-col gap-5" noValidate>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="student-name" className="text-sm font-medium text-slate-700">
+        <CardContent className="pb-10 pt-4">
+          <form onSubmit={handleJoin} className="flex flex-col gap-6" noValidate>
+            <div className="flex flex-col gap-2.5">
+              <Label htmlFor="student-name" className="text-sm font-semibold text-foreground">
                 Full name
               </Label>
               <Input
@@ -225,13 +230,13 @@ export default function JoinExamPage() {
                 required
                 minLength={2}
                 placeholder="e.g. Aarav Sharma"
-                className="h-11 text-base"
+                className="h-12 text-base bg-secondary/50 focus:bg-background transition-colors border-border/40"
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="student-email" className="text-sm font-medium text-slate-700">
+            <div className="flex flex-col gap-2.5">
+              <Label htmlFor="student-email" className="text-sm font-semibold text-foreground">
                 Email
               </Label>
               <Input
@@ -239,13 +244,13 @@ export default function JoinExamPage() {
                 type="email"
                 required
                 placeholder="you@example.com"
-                className="h-11 text-base"
+                className="h-12 text-base bg-secondary/50 focus:bg-background transition-colors border-border/40"
                 value={studentEmail}
                 onChange={(e) => setStudentEmail(e.target.value)}
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="enrollment-no" className="text-sm font-medium text-slate-700">
+            <div className="flex flex-col gap-2.5">
+              <Label htmlFor="enrollment-no" className="text-sm font-semibold text-foreground">
                 Enrollment number
               </Label>
               <Input
@@ -253,7 +258,7 @@ export default function JoinExamPage() {
                 required
                 minLength={2}
                 placeholder="e.g. CS2023-0142"
-                className="h-11 text-base"
+                className="h-12 text-base bg-secondary/50 focus:bg-background transition-colors border-border/40"
                 value={enrollmentNo}
                 onChange={(e) => setEnrollmentNo(e.target.value)}
               />
@@ -261,17 +266,17 @@ export default function JoinExamPage() {
             <Button
               type="submit"
               disabled={joining}
-              className="mt-2 h-12 gap-2 bg-indigo-700 hover:bg-indigo-800"
+              className="mt-4 h-12 gap-2 text-base w-full"
             >
               {joining ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                   Joining…
                 </>
               ) : (
                 <>
-                  Start exam
-                  <ArrowRight className="h-4 w-4" />
+                  Start Exam
+                  <ArrowRight className="h-5 w-5" />
                 </>
               )}
             </Button>

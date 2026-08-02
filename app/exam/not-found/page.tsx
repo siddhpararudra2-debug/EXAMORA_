@@ -20,45 +20,47 @@ function ExamNotFoundContent() {
   const inactive = reason === "inactive";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <Card className="w-full max-w-lg border-slate-200 bg-white text-center shadow-[0_8px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+    <div className="flex min-h-screen items-center justify-center bg-background relative overflow-hidden p-6">
+      {/* Subtle ambient background glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
+           style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
+      
+      <Card className="glass-panel w-full max-w-lg text-center animate-in zoom-in-95 duration-500 relative z-10">
         <CardHeader className="items-center gap-4 pt-10">
-          <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-red-50 to-red-100 ring-1 ring-inset ring-red-200">
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
             {inactive ? (
-              <CalendarX2 className="h-10 w-10 text-red-500" />
+              <CalendarX2 className="h-10 w-10" />
             ) : (
-              <SearchX className="h-10 w-10 text-red-500" />
+              <SearchX className="h-10 w-10" />
             )}
-            <span className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white shadow-sm">
+            <span className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm">
               <AlertCircle className="h-4 w-4" />
             </span>
           </div>
           <div className="space-y-2">
-            <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-red-700 ring-1 ring-inset ring-red-100">
+            <span className="inline-flex items-center rounded-full bg-destructive/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-destructive">
               Exam unavailable
             </span>
-            <CardTitle className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <CardTitle className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl mt-2">
               {inactive
-                ? "This exam isn&apos;t active yet"
+                ? "This exam isn't active yet"
                 : "Exam not found"}
             </CardTitle>
-            <CardDescription className="mx-auto max-w-sm text-sm leading-6 text-slate-600 sm:text-base">
+            <CardDescription className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground sm:text-base">
               {inactive
-                ? "The exam you&apos;re trying to open is still a draft or hasn&apos;t been published. Please check the link again once your teacher starts it."
-                : "We couldn&apos;t find this exam. The link may be wrong, or the exam may have been removed."}
+                ? "The exam you're trying to open is still a draft or hasn't been published. Please check the link again once your teacher starts it."
+                : "We couldn't find this exam. The link may be wrong, or the exam may have been removed."}
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 pb-10">
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <Button asChild variant="outline" className="h-11 gap-2">
-              <Link href="/">
-                <Home className="h-4 w-4" />
-                Back to home
-              </Link>
-            </Button>
-          </div>
-          <p className="text-xs text-slate-400">
+        <CardContent className="flex flex-col gap-5 pb-10 pt-4">
+          <Button asChild variant="outline" className="h-12 gap-2 text-base w-full max-w-[240px] mx-auto border-border/40">
+            <Link href="/">
+              <Home className="h-5 w-5" />
+              Back to home
+            </Link>
+          </Button>
+          <p className="text-xs text-muted-foreground/70">
             Contact your teacher if you believe this link should be working.
           </p>
         </CardContent>
@@ -69,7 +71,7 @@ function ExamNotFoundContent() {
 
 export default function ExamNotFoundPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Loading...</div>}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading...</div>}>
       <ExamNotFoundContent />
     </Suspense>
   );

@@ -12,14 +12,14 @@ export default function DashboardLayout({
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-background">
       <Sidebar />
       <MobileSidebar open={mobileNavOpen} onOpenChange={setMobileNavOpen} />
 
       <div className="flex min-h-screen flex-col lg:pl-72">
         <TopNav onMenuClick={() => setMobileNavOpen(true)} />
         <main className="flex-1 px-3 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <div className="mx-auto w-full max-w-7xl">{children}</div>
+          <div className="mx-auto w-full max-w-7xl animate-in fade-in duration-500">{children}</div>
         </main>
       </div>
     </div>

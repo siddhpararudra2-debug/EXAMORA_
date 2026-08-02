@@ -608,10 +608,13 @@ function TakeExamContent() {
   // -------- Rendering states --------
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="flex items-center gap-3 text-slate-600">
-          <Loader2 className="h-6 w-6 animate-spin text-indigo-700" />
-          <span className="text-lg">Preparing exam environment…</span>
+      <div className="flex min-h-screen items-center justify-center bg-background relative overflow-hidden">
+        {/* Subtle ambient background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] opacity-20 pointer-events-none" 
+             style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
+        <div className="flex items-center gap-3 text-muted-foreground animate-in fade-in duration-500 relative z-10">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <span className="text-lg font-medium">Preparing exam environment…</span>
         </div>
       </div>
     );
@@ -619,16 +622,16 @@ function TakeExamContent() {
 
   if (!exam) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white p-6">
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="max-w-md text-center">
-          <AlertCircle className="mx-auto h-10 w-10 text-red-500" />
-          <h1 className="mt-4 text-2xl font-semibold text-slate-900">
+          <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+          <h1 className="mt-5 text-2xl font-bold tracking-tight text-foreground">
             Exam not found
           </h1>
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-muted-foreground">
             The exam you&apos;re looking for isn&apos;t available.
           </p>
-          <Button className="mt-6" onClick={() => router.push("/")}>
+          <Button className="mt-8" onClick={() => router.push("/")}>
             Back to home
           </Button>
         </div>
@@ -642,7 +645,7 @@ function TakeExamContent() {
     timeLeft !== null && timeLeft <= 5 * 60 && !timerAlmostOver;
 
   return (
-    <div className="flex min-h-screen flex-col bg-white text-slate-900">
+    <div className="flex min-h-screen flex-col bg-background text-foreground relative selection:bg-primary/20">
       {/* Invisible webcam feed consumed by the BlazeFace proctoring hook.
           The hook only starts the camera while the exam is live. */}
       <video
@@ -653,58 +656,59 @@ function TakeExamContent() {
         className="pointer-events-none fixed h-px w-px opacity-0"
         aria-hidden="true"
       />
+      
       {/* Strict termination overlay */}
       {terminated && (
         <div
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="term-title"
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-red-900/30 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-xl animate-in fade-in duration-300"
         >
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-red-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100 py-10">
-              <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-white shadow-sm ring-4 ring-red-100 text-red-600">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl glass-panel border-destructive/30 animate-in zoom-in-95 duration-500">
+            <div className="flex items-center justify-center bg-destructive/10 py-10">
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground shadow-sm">
                 <OctagonX className="h-10 w-10" />
               </div>
             </div>
-            <div className="p-6 text-center sm:p-8">
-              <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-red-700 ring-1 ring-inset ring-red-100">
-                <ShieldAlert className="h-3.5 w-3.5" />
+            <div className="p-8 text-center">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-destructive">
+                <ShieldAlert className="h-4 w-4" />
                 Exam terminated
               </span>
               <h2
                 id="term-title"
-                className="mt-3 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl"
+                className="mt-4 text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
               >
                 Your exam has been terminated
               </h2>
-              <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
+              <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
                 {terminatedReason === "warnings_limit"
                   ? `Due to repeated proctoring violations (${warnings}/${warningLimit} warnings), this session has been closed.`
                   : terminatedReason === "teacher"
                   ? "Your teacher ended this session. Any answers submitted so far have been saved."
                   : "This session has been closed. Any answers submitted so far have been retained."}
               </p>
-              <dl className="mt-6 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-5 ring-1 ring-inset ring-slate-100">
+              <dl className="mt-8 grid grid-cols-2 gap-4 rounded-xl bg-secondary/50 p-5">
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Warnings
                   </dt>
-                  <dd className="mt-1 text-2xl font-bold text-red-600">
+                  <dd className="mt-1 text-2xl font-bold text-destructive">
                     {warnings}
-                    <span className="text-sm font-normal text-slate-500">
+                    <span className="text-sm font-normal text-muted-foreground">
                       {" "}
                       / {warningLimit}
                     </span>
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Answers saved
                   </dt>
-                  <dd className="mt-1 text-2xl font-bold text-slate-900">
+                  <dd className="mt-1 text-2xl font-bold text-foreground">
                     {answeredCount}
-                    <span className="text-sm font-normal text-slate-500">
+                    <span className="text-sm font-normal text-muted-foreground">
                       {" "}
                       / {totalQuestions}
                     </span>
@@ -713,7 +717,7 @@ function TakeExamContent() {
               </dl>
               <div
                 role="status"
-                className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+                className="mt-8 rounded-xl bg-destructive/10 p-4 text-sm font-medium text-destructive"
               >
                 <strong>Redirecting in{" "}
                   {terminatedCountdown ?? TERMINATED_REDIRECT_DELAY_MS / 1000}…</strong>{" "}
@@ -726,67 +730,65 @@ function TakeExamContent() {
 
       {/* Submitted success state (visible for ~4.5s before redirect) */}
       {submitted && (
-        <div className="flex min-h-screen flex-col bg-slate-50">
-          <div className="flex flex-1 items-center justify-center p-6">
-            <div className="w-full max-w-xl rounded-2xl border border-emerald-200 bg-white p-10 text-center shadow-sm ring-1 ring-inset ring-emerald-100">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                <CheckCircle2 className="h-8 w-8" />
-              </div>
-              <span className="mt-4 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-inset ring-emerald-100">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Submission successful
-              </span>
-              <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
-                Your exam has been submitted
-              </h1>
-              <p className="mt-3 text-lg text-slate-600">
-                Thanks — your answers have been received and saved. Redirecting…
-              </p>
-              <dl className="mt-8 grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-6 text-left">
-                <div>
-                  <dt className="text-sm font-medium text-slate-500">
-                    Questions answered
-                  </dt>
-                  <dd className="mt-1 text-2xl font-semibold text-slate-900">
-                    {answeredCount}
-                    <span className="text-base font-normal text-slate-500">
-                      {" "}
-                      / {totalQuestions}
-                    </span>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-slate-500">
-                    Total marks
-                  </dt>
-                  <dd className="mt-1 text-2xl font-semibold text-slate-900">
-                    {totalMarks}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-slate-500">
-                    Warnings
-                  </dt>
-                  <dd className="mt-1 text-2xl font-semibold text-slate-900">
-                    {warnings}
-                    <span className="text-base font-normal text-slate-500">
-                      {" "}
-                      / {warningLimit}
-                    </span>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-slate-500">
-                    Submitted at
-                  </dt>
-                  <dd className="mt-1 truncate text-sm font-mono text-slate-800">
-                    {submittedResult?.submittedAt
-                      ? new Date(submittedResult.submittedAt).toLocaleString()
-                      : "—"}
-                  </dd>
-                </div>
-              </dl>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="w-full max-w-xl rounded-2xl glass-panel p-10 text-center animate-in zoom-in-95 duration-500">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <CheckCircle2 className="h-10 w-10" />
             </div>
+            <span className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary">
+              <ShieldCheck className="h-4 w-4" />
+              Submission successful
+            </span>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-foreground">
+              Your exam has been submitted
+            </h1>
+            <p className="mt-3 text-lg text-muted-foreground">
+              Thanks — your answers have been received and saved. Redirecting…
+            </p>
+            <dl className="mt-10 grid grid-cols-2 gap-4 rounded-xl bg-secondary/30 p-6 text-left border border-border/40">
+              <div>
+                <dt className="text-sm font-medium text-muted-foreground">
+                  Questions answered
+                </dt>
+                <dd className="mt-1 text-2xl font-bold text-foreground">
+                  {answeredCount}
+                  <span className="text-base font-normal text-muted-foreground">
+                    {" "}
+                    / {totalQuestions}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-muted-foreground">
+                  Total marks
+                </dt>
+                <dd className="mt-1 text-2xl font-bold text-foreground">
+                  {totalMarks}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-muted-foreground">
+                  Warnings
+                </dt>
+                <dd className="mt-1 text-2xl font-bold text-foreground">
+                  {warnings}
+                  <span className="text-base font-normal text-muted-foreground">
+                    {" "}
+                    / {warningLimit}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-muted-foreground">
+                  Submitted at
+                </dt>
+                <dd className="mt-1 truncate text-sm font-mono text-foreground">
+                  {submittedResult?.submittedAt
+                    ? new Date(submittedResult.submittedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                    : "—"}
+                </dd>
+              </div>
+            </dl>
           </div>
         </div>
       )}
@@ -794,13 +796,13 @@ function TakeExamContent() {
       {!submitted && (
         <>
           {/* Top Bar */}
-          <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
-            <div className="mx-auto flex h-20 w-full max-w-6xl flex-wrap items-center gap-4 px-4 sm:px-6 lg:px-8">
+          <header className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-xl">
+            <div className="mx-auto flex h-20 w-full max-w-5xl flex-wrap items-center gap-4 px-4 sm:px-6 lg:px-8">
               <div className="flex min-w-0 flex-1 flex-col justify-center">
-                <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
                   Now taking
                 </p>
-                <h1 className="truncate text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+                <h1 className="truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl mt-0.5">
                   {exam.title}
                 </h1>
               </div>
@@ -808,34 +810,34 @@ function TakeExamContent() {
               <div className="flex items-center gap-3 sm:gap-4">
                 <div
                   className={cn(
-                    "flex items-center gap-2 rounded-xl border px-4 py-2.5",
+                    "flex items-center gap-2 rounded-lg border px-4 py-2.5 transition-colors",
                     timerAlmostOver
-                      ? "border-red-200 bg-red-50 text-red-700"
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
                       : timerWarn
-                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                      : "border-slate-200 bg-slate-50 text-slate-800"
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                      : "border-border/40 bg-secondary/30 text-foreground"
                   )}
                   aria-live="polite"
                 >
                   <Clock className="h-5 w-5" aria-hidden />
-                  <span className="font-mono text-lg font-semibold tabular-nums sm:text-xl">
+                  <span className="font-mono text-lg font-bold tabular-nums sm:text-xl tracking-tight">
                     {formatTime(timeLeft ?? 0)}
                   </span>
                 </div>
 
                 <div
                   className={cn(
-                    "flex items-center gap-2 rounded-xl border px-4 py-2.5",
+                    "flex items-center gap-2.5 rounded-lg border px-4 py-2.5 transition-colors",
                     warningsCritical || terminated
-                      ? "border-red-200 bg-red-50 text-red-700"
-                      : "border-amber-200 bg-amber-50 text-amber-800"
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-border/40 bg-secondary/30 text-foreground"
                   )}
                   title="Proctoring warnings"
                 >
                   {warningsCritical || terminated ? (
                     <ShieldAlert className="h-5 w-5" aria-hidden />
                   ) : (
-                    <AlertTriangle className="h-5 w-5" aria-hidden />
+                    <ShieldCheck className="h-5 w-5 text-muted-foreground" aria-hidden />
                   )}
                   <span className="text-sm font-semibold sm:text-base">
                     Warnings: {warnings}/{warningLimit}
@@ -846,28 +848,28 @@ function TakeExamContent() {
           </header>
 
           {/* Main Area */}
-          <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
+          <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-6 lg:px-8">
             {currentQuestion && (
               <div
                 key={currentQuestion.id}
-                className="flex flex-col gap-8"
+                className="flex flex-col gap-8 animate-in slide-in-from-right-4 fade-in duration-500"
                 aria-disabled={disabled}
               >
-                <div className="flex flex-wrap items-end justify-between gap-3">
+                <div className="flex flex-wrap items-end justify-between gap-3 pb-4 border-b border-border/40">
                   <div>
-                    <p className="text-sm font-medium text-indigo-700">
+                    <p className="text-sm font-bold text-muted-foreground">
                       Question {currentIndex + 1} of {totalQuestions}
                     </p>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-2 text-sm">
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                          "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold",
                           currentQuestion.type === "MCQ_SINGLE" &&
-                            "bg-indigo-50 text-indigo-700",
+                            "bg-secondary text-foreground",
                           currentQuestion.type === "TRUE_FALSE" &&
-                            "bg-sky-50 text-sky-700",
+                            "bg-secondary text-foreground",
                           currentQuestion.type === "SHORT_ANSWER" &&
-                            "bg-emerald-50 text-emerald-700"
+                            "bg-primary/10 text-primary"
                         )}
                       >
                         {currentQuestion.type === "MCQ_SINGLE"
@@ -878,20 +880,20 @@ function TakeExamContent() {
                       </span>
                     </p>
                   </div>
-                  <p className="text-sm font-medium text-slate-500">
+                  <p className="text-sm font-bold text-muted-foreground">
                     {currentQuestion.marks}{" "}
                     {currentQuestion.marks === 1 ? "mark" : "marks"}
                   </p>
                 </div>
 
-                <h2 className="text-2xl font-semibold leading-relaxed tracking-tight text-slate-900 whitespace-pre-wrap sm:text-3xl">
+                <h2 className="text-2xl font-bold leading-relaxed tracking-tight text-foreground whitespace-pre-wrap sm:text-3xl">
                   {currentQuestion.question_text}
                 </h2>
 
                 {/* MCQ / True-False */}
                 {(currentQuestion.type === "MCQ_SINGLE" ||
                   currentQuestion.type === "TRUE_FALSE") && (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-4 mt-2">
                     {(currentQuestion.options ?? []).map((option, i) => {
                       const optionKey = String.fromCharCode(65 + i);
                       const value = option;
@@ -900,25 +902,25 @@ function TakeExamContent() {
                         <label
                           key={`${currentQuestion.id}-${i}`}
                           className={cn(
-                            "group rounded-2xl border px-5 py-4 text-lg transition-colors sm:text-xl",
-                            disabled && "pointer-events-none opacity-60",
+                            "group relative rounded-xl border p-5 text-lg transition-all duration-200 sm:text-xl",
+                            disabled && "pointer-events-none opacity-50",
                             selected
-                              ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200 cursor-pointer"
-                              : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50 cursor-pointer"
+                              ? "border-primary bg-primary/5 ring-1 ring-primary cursor-pointer shadow-sm"
+                              : "border-border/40 bg-secondary/20 hover:border-border hover:bg-secondary/60 cursor-pointer"
                           )}
                         >
-                          <span className="flex items-start gap-4">
+                          <span className="flex items-start gap-5">
                             <span
                               className={cn(
-                                "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-base font-semibold",
+                                "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sm font-bold transition-colors",
                                 selected
-                                  ? "border-indigo-600 bg-indigo-600 text-white"
-                                  : "border-slate-300 bg-white text-slate-500 group-hover:border-indigo-400"
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground border border-border group-hover:border-foreground/30"
                               )}
                               aria-hidden
                             >
                               {selected ? (
-                                <CheckCircle2 className="h-4 w-4" />
+                                <CheckCircle2 className="h-5 w-5" />
                               ) : (
                                 optionKey
                               )}
@@ -934,7 +936,7 @@ function TakeExamContent() {
                                 setAnswer(currentQuestion.id, value)
                               }
                             />
-                            <span className="leading-7 text-slate-800">
+                            <span className={cn("leading-relaxed", selected ? "text-foreground font-medium" : "text-muted-foreground")}>
                               {option}
                             </span>
                           </span>
@@ -946,7 +948,7 @@ function TakeExamContent() {
 
                 {/* Short Answer */}
                 {currentQuestion.type === "SHORT_ANSWER" && (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-4 mt-2">
                     <Textarea
                       value={answers[currentQuestion.id] ?? ""}
                       onChange={(e) =>
@@ -954,9 +956,10 @@ function TakeExamContent() {
                       }
                       placeholder="Type your answer here…"
                       disabled={disabled}
-                      className="min-h-[240px] resize-y text-lg leading-7 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
+                      className="min-h-[280px] resize-y text-lg leading-relaxed p-6 bg-secondary/30 border-border/40 focus-visible:ring-primary focus-visible:bg-background disabled:cursor-not-allowed disabled:opacity-50"
                     />
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
                       Your answer is auto-saved locally as you type.
                     </p>
                   </div>
@@ -965,11 +968,11 @@ function TakeExamContent() {
             )}
 
             {/* Question navigator */}
-            <div className="mt-14">
-              <p className="mb-3 text-sm font-medium text-slate-500">
-                Jump to question
+            <div className="mt-20 border-t border-border/40 pt-8">
+              <p className="mb-4 text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                Exam Overview
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2.5">
                 {exam.questions.map((q, i) => {
                   const active = i === currentIndex;
                   const answered = Boolean(answers[q.id]?.trim());
@@ -980,12 +983,12 @@ function TakeExamContent() {
                       onClick={() => setCurrentIndex(i)}
                       disabled={disabled}
                       className={cn(
-                        "flex h-11 w-11 items-center justify-center rounded-lg border text-base font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+                        "flex h-12 w-12 items-center justify-center rounded-lg text-base font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50",
                         active
-                          ? "border-indigo-600 bg-indigo-600 text-white"
+                          ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/20 ring-offset-2 ring-offset-background"
                           : answered
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50"
+                          ? "bg-secondary text-foreground hover:bg-secondary/80 border border-border/40"
+                          : "bg-transparent text-muted-foreground hover:bg-secondary/50 border border-border/40"
                       )}
                       aria-current={active ? "page" : undefined}
                       aria-label={`Question ${i + 1}${
@@ -997,33 +1000,45 @@ function TakeExamContent() {
                   );
                 })}
               </div>
-              <p className="mt-3 text-xs text-slate-500">
-                <span className="inline-flex h-3 w-3 rounded bg-emerald-500 align-middle" />{" "}
-                = answered
-                <span className="mx-2">·</span>
-                <span className="inline-flex h-3 w-3 rounded bg-indigo-600 align-middle" />{" "}
-                = current
-              </p>
+              <div className="mt-6 flex gap-6 text-sm font-medium text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 rounded bg-secondary border border-border/40" />
+                  Answered
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 rounded bg-primary" />
+                  Current
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 rounded bg-transparent border border-border/40" />
+                  Unanswered
+                </span>
+              </div>
             </div>
           </main>
 
           {/* Bottom Bar */}
-          <footer className="sticky bottom-0 z-30 border-t border-slate-200 bg-white/90 backdrop-blur">
-            <div className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <footer className="sticky bottom-0 z-30 border-t border-border/40 bg-background/80 backdrop-blur-xl">
+            <div className="mx-auto flex h-24 w-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
               <Button
                 type="button"
                 variant="outline"
                 size="lg"
                 onClick={goPrev}
                 disabled={disabled || currentIndex === 0}
-                className="h-12 gap-2"
+                className="h-12 gap-2 w-[140px] border-border/40 text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="h-5 w-5" /> Previous
               </Button>
 
-              <p className="hidden text-sm font-medium text-slate-500 sm:block">
-                {answeredCount} of {totalQuestions} answered
-              </p>
+              <div className="hidden sm:flex flex-col items-center">
+                <p className="text-sm font-bold text-foreground">
+                  {Math.round((answeredCount / totalQuestions) * 100)}% Completed
+                </p>
+                <p className="text-xs font-medium text-muted-foreground mt-0.5">
+                  {answeredCount} of {totalQuestions} answered
+                </p>
+              </div>
 
               {currentIndex < totalQuestions - 1 ? (
                 <Button
@@ -1031,7 +1046,7 @@ function TakeExamContent() {
                   size="lg"
                   onClick={goNext}
                   disabled={disabled}
-                  className="h-12 gap-2"
+                  className="h-12 gap-2 w-[140px]"
                 >
                   Next <ArrowRight className="h-5 w-5" />
                 </Button>
@@ -1039,11 +1054,11 @@ function TakeExamContent() {
                 <Button
                   type="button"
                   size="lg"
-                  className="h-12 gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  className="h-12 gap-2 w-[140px] text-base"
                   onClick={() => setShowConfirm(true)}
                   disabled={disabled || submitting}
                 >
-                  <Send className="h-5 w-5" /> Submit Exam
+                  <Send className="h-5 w-5" /> Submit
                 </Button>
               )}
             </div>
@@ -1052,40 +1067,45 @@ function TakeExamContent() {
           {/* Confirmation Dialog */}
           {showConfirm && (
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm animate-in fade-in duration-200"
               role="dialog"
               aria-modal="true"
               aria-labelledby="submit-confirm-title"
             >
-              <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-700">
+              <div className="w-full max-w-md rounded-2xl glass-panel p-8 shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="flex items-start gap-5">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Send className="h-6 w-6" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <h2
                       id="submit-confirm-title"
-                      className="text-xl font-semibold text-slate-900"
+                      className="text-xl font-bold tracking-tight text-foreground"
                     >
-                      Submit your exam?
+                      Submit Exam
                     </h2>
-                    <p className="mt-2 text-slate-600">
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                       You have answered{" "}
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-bold text-foreground">
                         {answeredCount}
                       </span>{" "}
                       out of{" "}
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-bold text-foreground">
                         {totalQuestions}
                       </span>{" "}
                       questions.
                     </p>
                     {answeredCount < totalQuestions && (
-                      <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-                        {totalQuestions - answeredCount} question
-                        {totalQuestions - answeredCount === 1 ? "" : "s"} left
-                        unanswered. Are you sure you want to continue?
-                      </p>
+                      <div className="mt-4 rounded-xl bg-amber-500/10 p-4 border border-amber-500/20">
+                        <p className="text-sm font-semibold text-amber-500">
+                          {totalQuestions - answeredCount} question
+                          {totalQuestions - answeredCount === 1 ? "" : "s"} left
+                          unanswered.
+                        </p>
+                        <p className="text-sm mt-1 text-amber-500/80">
+                           Are you sure you want to finish early?
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1095,6 +1115,7 @@ function TakeExamContent() {
                     variant="outline"
                     onClick={() => setShowConfirm(false)}
                     disabled={submitting}
+                    className="border-border/40"
                   >
                     Keep working
                   </Button>
@@ -1102,7 +1123,7 @@ function TakeExamContent() {
                     type="button"
                     onClick={() => handleSubmit(false)}
                     disabled={submitting}
-                    className="min-w-[140px] bg-emerald-600 hover:bg-emerald-700"
+                    className="min-w-[140px]"
                   >
                     {submitting ? (
                       <>
