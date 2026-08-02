@@ -34,6 +34,39 @@ export interface SendMarksheetEmailParams {
   filename: string;
 }
 
+export interface MarksheetSession {
+  id: string;
+  session_token: string;
+  student_name: string;
+  enrollment_number: string | null;
+  student_email: string | null;
+  status: string;
+  submitted_at: Date | null;
+  total_score: number | null;
+  percentage: number | null;
+  answers: {
+    question_id: string;
+    answer_text: string;
+    marks_awarded: number | null;
+    is_correct: boolean | null;
+  }[];
+}
+
+export interface MarksheetExam {
+  id: string;
+  title: string;
+  creator: { name: string | null; college_name: string | null } | null;
+  questions: {
+    id: string;
+    question_text: string;
+    type: string;
+    marks: number;
+    negative_marks: number | null;
+    order_index: number;
+  }[];
+  sessions: MarksheetSession[];
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 const htmlForMarksheet = ({ studentName, examTitle, percentage }: Omit<SendMarksheetEmailParams, 'to' | 'pdfBuffer' | 'filename'>): string => `
@@ -113,10 +146,17 @@ async function ensureEmailLog(params: {
   }
 }
 
-export async function dispatchResults(examId: string): Promise<DispatchSummary> {
-  const summary: DispatchSummary = { total: 0, sent: 0, failed: 0, skipped: 0, errors: [] };
-
-  const exam = await prisma.exam.findUnique({
+/**
+ * Loads an exam with all graded sessions and the class analytics needed to
+ * render identical marksheets for every student of the same exam.
+ */
+export async function loadMarksheetData(examId: string): Promise<{
+  exam: MarksheetExam;
+  examData: ExamData;
+  totalMarks: number;
+  classAnalytics: ClassAnalytics;
+}> {
+  const exam = (await prisma.exam.findUnique({
     where: { id: examId },
     include: {
       creator: { select: { name: true, college_name: true } },
@@ -127,7 +167,7 @@ export async function dispatchResults(examId: string): Promise<DispatchSummary> 
         orderBy: { student_name: 'asc' },
       },
     },
-  });
+  })) as MarksheetExam | null;
 
   if (!exam) {
     throw new Error(`Exam ${examId} not found`);
@@ -154,6 +194,77 @@ export async function dispatchResults(examId: string): Promise<DispatchSummary> 
     scores: percentages,
   };
 
+  return { exam, examData, totalMarks, classAnalytics };
+}
+
+/**
+ * Builds the SessionData structure for one student session (shared by the
+ * email dispatcher and the teacher-facing PDF download endpoint).
+ */
+export function buildSessionData(
+  exam: MarksheetExam,
+  totalMarks: number,
+  session: MarksheetSession,
+): SessionData {
+  const answersByQuestion = new Map(session.answers.map((answer) => [answer.question_id, answer]));
+  const questionResults: QuestionResultData[] = exam.questions.map((question) => {
+    const answer = answersByQuestion.get(question.id);
+    return {
+      id: question.id,
+      orderIndex: question.order_index,
+      questionText: question.question_text,
+      type: question.type,
+      marks: question.marks,
+      negativeMarks: Number(question.negative_marks) || 0,
+      marksAwarded: answer?.marks_awarded !== null && answer?.marks_awarded !== undefined ? Number(answer.marks_awarded) : null,
+      isCorrect: answer?.is_correct ?? null,
+      answerText: answer?.answer_text ?? '',
+    };
+  });
+
+  return {
+    sessionId: session.id,
+    sessionToken: session.session_token,
+    studentName: session.student_name,
+    enrollmentNumber: session.enrollment_number,
+    studentEmail: session.student_email,
+    status: session.status,
+    submittedAt: session.submitted_at,
+    totalScore: session.total_score !== null && session.total_score !== undefined ? Number(session.total_score) : null,
+    totalMarks,
+    percentage: session.percentage !== null && session.percentage !== undefined ? Number(session.percentage) : null,
+    questionResults,
+  };
+}
+
+/**
+ * Generates a single student's marksheet PDF. Used by the teacher download
+ * endpoint; returns null when the session is missing or not yet graded.
+ */
+export async function buildMarksheetPdf(
+  examId: string,
+  sessionId: string,
+): Promise<{ pdfBuffer: Buffer; filename: string; studentName: string; studentEmail: string | null } | null> {
+  const { exam, examData, totalMarks, classAnalytics } = await loadMarksheetData(examId);
+  const session = exam.sessions.find((s) => s.id === sessionId);
+  if (!session) return null;
+
+  const sessionData = buildSessionData(exam, totalMarks, session);
+  const pdfBuffer = await generateMarksheet(sessionData, examData, classAnalytics);
+  const filename = `Marksheet_${sanitizeForFilename(sessionData.studentName)}_${sanitizeForFilename(examData.title)}.pdf`;
+
+  return {
+    pdfBuffer,
+    filename,
+    studentName: sessionData.studentName,
+    studentEmail: session.student_email,
+  };
+}
+
+export async function dispatchResults(examId: string): Promise<DispatchSummary> {
+  const summary: DispatchSummary = { total: 0, sent: 0, failed: 0, skipped: 0, errors: [] };
+
+  const { exam, examData, totalMarks, classAnalytics } = await loadMarksheetData(examId);
   summary.total = exam.sessions.length;
 
   for (const session of exam.sessions) {
@@ -163,35 +274,7 @@ export async function dispatchResults(examId: string): Promise<DispatchSummary> 
       continue;
     }
 
-    const answersByQuestion = new Map(session.answers.map((answer) => [answer.question_id, answer]));
-    const questionResults: QuestionResultData[] = exam.questions.map((question) => {
-      const answer = answersByQuestion.get(question.id);
-      return {
-        id: question.id,
-        orderIndex: question.order_index,
-        questionText: question.question_text,
-        type: question.type,
-        marks: question.marks,
-        negativeMarks: Number(question.negative_marks) || 0,
-        marksAwarded: answer?.marks_awarded !== null && answer?.marks_awarded !== undefined ? Number(answer.marks_awarded) : null,
-        isCorrect: answer?.is_correct ?? null,
-        answerText: answer?.answer_text ?? '',
-      };
-    });
-
-    const sessionData: SessionData = {
-      sessionId: session.id,
-      sessionToken: session.session_token,
-      studentName: session.student_name,
-      enrollmentNumber: session.enrollment_number,
-      studentEmail: session.student_email,
-      status: session.status,
-      submittedAt: session.submitted_at,
-      totalScore: session.total_score !== null && session.total_score !== undefined ? Number(session.total_score) : null,
-      totalMarks,
-      percentage: session.percentage !== null && session.percentage !== undefined ? Number(session.percentage) : null,
-      questionResults,
-    };
+    const sessionData = buildSessionData(exam, totalMarks, session);
 
     try {
       const pdfBuffer = await generateMarksheet(sessionData, examData, classAnalytics);

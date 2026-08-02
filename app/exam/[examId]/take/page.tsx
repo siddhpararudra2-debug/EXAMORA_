@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAIFaceDetection } from "@/components/proctoring/useAIFaceDetection";
+import { isAIOverlayElement } from "@/components/proctoring/useExamLockdown";
 import {
   ExamTerminatedEvent,
   getSocket,
@@ -538,6 +539,85 @@ function TakeExamContent() {
       navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
       window.removeEventListener("keydown", onKeyDown, true);
       clearInterval(captureScan);
+    };
+  }, [submitted, terminated, loading, exam, emitViolation]);
+
+  // -------- AI overlay detection (MutationObserver) + DevTools + input blocking --------
+  useEffect(() => {
+    if (submitted || terminated || loading || !exam) return;
+
+    const scanExistingDOMForOverlays = () => {
+      const candidates = document.querySelectorAll<HTMLElement>(
+        "div, section, aside, iframe, span"
+      );
+      for (let i = 0; i < candidates.length; i += 1) {
+        if (isAIOverlayElement(candidates[i])) {
+          void emitViolation(
+            `AI overlay / floating element detected on page: <${candidates[i].tagName.toLowerCase()}>`,
+            "AI_OVERLAY"
+          );
+          break;
+        }
+      }
+    };
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (let i = 0; i < mutation.addedNodes.length; i += 1) {
+          const node = mutation.addedNodes[i];
+          if (node.nodeType === Node.ELEMENT_NODE && isAIOverlayElement(node as Element)) {
+            void emitViolation("Injected AI overlay detected", "AI_OVERLAY");
+            return;
+          }
+        }
+        if (
+          mutation.type === "attributes" &&
+          mutation.target.nodeType === Node.ELEMENT_NODE &&
+          isAIOverlayElement(mutation.target as Element)
+        ) {
+          void emitViolation("Modified AI overlay attributes detected", "AI_OVERLAY");
+          return;
+        }
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "id", "style"],
+    });
+    scanExistingDOMForOverlays();
+
+    // DevTools detection (viewport delta heuristic)
+    const devToolsInterval = setInterval(() => {
+      if (window.outerWidth - window.innerWidth > 200) {
+        void emitViolation("Developer tools detected", "DEVTOOLS");
+      }
+    }, 1000);
+
+    // Input blocking: cut / copy / paste / right-click
+    const onBlockedInput = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void emitViolation(
+        e.type === "contextmenu"
+          ? "Right-click context menu disabled"
+          : `${e.type.toUpperCase()} operation blocked`,
+        "KEYBOARD_SHORTCUT"
+      );
+    };
+    window.addEventListener("cut", onBlockedInput, true);
+    window.addEventListener("copy", onBlockedInput, true);
+    window.addEventListener("paste", onBlockedInput, true);
+    window.addEventListener("contextmenu", onBlockedInput, true);
+
+    return () => {
+      observer.disconnect();
+      clearInterval(devToolsInterval);
+      window.removeEventListener("cut", onBlockedInput, true);
+      window.removeEventListener("copy", onBlockedInput, true);
+      window.removeEventListener("paste", onBlockedInput, true);
+      window.removeEventListener("contextmenu", onBlockedInput, true);
     };
   }, [submitted, terminated, loading, exam, emitViolation]);
 

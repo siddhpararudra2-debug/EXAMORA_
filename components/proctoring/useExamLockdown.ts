@@ -276,8 +276,10 @@ const requestFullscreen = async (): Promise<void> => {
 
 /**
  * Checks whether an element exhibits signatures of injected AI tools / floating overlays.
+ * Exported so the student exam page can run the same detection through its own
+ * violation pipeline (useExamLockdown itself is only used by ProctoringWrapper).
  */
-const isAIOverlayElement = (el: Element): boolean => {
+export const isAIOverlayElement = (el: Element): boolean => {
   if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
 
   const className = typeof el.className === "string" ? el.className.toLowerCase() : "";
