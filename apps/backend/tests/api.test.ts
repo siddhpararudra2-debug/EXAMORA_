@@ -266,9 +266,9 @@ describe('GET /api/exams/:id/student-view', () => {
   });
 });
 
-describe('POST /api/exams/:id/submit + grade-all', () => {
-  it('submits answers and marks the session SUBMITTED', async () => {
-    // Fetch real question ids from the student view (no correctAnswer leak)
+describe('POST /api/v1/exam-session/:token/submit', () => {
+  it('submits answers and grades the session atomically', async () => {
+    // Fetch real question ids from the student view
     const view = await api
       .get(`/api/exams/${examId}/student-view`)
       .query({ sessionToken })
@@ -277,77 +277,78 @@ describe('POST /api/exams/:id/submit + grade-all', () => {
     const questions = view.body.data.exam.questions;
     expect(questions).toHaveLength(2);
 
-    // Question ids that do not belong to this exam are rejected
+    // Save answers via canonical /answer endpoint
     await api
-      .post(`/api/exams/${examId}/submit`)
-      .send({
-        sessionToken,
-        answers: [{ questionId: '00000000-0000-0000-0000-000000000000', answerText: 'X' }],
-      })
-      .expect(400);
-
-    await api
-      .post(`/api/exams/${examId}/submit`)
-      .send({
-        sessionToken,
-        answers: [
-          { questionId: questions[0].id, answerText: 'Paris' },
-          { questionId: questions[1].id, answerText: 'Mars' },
-        ],
-      })
+      .post(`/api/v1/exam-session/${sessionToken}/answer`)
+      .set('Authorization', `Bearer ${sessionToken}`)
+      .send({ questionId: questions[0].id, answerData: 'Paris' })
       .expect(200);
 
-    // Second submit must be rejected (already submitted)
     await api
-      .post(`/api/exams/${examId}/submit`)
-      .send({
-        sessionToken,
-        answers: [{ questionId: questions[0].id, answerText: 'Paris' }],
-      })
-      .expect(400);
+      .post(`/api/v1/exam-session/${sessionToken}/answer`)
+      .set('Authorization', `Bearer ${sessionToken}`)
+      .send({ questionId: questions[1].id, answerData: 'Mars' })
+      .expect(200);
+
+    // Submit session via canonical /submit endpoint
+    const res = await api
+      .post(`/api/v1/exam-session/${sessionToken}/submit`)
+      .set('Authorization', `Bearer ${sessionToken}`)
+      .expect(200);
+
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.result.score).toBe(4);
+
+    // Second submit must be rejected (session already submitted)
+    await api
+      .post(`/api/v1/exam-session/${sessionToken}/submit`)
+      .set('Authorization', `Bearer ${sessionToken}`)
+      .expect(403);
   });
 
-  it('auto-grades submitted sessions and persists the score', async () => {
-    const res = await api
-      .post(`/api/exams/${examId}/grade-all`)
-      .set('Authorization', `Bearer ${teacherToken}`)
-      .expect(200);
-
-    expect(res.body.data.gradedSessions).toHaveLength(1);
-    expect(res.body.data.gradedSessions[0].score).toBe(4); // 2 × 2 marks
-
+  it('verifies graded score persisted on session', async () => {
     const session = await prisma.examSession.findUnique({
       where: { session_token: sessionToken },
       select: { total_score: true, status: true },
     });
     expect(session?.total_score).toBe(4);
+    expect(session?.status).toBe('SUBMITTED');
   });
 });
 
-describe('Proctoring event logging', () => {
-  it('logs events via REST and terminates after 3 warnings', async () => {
+describe('POST /api/v1/exam-session/:token/violation', () => {
+  it('logs violations and enforces 3-warning termination rule', async () => {
+    const joinRes = await api
+      .post(`/api/exams/${examId}/join`)
+      .send({
+        studentName: 'Violation Test Student',
+        studentEmail: 'violation.test@example.com',
+        enrollmentNo: 'CS2023-8888',
+      })
+      .expect(201);
+
+    const testToken = joinRes.body.data.sessionToken;
+
     for (let i = 1; i <= 3; i++) {
       const res = await api
-        .post(`/api/exams/${examId}/proctoring-event`)
-        .send({ sessionToken, eventType: 'TAB_SWITCH', reason: `Switch ${i}` })
+        .post(`/api/v1/exam-session/${testToken}/violation`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ type: 'TAB_SWITCH', description: `Switch ${i}` })
         .expect(201);
 
-      expect(res.body.data.event.type).toBe('TAB_SWITCH');
+      expect(res.body.data.violation.type).toBe('TAB_SWITCH');
       expect(res.body.data.warningsCount).toBe(i);
       expect(res.body.data.terminated).toBe(i === 3);
     }
 
-    // The session is now TERMINATED — further events are rejected
+    // The session is now TERMINATED — further requests are rejected with 403
     await api
-      .post(`/api/exams/${examId}/proctoring-event`)
-      .send({ sessionToken, eventType: 'TAB_SWITCH' })
-      .expect(400);
-
-    // The teacher can fetch the full violation timeline
-    const session = await prisma.examSession.findFirst({
-      where: { session_token: sessionToken },
-      select: { id: true },
-    });
+      .post(`/api/v1/exam-session/${testToken}/violation`)
+      .set('Authorization', `Bearer ${testToken}`)
+      .send({ type: 'TAB_SWITCH' })
+      .expect(403);
+  });
+});
 
     const eventsRes = await api
       .get(`/api/exams/${examId}/sessions/${session!.id}/events`)

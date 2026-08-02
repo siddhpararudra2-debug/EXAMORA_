@@ -126,6 +126,7 @@ export async function gradeSubmission(
   const [answers, questions] = await Promise.all([
     prisma.answer.findMany({
       where: { session_id: sessionId },
+      orderBy: { created_at: 'asc' },
       select: { question_id: true, answer_text: true },
     }),
     prisma.question.findMany({
@@ -143,7 +144,10 @@ export async function gradeSubmission(
 
   const questionById = new Map(questions.map((q) => [q.id, q]));
 
-  let score = 0;
+  // rawScore accumulates marks and deductions WITHOUT clamping — clamping is
+  // applied to the final total only, so the answer order cannot affect the
+  // result (e.g. a correct +10 after a wrong -5 must net +5).
+  let rawScore = 0;
   let correctAnswers = 0;
   const updates: AnswerGradingUpdate[] = [];
 
@@ -154,7 +158,7 @@ export async function gradeSubmission(
     }
 
     if (isAnswerCorrect(question, answer.answer_text)) {
-      score += question.marks;
+      rawScore += question.marks;
       correctAnswers += 1;
       updates.push({
         questionId: question.id,
@@ -178,7 +182,7 @@ export async function gradeSubmission(
           question.marks,
         );
 
-        score += ai.marksAwarded;
+        rawScore += ai.marksAwarded;
         updates.push({
           questionId: question.id,
           isCorrect: ai.marksAwarded > 0,
@@ -207,9 +211,10 @@ export async function gradeSubmission(
     }
 
     // Objective question, wrong answer → apply negative marking when configured.
+    // Deduction is accumulated into the unclamped running total.
     const negativeMarks = Number(question.negative_marks);
     if (negativeMarks > 0) {
-      score = Math.max(0, score - negativeMarks);
+      rawScore -= negativeMarks;
     }
 
     updates.push({
@@ -222,6 +227,8 @@ export async function gradeSubmission(
     });
   }
 
+  // Clamp the final total exactly once, after all deductions are accumulated.
+  const score = Math.max(0, rawScore);
   const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
   const percentage = totalMarks > 0 ? (score / totalMarks) * 100 : 0;
 

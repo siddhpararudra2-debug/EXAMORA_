@@ -1,10 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { Prisma, PrismaClient, SubmissionStatus, ViolationType } from '@prisma/client';
+import { Server } from 'socket.io';
 
 import { AuthenticatedStudentRequest } from '../middleware/validateStudentSession.js';
 import { gradeSubmission } from '../../packages/database/src/grading.service.js';
 
 const prisma = new PrismaClient();
+
+export const MAX_WARNINGS = 3;
+
+/**
+ * Room name helper matching proctoring socket room convention.
+ */
+const roomName = (examId: string): string => `exam_${examId}`;
 
 // ── POST /api/v1/exam-session/:token/answer ─────────────────────────────────────
 // Authenticated by validateStudentSession (Bearer session token).
@@ -71,7 +79,9 @@ export const saveAnswer = async (
 // ── POST /api/v1/exam-session/:token/violation ─────────────────────────────────
 // Authenticated by validateStudentSession (Bearer session token).
 // Body: ViolationInput — { type, description?, metadata? }
-// Inserts a proctoring violation for the session.
+// Inserts a proctoring violation for the session, enforces the 3-warning rule,
+// updates status to TERMINATED if warnings >= 3, and broadcasts status update
+// to the teacher live monitoring room via Socket.io.
 
 export const reportViolation = async (
   req: Request,
@@ -86,25 +96,88 @@ export const reportViolation = async (
       metadata?: Record<string, unknown>;
     };
 
+    // 1. Create Violation record in DB
     const violation = await prisma.violation.create({
       data: {
         session_id: studentSession.id,
-        type,
+        type: type || ViolationType.TAB_SWITCH,
         description: description ?? null,
         metadata: (metadata ?? {}) as Prisma.InputJsonValue,
       },
       select: { id: true, type: true, occurred_at: true },
     });
 
+    // 2. Count total warnings for session
     const warningsCount = await prisma.violation.count({
       where: { session_id: studentSession.id },
     });
+
+    const terminated = warningsCount >= MAX_WARNINGS;
+
+    // 3. Enforce 3-warning termination rule
+    if (terminated) {
+      await prisma.examSession.updateMany({
+        where: {
+          id: studentSession.id,
+          status: SubmissionStatus.IN_PROGRESS,
+        },
+        data: {
+          status: SubmissionStatus.TERMINATED,
+          submitted_at: new Date(),
+        },
+      });
+    }
+
+    // 4. Broadcast update to teacher live monitoring room via Socket.io
+    const io = (req.app as unknown as { io?: Server }).io;
+    if (io) {
+      const sessionDetails = await prisma.examSession.findUnique({
+        where: { id: studentSession.id },
+        select: {
+          student_name: true,
+          student_email: true,
+          enrollment_number: true,
+          status: true,
+        },
+      });
+
+      const examRoom = roomName(studentSession.examId);
+
+      // Broadcast student_status_update to teacher dashboard
+      io.to(examRoom).emit('student_status_update', {
+        examId: studentSession.examId,
+        sessionId: studentSession.id,
+        studentName: sessionDetails?.student_name ?? 'Student',
+        studentEmail: sessionDetails?.student_email ?? '',
+        enrollmentNo: sessionDetails?.enrollment_number ?? '',
+        status: terminated ? SubmissionStatus.TERMINATED : SubmissionStatus.IN_PROGRESS,
+        warnings: warningsCount,
+        warningsLimit: MAX_WARNINGS,
+        terminated,
+        submitted: false,
+        timestamp: new Date().toISOString(),
+        reason: description ?? type,
+      });
+
+      // If session is terminated, emit exam_terminated event
+      if (terminated) {
+        io.to(examRoom).emit('exam_terminated', {
+          examId: studentSession.examId,
+          sessionId: studentSession.id,
+          reason: description ?? 'warnings_limit',
+          warnings: warningsCount,
+          warningsLimit: MAX_WARNINGS,
+        });
+      }
+    }
 
     res.status(201).json({
       status: 'success',
       data: {
         violation,
         warningsCount,
+        terminated,
+        maxWarnings: MAX_WARNINGS,
       },
     });
   } catch (err) {
@@ -115,7 +188,7 @@ export const reportViolation = async (
 // ── POST /api/v1/exam-session/:token/submit ────────────────────────────────────
 // Authenticated by validateStudentSession (Bearer session token).
 // Marks the session SUBMITTED (atomic, race-safe), then grades every answer
-// in the session and returns the final result summary.
+// in the session and returns the final result summary. Broadcasts update to teacher.
 
 export const submitSession = async (
   req: Request,
@@ -157,9 +230,42 @@ export const submitSession = async (
     const percentage =
       result.totalMarks > 0 ? (result.score / result.totalMarks) * 100 : 0;
 
+    // Broadcast status update to teacher monitoring room via Socket.io
+    const io = (req.app as unknown as { io?: Server }).io;
+    if (io) {
+      const sessionDetails = await prisma.examSession.findUnique({
+        where: { id: studentSession.id },
+        select: {
+          student_name: true,
+          student_email: true,
+          enrollment_number: true,
+        },
+      });
+
+      const warningsCount = await prisma.violation.count({
+        where: { session_id: studentSession.id },
+      });
+
+      io.to(roomName(studentSession.examId)).emit('student_status_update', {
+        examId: studentSession.examId,
+        sessionId: studentSession.id,
+        studentName: sessionDetails?.student_name ?? 'Student',
+        studentEmail: sessionDetails?.student_email ?? '',
+        enrollmentNo: sessionDetails?.enrollment_number ?? '',
+        status: SubmissionStatus.SUBMITTED,
+        warnings: warningsCount,
+        warningsLimit: MAX_WARNINGS,
+        terminated: false,
+        submitted: true,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     res.json({
       status: 'success',
       data: {
+        message: 'Exam submitted successfully',
+        submittedAt: new Date().toISOString(),
         result: {
           sessionId: result.sessionId,
           score: result.score,

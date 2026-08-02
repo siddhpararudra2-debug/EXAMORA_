@@ -119,6 +119,90 @@ describe('grading.service', () => {
       expect(result.correctAnswers).toBe(0);
     });
 
+    it('accumulates negative marks and clamps only the final total (not per-answer)', async () => {
+      (txMock.examSession.findFirst as jest.Mock).mockResolvedValue({ id: sessionId });
+      // Q1 correct (+2) → Q2 wrong (-5) → Q3 correct (+10).
+      // Deductions must sum unclamped: raw = 2 - 5 + 10 = 7 (NOT 10, which the
+      // old per-answer clamp produced by resetting the running score to 0
+      // after Q2 before Q3 added its 10).
+      (txMock.answer.findMany as jest.Mock).mockResolvedValue([
+        { question_id: 'q1', answer_text: 'Paris' },
+        { question_id: 'q2', answer_text: 'wrong-answer' },
+        { question_id: 'q3', answer_text: 'Rome' },
+      ]);
+      (txMock.question.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'q1',
+          type: QuestionType.MCQ_SINGLE,
+          correct_answer: 'Paris',
+          marks: 2,
+          negative_marks: 0,
+        },
+        {
+          id: 'q2',
+          type: QuestionType.MCQ_SINGLE,
+          correct_answer: 'Mars',
+          marks: 2,
+          negative_marks: 5,
+        },
+        {
+          id: 'q3',
+          type: QuestionType.MCQ_SINGLE,
+          correct_answer: 'Rome',
+          marks: 10,
+          negative_marks: 0,
+        },
+      ]);
+      (txMock.examSession.update as jest.Mock).mockResolvedValue({ id: sessionId });
+
+      const result = await gradeSubmission(examId, sessionId);
+
+      expect(result).toEqual({
+        sessionId,
+        score: 7,
+        totalMarks: 14,
+        correctAnswers: 2,
+        totalQuestions: 3,
+      });
+      expect(txMock.examSession.update).toHaveBeenCalledWith({
+        where: { id: sessionId },
+        data: { total_score: 7, percentage: 50 },
+      });
+    });
+
+    it('clamps the final total at zero when deductions exceed earned marks', async () => {
+      (txMock.examSession.findFirst as jest.Mock).mockResolvedValue({ id: sessionId });
+      (txMock.answer.findMany as jest.Mock).mockResolvedValue([
+        { question_id: 'q1', answer_text: 'wrong' },
+        { question_id: 'q2', answer_text: 'wrong' },
+      ]);
+      (txMock.question.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'q1',
+          type: QuestionType.MCQ_SINGLE,
+          correct_answer: 'A',
+          marks: 2,
+          negative_marks: 3,
+        },
+        {
+          id: 'q2',
+          type: QuestionType.MCQ_SINGLE,
+          correct_answer: 'B',
+          marks: 2,
+          negative_marks: 3,
+        },
+      ]);
+      (txMock.examSession.update as jest.Mock).mockResolvedValue({ id: sessionId });
+
+      const result = await gradeSubmission(examId, sessionId);
+
+      expect(result.score).toBe(0);
+      expect(txMock.examSession.update).toHaveBeenCalledWith({
+        where: { id: sessionId },
+        data: { total_score: 0, percentage: 0 },
+      });
+    });
+
     it('throws when the session does not exist', async () => {
       (txMock.examSession.findFirst as jest.Mock).mockResolvedValue(null);
 

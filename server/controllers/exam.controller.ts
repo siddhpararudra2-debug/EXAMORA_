@@ -110,7 +110,7 @@ export const getStudentView = async (
       return;
     }
 
-    if (session.status === SubmissionStatus.SUBMITTED || session.status === SubmissionStatus.TERMINATED) {
+    if (session.status !== SubmissionStatus.IN_PROGRESS) {
       res.status(403).json({
         status: 'error',
         message: `Exam session is already ${session.status.toLowerCase()}`,
@@ -154,11 +154,11 @@ export const getStudentView = async (
   }
 };
 
-// ── POST /api/exams/:id/submit ────────────────────────────────────────────────
-// Public route — no teacher auth.
-// Body: SubmitExamInput — { sessionToken, answers: [{ questionId, answerText }] }
-// Saves all submissions, marks session as SUBMITTED, records submittedAt.
-
+// ── POST /api/exams/:id/submit (DEPRECATED) ───────────────────────────────────
+/**
+ * @deprecated Use POST /api/v1/exam-session/:token/submit (student-session.controller.ts) instead.
+ * Canonical student submission route is now authenticated via Bearer session token.
+ */
 export const submitExam = async (
   req: Request,
   res: Response,

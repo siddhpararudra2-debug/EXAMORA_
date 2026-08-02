@@ -86,9 +86,8 @@ router.get('/:id/status', getExamStatus);
 router.get('/:id/student-view', getStudentView);
 
 /**
- * POST /api/exams/:id/submit
- * Submit answers for an exam session.
- * Public — requires a valid sessionToken in the request body.
+ * POST /api/exams/:id/submit (DEPRECATED)
+ * @deprecated Standardized on POST /api/v1/exam-session/:token/submit instead.
  */
 router.post('/:id/submit', validateBody(submitExamSchema), submitExam);
 
