@@ -167,24 +167,6 @@ export const aiGenerateSchema = z.object({
   type: QuestionTypeEnum.optional(),
 });
 
-// ── Proctoring Event Logging ──────────────────────────────────────────────────
-
-export const proctoringEventSchema = z.object({
-  sessionToken: z.string().uuid('sessionToken must be a valid UUID'),
-  eventType: z.enum([
-    'TAB_SWITCH',
-    'APP_SWITCH',
-    'MINIMIZE',
-    'MOBILE_BUTTON',
-    'AI_OVERLAY',
-    'DEVTOOLS',
-    'SCREEN_CAPTURE',
-    'KEYBOARD_SHORTCUT',
-  ]),
-  reason: z.string().max(200, 'Reason must be at most 200 characters').optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
-
 // ── Inferred types ────────────────────────────────────────────────────────────
 
 export type CreateExamInput = z.infer<typeof createExamSchema>;
@@ -192,4 +174,3 @@ export type SubmitExamInput = z.infer<typeof submitExamSchema>;
 export type QuestionInput = z.infer<typeof questionSchema>;
 export type SubmissionItemInput = z.infer<typeof submissionItemSchema>;
 export type AiGenerateInput = z.infer<typeof aiGenerateSchema>;
-export type ProctoringEventInput = z.infer<typeof proctoringEventSchema>;

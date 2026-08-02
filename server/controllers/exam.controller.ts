@@ -16,7 +16,7 @@ import {
   publishExamService,
   unpublishExamService,
 } from '../../packages/database/src/exam.service.js';
-import { gradeAllSubmissionsForExam } from '../../packages/database/src/grading.service.js';
+import { gradeAllSubmissionsForExam, GRADED_STATUSES } from '../../packages/database/src/grading.service.js';
 
 const prisma = new PrismaClient();
 
@@ -539,12 +539,6 @@ export const getSessionEvents = async (
 // Returns graded sessions (SUBMITTED / AUTO_SUBMITTED / TERMINATED) with
 // per-question answers plus the question paper, so the results dashboard can
 // render analytics, the distribution histogram and per-student answer sheets.
-
-const GRADED_STATUSES = [
-  SubmissionStatus.SUBMITTED,
-  SubmissionStatus.AUTO_SUBMITTED,
-  SubmissionStatus.TERMINATED,
-];
 
 export const getExamResults = async (
   req: Request,

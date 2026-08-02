@@ -5,6 +5,17 @@ const AI_GRADING_URL =
   process.env.AI_GRADING_URL ?? 'http://localhost:8001/api/v1/ai/grade-subjective';
 const AI_GRADING_TIMEOUT_MS = 10_000;
 
+/**
+ * Statuses whose sessions are eligible for grading and result dispatch.
+ * Shared by the grade-all controller, the result emails, and anything else
+ * that needs the canonical "this session can be graded" set.
+ */
+export const GRADED_STATUSES = [
+  SubmissionStatus.SUBMITTED,
+  SubmissionStatus.AUTO_SUBMITTED,
+  SubmissionStatus.TERMINATED,
+] as const;
+
 export interface GradingResult {
   sessionId: string;
   score: number;
@@ -316,11 +327,7 @@ export async function gradeAllSubmissionsForExam(
     where: {
       exam_id: examId,
       status: {
-        in: [
-          SubmissionStatus.SUBMITTED,
-          SubmissionStatus.AUTO_SUBMITTED,
-          SubmissionStatus.TERMINATED,
-        ],
+        in: [...GRADED_STATUSES],
       },
     },
     select: { id: true },

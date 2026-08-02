@@ -1,12 +1,13 @@
 import { Server, Socket } from 'socket.io';
-import { SubmissionStatus, ViolationType } from '@prisma/client';
+import jwt from 'jsonwebtoken';
+import { SubmissionStatus } from '@prisma/client';
 import prisma from '../../../../prisma/client.js';
+import { JWT_SECRET } from '../../../../server/config.js';
 
 export const MAX_WARNINGS = 3;
 
 export const PROCTORING_EVENTS = {
   JOIN_EXAM_ROOM: 'join_exam_room',
-  STUDENT_WARNING: 'student_warning',
   EXAM_TERMINATED: 'exam_terminated',
   STUDENT_STATUS_UPDATE: 'student_status_update',
   PROCTORING_ERROR: 'proctoring_error',
@@ -18,15 +19,6 @@ export const PROCTORING_EVENTS = {
 export interface JoinExamRoomPayload {
   sessionToken: string;
   examId: string;
-}
-
-export interface StudentWarningPayload {
-  sessionToken?: string;
-  sessionId?: string;
-  examId: string;
-  eventType?: ViolationType | string;
-  reason?: string;
-  metadata?: Record<string, unknown>;
 }
 
 export interface TeacherJoinRoomPayload {
@@ -62,129 +54,6 @@ export type JoinExamRoomResponse =
 
 export const roomName = (examId: string): string => `exam_${examId}`;
 export const sessionRoomName = (sessionId: string): string => `session_${sessionId}`;
-
-/**
- * Maps arbitrary event type strings to the Prisma ViolationType enum.
- * Camera-era event names (FACE_LOST, FULLSCREEN_EXIT, ...) are folded into the
- * closest modern ViolationType; anything unrecognized falls back to TAB_SWITCH.
- */
-function mapViolationType(typeStr?: string, reason?: string): ViolationType {
-  const lowerReason = reason?.toLowerCase() ?? '';
-  if (!typeStr) {
-    if (lowerReason.includes('face lost') || lowerReason.includes('no face')) {
-      return ViolationType.AI_OVERLAY;
-    }
-    if (lowerReason.includes('fullscreen')) {
-      return ViolationType.MINIMIZE;
-    }
-    if (lowerReason.includes('multiple faces')) {
-      return ViolationType.SCREEN_CAPTURE;
-    }
-    if (lowerReason.includes('phone')) {
-      return ViolationType.APP_SWITCH;
-    }
-    return ViolationType.TAB_SWITCH;
-  }
-
-  const upper = typeStr.toUpperCase();
-  if (upper === 'FACE_LOST' || upper === 'AI_OVERLAY') return ViolationType.AI_OVERLAY;
-  if (upper === 'FULLSCREEN_EXIT' || upper === 'MINIMIZE') return ViolationType.MINIMIZE;
-  if (upper === 'MULTIPLE_FACES') return ViolationType.SCREEN_CAPTURE;
-  if (upper === 'PHONE_DETECTED' || upper === 'APP_SWITCH') return ViolationType.APP_SWITCH;
-  if (upper === 'MOBILE_BUTTON') return ViolationType.MOBILE_BUTTON;
-  if (upper === 'DEVTOOLS') return ViolationType.DEVTOOLS;
-  if (upper === 'KEYBOARD_SHORTCUT') return ViolationType.KEYBOARD_SHORTCUT;
-  return ViolationType.TAB_SWITCH;
-}
-
-const registerStudentWarningHandler = (io: Server, socket: Socket): void => {
-  socket.on(PROCTORING_EVENTS.STUDENT_WARNING, async (payload: StudentWarningPayload) => {
-    try {
-      const { sessionToken, sessionId, examId, reason, eventType, metadata } = payload;
-
-      // Locate session by sessionToken or sessionId
-      const session = await prisma.examSession.findFirst({
-        where: {
-          OR: [
-            ...(sessionToken ? [{ session_token: sessionToken, exam_id: examId }] : []),
-            ...(sessionId ? [{ id: sessionId, exam_id: examId }] : []),
-          ],
-        },
-      });
-
-      if (!session) {
-        socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
-          message: 'Invalid session token or session ID for this exam',
-        });
-        return;
-      }
-
-      if (session.status !== SubmissionStatus.IN_PROGRESS) {
-        return;
-      }
-
-      // Step 2: Create Violation record in database via Prisma
-      const mappedType = mapViolationType(eventType as string, reason);
-      await prisma.violation.create({
-        data: {
-          session_id: session.id,
-          type: mappedType,
-          description: reason ?? 'Proctoring violation warning',
-          metadata: {
-            reason: reason ?? 'Proctoring violation warning',
-            ...(metadata ?? {}),
-          },
-        },
-      });
-
-      // Warning count = total violations recorded for the session
-      const warningsCount = await prisma.violation.count({
-        where: { session_id: session.id },
-      });
-
-      const terminated = warningsCount >= MAX_WARNINGS;
-
-      if (terminated) {
-        await prisma.examSession.update({
-          where: { id: session.id },
-          data: { status: SubmissionStatus.TERMINATED, submitted_at: new Date() },
-        });
-
-        io.to(sessionRoomName(session.id)).emit(PROCTORING_EVENTS.EXAM_TERMINATED, {
-          examId,
-          sessionId: session.id,
-          reason: reason ?? 'warnings_limit',
-          warnings: warningsCount,
-          warningsLimit: MAX_WARNINGS,
-        } satisfies ExamTerminatedPayload);
-      }
-
-      // Broadcast update to teacher live monitoring room
-      io.to(roomName(examId)).emit(
-        PROCTORING_EVENTS.STUDENT_STATUS_UPDATE,
-        {
-          examId,
-          sessionId: session.id,
-          studentName: session.student_name,
-          studentEmail: session.student_email ?? '',
-          enrollmentNo: session.enrollment_number ?? '',
-          status: terminated ? SubmissionStatus.TERMINATED : SubmissionStatus.IN_PROGRESS,
-          warnings: warningsCount,
-          warningsLimit: MAX_WARNINGS,
-          terminated,
-          submitted: false,
-          timestamp: new Date().toISOString(),
-          reason,
-        } satisfies StudentStatusUpdatePayload,
-      );
-    } catch (err) {
-      console.error('[proctoring] student_warning failed:', err);
-      socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
-        message: 'Failed to record proctoring warning',
-      });
-    }
-  });
-};
 
 const registerJoinExamRoomHandler = (socket: Socket): void => {
   socket.on(
@@ -229,10 +98,41 @@ const registerJoinExamRoomHandler = (socket: Socket): void => {
   );
 };
 
+/**
+ * Verifies the teacher JWT from the socket handshake (`auth.token`) and
+ * resolves the teacher's user id. Emits a PROCTORING_ERROR and returns null
+ * on any failure so the caller can abort.
+ */
+const resolveTeacherId = (socket: Socket): string | null => {
+  const token = socket.handshake.auth?.token as string | undefined;
+  if (!token) {
+    socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
+      message: 'Authentication required. Provide a teacher JWT via the socket handshake.',
+    });
+    return null;
+  }
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as { userId?: string };
+    if (!payload.userId) {
+      socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
+        message: 'Invalid teacher token',
+      });
+      return null;
+    }
+    return payload.userId;
+  } catch {
+    socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
+      message: 'Invalid or expired teacher token',
+    });
+    return null;
+  }
+};
+
 const registerTeacherRoomHandler = (socket: Socket): void => {
   socket.on(
     PROCTORING_EVENTS.TEACHER_JOIN_EXAM_ROOM,
-    (payload: TeacherJoinRoomPayload) => {
+    async (payload: TeacherJoinRoomPayload) => {
       const { examId } = payload;
       if (!examId) {
         socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
@@ -240,8 +140,41 @@ const registerTeacherRoomHandler = (socket: Socket): void => {
         });
         return;
       }
-      void socket.join(roomName(examId));
-      socket.emit(PROCTORING_EVENTS.EXAM_ROOM_JOINED, { examId });
+
+      // Only the exam's owner may join the live-monitoring room: students and
+      // third parties know the examId, so a bare id join would leak every
+      // student's status updates (name, email, enrollment no, warnings).
+      const teacherId = resolveTeacherId(socket);
+      if (!teacherId) return;
+
+      try {
+        const exam = await prisma.exam.findUnique({
+          where: { id: examId },
+          select: { created_by: true },
+        });
+
+        if (!exam) {
+          socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
+            message: 'Exam not found',
+          });
+          return;
+        }
+
+        if (exam.created_by !== teacherId) {
+          socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
+            message: 'You do not have access to this exam',
+          });
+          return;
+        }
+
+        await socket.join(roomName(examId));
+        socket.emit(PROCTORING_EVENTS.EXAM_ROOM_JOINED, { examId });
+      } catch (err) {
+        console.error('[proctoring] teacher_join_exam_room failed:', err);
+        socket.emit(PROCTORING_EVENTS.PROCTORING_ERROR, {
+          message: 'Failed to join exam room',
+        });
+      }
     },
   );
 
@@ -258,7 +191,6 @@ const registerTeacherRoomHandler = (socket: Socket): void => {
 export const registerProctoringHandlers = (io: Server): void => {
   io.on('connection', (socket: Socket) => {
     registerJoinExamRoomHandler(socket);
-    registerStudentWarningHandler(io, socket);
     registerTeacherRoomHandler(socket);
   });
 };

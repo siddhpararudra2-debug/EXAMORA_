@@ -12,14 +12,14 @@ export interface UseAIFaceDetectionOptions {
   /** Whether AI face detection is active. Default: true */
   enabled?: boolean;
   /** Optional video element reference if an external stream is provided */
-  externalVideoRef?: React.RefObject<HTMLVideoElement | null>;
+  externalVideoRef?: React.RefObject<HTMLVideoElement>;
 }
 
 export interface UseAIFaceDetectionReturn {
   faceCount: number;
   isModelLoading: boolean;
   modelError: string | null;
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  videoRef: React.RefObject<HTMLVideoElement>;
   stream: MediaStream | null;
 }
 

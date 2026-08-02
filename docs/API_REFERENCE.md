@@ -230,17 +230,16 @@ z.object({
 Response `200`: `{ "data": { "message", "submittedAt", "answersRecorded" } }`
 Errors: `400` invalid question/session not active/already submitted, `401` bad token.
 
-### POST `/api/exams/:id/proctoring-event` — Log a proctoring violation
+### POST `/api/v1/exam-session/:token/violation` — Report a proctoring violation
 
-Public, session-authenticated (token in body). Enforces the **3-warning rule**: each event increments `warningsCount`; at 3 the session is automatically `TERMINATED` (mirrors the Socket.io handler for REST-only clients).
+Public, authenticated by the anonymous Bearer session token. Enforces the **3-warning rule**: each violation increments `warningsCount`; at 3 the session is automatically `TERMINATED` and the teacher's live room is notified via Socket.io.
 
 Zod schema:
 
 ```ts
 z.object({
-  sessionToken: z.string().uuid(),
-  eventType: z.enum(["TAB_SWITCH","FACE_LOST","FULLSCREEN_EXIT","MULTIPLE_FACES","PHONE_DETECTED"]),
-  reason: z.string().max(200).optional(),
+  type: z.enum(["TAB_SWITCH","APP_SWITCH","MINIMIZE","MOBILE_BUTTON","AI_OVERLAY","DEVTOOLS","SCREEN_CAPTURE","KEYBOARD_SHORTCUT"]),
+  description: z.string().max(500).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
 ```
@@ -251,16 +250,15 @@ Response `201`:
 {
   "status": "success",
   "data": {
-    "event": { "id": "…", "eventType": "TAB_SWITCH", "timestamp": "…" },
+    "violation": { "id": "…", "type": "TAB_SWITCH", "occurred_at": "…" },
     "warningsCount": 2,
-    "warningsLimit": 3,
     "terminated": false,
-    "reason": "…"
+    "maxWarnings": 3
   }
 }
 ```
 
-Errors: `400` session not active / bad body, `401` invalid token.
+Errors: `400` invalid body, `401` bad token, `403` session already closed / exam inactive.
 
 ---
 
@@ -317,11 +315,10 @@ Endpoint: `/socket.io` — same origin as the API.
 | Event | Direction | Payload |
 | --- | --- | --- |
 | `join_exam_room` | Student → server | `{ sessionToken, examId }` (ack: `{ status }`) |
-| `student_warning` | Client → server | `{ sessionToken?, sessionId?, examId, eventType?, reason?, metadata? }` — persists a `ProctoringEvent`, increments warnings, **terminates at 3 warnings** |
 | `student_status_update` | Server → room | live warning/termination broadcast for teachers |
 | `exam_terminated` | Server → student | `{ examId, sessionId, reason, warnings, warningsLimit }` |
 | `proctoring_error` | Server → client | `{ message }` |
-| `teacher_join_exam_room` / `teacher_leave_exam_room` | Teacher | `{ examId }` |
+| `teacher_join_exam_room` / `teacher_leave_exam_room` | Teacher | `{ examId }` (join requires a teacher JWT in the handshake; only the exam owner is admitted) |
 | `exam_room_joined` | Server → teacher | `{ examId }` |
 
 ---

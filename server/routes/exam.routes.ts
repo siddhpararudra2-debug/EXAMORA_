@@ -18,12 +18,10 @@ import {
 } from '../controllers/exam.controller.js';
 import { generateAIQuestions } from '../../apps/backend/src/controllers/ai.controller.js';
 import { inviteBulkStudents } from '../../apps/backend/src/controllers/invite.controller.js';
-import { logProctoringEvent } from '../../apps/backend/src/controllers/proctoring.controller.js';
 import {
   createExamSchema,
   submitExamSchema,
   aiGenerateSchema,
-  proctoringEventSchema,
 } from '../validators/exam.js';
 
 const router = Router();
@@ -90,17 +88,6 @@ router.get('/:id/student-view', getStudentView);
  * @deprecated Standardized on POST /api/v1/exam-session/:token/submit instead.
  */
 router.post('/:id/submit', validateBody(submitExamSchema), submitExam);
-
-/**
- * POST /api/exams/:id/proctoring-event
- * Persist a proctoring violation and enforce the 3-warning termination rule.
- * Public — requires a valid sessionToken in the request body.
- */
-router.post(
-  '/:id/proctoring-event',
-  validateBody(proctoringEventSchema),
-  logProctoringEvent,
-);
 
 /**
  * POST /api/exams/:id/publish

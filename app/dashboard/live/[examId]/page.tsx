@@ -36,6 +36,7 @@ import {
   getSocket,
 } from "@/lib/socket";
 import { useToast } from "@/hooks/use-toast";
+import { getAuthToken } from "@/lib/auth-token";
 
 const DEFAULT_WARNINGS_LIMIT = 3;
 
@@ -264,7 +265,7 @@ export default function LiveProctoringDashboard() {
       if (canceled) return;
 
       try {
-        socket = getSocket();
+        socket = getSocket({ token: getAuthToken() ?? undefined });
         socketRef.current = socket;
 
         socket.on("connect", () => {

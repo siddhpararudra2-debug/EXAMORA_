@@ -1,8 +1,9 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { EmailLogStatus, SubmissionStatus } from '@prisma/client';
+import { EmailLogStatus } from '@prisma/client';
 import prisma from '../../../../prisma/client.js';
+import { GRADED_STATUSES } from '../../../../packages/database/src/grading.service.js';
 import { createTransporter } from './email.service.js';
 import {
   ClassAnalytics,
@@ -15,7 +16,6 @@ import {
 
 const MAX_EMAIL_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [1500, 6000];
-const GRADED_SESSION_STATUSES = [SubmissionStatus.SUBMITTED, SubmissionStatus.AUTO_SUBMITTED];
 
 export interface DispatchSummary {
   total: number;
@@ -122,7 +122,7 @@ export async function dispatchResults(examId: string): Promise<DispatchSummary> 
       creator: { select: { name: true, college_name: true } },
       questions: { select: { id: true, question_text: true, type: true, marks: true, negative_marks: true, order_index: true } },
       sessions: {
-        where: { status: { in: GRADED_SESSION_STATUSES } },
+        where: { status: { in: [...GRADED_STATUSES] } },
         include: { answers: true },
         orderBy: { student_name: 'asc' },
       },

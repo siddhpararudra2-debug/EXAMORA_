@@ -373,8 +373,9 @@ describe('POST /api/v1/exam-session/:token/violation', () => {
       .expect(201);
 
     await api
-      .post(`/api/exams/${examId}/proctoring-event`)
-      .send({ sessionToken: freshJoin.body.data.sessionToken, eventType: 'NINJA_MOVE' })
+      .post(`/api/v1/exam-session/${freshJoin.body.data.sessionToken}/violation`)
+      .set('Authorization', `Bearer ${freshJoin.body.data.sessionToken}`)
+      .send({ type: 'NINJA_MOVE' })
       .expect(400);
   });
 });

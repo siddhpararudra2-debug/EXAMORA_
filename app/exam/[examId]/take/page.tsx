@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useAIFaceDetection } from "@/components/proctoring/useAIFaceDetection";
 import {
   ExamTerminatedEvent,
   getSocket,
@@ -365,9 +366,20 @@ function TakeExamContent() {
     [answers, session]
   );
 
-  // -------- Tab-switch proctoring --------
+  // -------- Tab-switch + AI face proctoring --------
   const emitViolation = useCallback(
-    async (reason: string) => {
+    async (
+      reason: string,
+      type:
+        | "TAB_SWITCH"
+        | "APP_SWITCH"
+        | "MINIMIZE"
+        | "MOBILE_BUTTON"
+        | "AI_OVERLAY"
+        | "DEVTOOLS"
+        | "SCREEN_CAPTURE"
+        | "KEYBOARD_SHORTCUT" = "TAB_SWITCH"
+    ) => {
       if (!session?.sessionToken || !exam) return;
 
       try {
@@ -380,7 +392,7 @@ function TakeExamContent() {
               Authorization: `Bearer ${session.sessionToken}`,
             },
             body: JSON.stringify({
-              type: "TAB_SWITCH",
+              type,
               description: reason,
             }),
           }
@@ -398,7 +410,7 @@ function TakeExamContent() {
 
           toast({
             title: "Proctoring alert",
-            description: `Tab switch detected. Warning ${count}/${limit}.`,
+            description: `${reason}. Warning ${count}/${limit}.`,
             variant: isTerminated ? "destructive" : "default",
           });
 
@@ -425,6 +437,14 @@ function TakeExamContent() {
     return () =>
       document.removeEventListener("visibilitychange", onVisibility);
   }, [submitted, loading, exam, emitViolation]);
+
+  // -------- AI face detection (BlazeFace, client-side) --------
+  // Runs only while the exam is live; reports missing / multiple faces
+  // through the canonical /violation endpoint (AI_OVERLAY type).
+  const { videoRef } = useAIFaceDetection({
+    enabled: !!session && !submitted && !terminated,
+    onViolation: (reason) => void emitViolation(reason, "AI_OVERLAY"),
+  });
 
   // -------- Derived --------
   const totalQuestions = exam?.questions.length ?? 0;
@@ -623,6 +643,16 @@ function TakeExamContent() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
+      {/* Invisible webcam feed consumed by the BlazeFace proctoring hook.
+          The hook only starts the camera while the exam is live. */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="pointer-events-none fixed h-px w-px opacity-0"
+        aria-hidden="true"
+      />
       {/* Strict termination overlay */}
       {terminated && (
         <div

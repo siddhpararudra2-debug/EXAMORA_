@@ -319,13 +319,12 @@ examora/
 | POST | `/api/exams/:id/submit` | Session token | Submit answers |
 | POST | `/api/exams/:id/grade-all` | Teacher JWT | Grade all submitted sessions |
 | POST | `/api/exams/:id/publish` | Teacher JWT | Publish a DRAFT exam |
-| POST | `/api/exams/:id/proctoring-event` | Session token | Log a violation; enforces the 3-warning rule |
 | GET | `/api/exams/:examId/sessions/:sessionId/events` | Teacher JWT | Proctoring event timeline |
 | POST | `/api/exams/generate-questions` | Teacher JWT | AI question generation (Groq free tier + fallback) |
 | POST | `/api/exams/:examId/invite-bulk` | Teacher JWT | Bulk invite via CSV upload or JSON (email join links) |
 | DELETE | `/api/exams/:id` | Teacher JWT | Delete exam + cascade |
 
-Socket.io events: `join_exam_room`, `student_warning`, `student_status_update`, `exam_terminated`, `teacher_join_exam_room` / `teacher_leave_exam_room`.
+Socket.io events: `join_exam_room`, `student_status_update`, `exam_terminated`, `teacher_join_exam_room` (teacher JWT required; owner only) / `teacher_leave_exam_room`. Violations are reported via `POST /api/v1/exam-session/:token/violation`.
 
 ---
 
