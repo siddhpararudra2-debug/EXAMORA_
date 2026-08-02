@@ -2,8 +2,9 @@
 
 This guide provides step-by-step instructions for configuring free tier services for **Examora**:
 1. **Groq AI Question Generation** (100% Free AI API)
-2. **Gmail SMTP Email Invites** (100% Free Transporter via App Passwords)
-3. **Deploying Environment Variables** to Vercel & Render
+2. **AI Document Parsing Service** (FastAPI — PDF/DOCX/TXT → questions)
+3. **Gmail SMTP Email Invites** (100% Free Transporter via App Passwords)
+4. **Deploying Environment Variables** to Vercel & Render
 
 ---
 
@@ -22,6 +23,37 @@ Examora uses **Groq** (`llama-3.3-70b-versatile`) to generate exam questions in 
    ```
 
 > 💡 **Rate Limit Note**: Groq's free tier provides a generous rate limit. If you encounter `429 Too Many Requests`, Examora automatically activates its built-in fallback question generator so the teacher's workflow is never interrupted.
+
+---
+
+## 1.5 Running the AI Document Parsing Service (`services/ai-service`)
+
+The **"Upload paper"** feature in the exam wizard parses PDF/DOCX/TXT exam papers into editable question banks. It runs as a small FastAPI service (`services/ai-service/`) that talks to Groq using the **same** `GROQ_API_KEY` above.
+
+### Option A — Docker (recommended)
+
+```bash
+docker compose up -d ai-service        # dev stack (adds the FastAPI container on :5001)
+```
+
+### Option B — Local Python
+
+```bash
+npm run ai:service:install   # pip install -r services/ai-service/requirements.txt
+npm run ai:service           # uvicorn on http://localhost:5001
+```
+
+Verify: `GET http://localhost:5001/health` → `{ "status": "ok", "groq_configured": true }`
+
+The Express backend proxies uploads to this service via `AI_SERVICE_URL` (`.env`):
+
+```env
+AI_SERVICE_URL="http://localhost:5001"   # "http://ai-service:5001" inside Docker Compose
+```
+
+> **Scanned PDFs**: OCR (`pytesseract` + `pdf2image`) is a lazy fallback. Install the system binaries (`tesseract-ocr`, `poppler-utils`) — the Docker image already includes them. Without them, scanned PDFs return `no readable text`.
+
+> If the AI service is unreachable, the parse endpoint returns `503` with a clear message — the rest of the platform keeps working.
 
 ---
 

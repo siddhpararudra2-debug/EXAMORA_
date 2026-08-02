@@ -51,6 +51,7 @@ import { useToast } from "@/hooks/use-toast";
 import { authHeaders } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
 import { AIQuestionGenerator, GeneratedQuestion } from "@/components/exams/AIQuestionGenerator";
+import { DocumentUploader } from "@/components/exams/DocumentUploader";
 
 // ---------- Types & Schemas ----------
 
@@ -165,6 +166,7 @@ export default function CreateExamPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [submitting, setSubmitting] = useState(false);
   const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
+  const [isUploaderOpen, setIsUploaderOpen] = useState(false);
 
   const handleAIQuestionsAdded = (questions: GeneratedQuestion[]) => {
     questions.forEach((q) => {
@@ -175,7 +177,7 @@ export default function CreateExamPage() {
               questionText: q.questionText,
               marks: q.marks || 2,
               options: q.options && q.options.length >= 2 ? q.options : ["Option A", "Option B"],
-              correctAnswer: q.options?.[0] || "",
+              correctAnswer: q.correctAnswer || q.options?.[0] || "",
             }
           : q.type === "TRUE_FALSE"
           ? {
@@ -183,19 +185,19 @@ export default function CreateExamPage() {
               questionText: q.questionText,
               marks: q.marks || 1,
               options: ["True", "False"],
-              correctAnswer: "True",
+              correctAnswer: q.correctAnswer === "False" ? "False" : "True",
             }
           : {
               type: "SHORT_ANSWER",
               questionText: q.questionText,
               marks: q.marks || 5,
               options: [],
-              correctAnswer: "Model answer sample",
+              correctAnswer: q.correctAnswer || "Model answer sample",
             };
       append(formatted);
     });
     toast({
-      title: "AI Questions Added! ✨",
+      title: "Questions Added! ✨",
       description: `Added ${questions.length} question(s) to your exam draft.`,
     });
   };
@@ -969,7 +971,7 @@ export default function CreateExamPage() {
                 })}
 
                 {/* Add question CTA & AI Question Generator CTA */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <button
                     type="button"
                     onClick={() => addQuestion()}
@@ -993,6 +995,17 @@ export default function CreateExamPage() {
                       <Sparkles className="h-5 w-5" />
                     </span>
                     ✨ Generate with AI
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsUploaderOpen(true)}
+                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 px-6 py-5 text-base font-semibold text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-100/50 shadow-sm"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-200">
+                      <FileText className="h-5 w-5" />
+                    </span>
+                    📄 Upload paper
                   </button>
                 </div>
               </div>
@@ -1079,6 +1092,13 @@ export default function CreateExamPage() {
       <AIQuestionGenerator
         isOpen={isAIGeneratorOpen}
         onClose={() => setIsAIGeneratorOpen(false)}
+        onAddQuestions={handleAIQuestionsAdded}
+      />
+
+      {/* Document Upload / AI Parser Modal */}
+      <DocumentUploader
+        isOpen={isUploaderOpen}
+        onClose={() => setIsUploaderOpen(false)}
         onAddQuestions={handleAIQuestionsAdded}
       />
     </div>

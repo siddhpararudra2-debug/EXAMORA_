@@ -33,6 +33,22 @@ services:
       timeout: 5s
       retries: 5
 
+  ai-service:
+    build: ./services/ai-service
+    container_name: examora_ai_service
+    restart: always
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama3-70b-8192}
+      PORT: 5001
+    ports:
+      - "5001:5001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
     driver: local

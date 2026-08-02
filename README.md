@@ -35,10 +35,13 @@ Examora is a 100% free and open-source AI-proctored online exam platform. Teache
 | 🤖 **AI proctoring in the browser** | Blazeface (TensorFlow.js) head & gaze detection runs entirely client-side — no video leaves the student's device. |
 | ⚠️ **3-warning beep escalation** | The student hears a beep on every violation (looking away, no face, tab switch). After 3 warnings the session is **automatically terminated** and the teacher is alerted in real time. |
 | 🪟 **Tab-switch & visibility tracking** | `visibilitychange` detection flags every attempt to leave the exam window. |
+| 📵 **Mobile back-button guard** | On Android/iOS, hardware back presses and back-swipe gestures are intercepted (history sentinel + `popstate`) and logged as violations instead of leaving the exam. |
+| 🚫 **Screen-recording detection** | Detects virtual camera / screen-capture devices (OBS, ManyCam, …) and blocks screen-record hotkeys (Win+Alt+R, Cmd+Shift+3/4/5). |
 | ⚡ **Instant auto-grading** | MCQs and true/false are graded automatically on submit; short answers are graded with per-question scorecards. |
 | 📄 **PDF scorecards** | Per-student results export as clean, printable PDF scorecards. |
 | 📱 **QR access & join links** | Students join any exam anonymously with a shareable link or QR code — no account required. |
-| 🛡️ **Live proctoring monitor** | Teachers watch active sessions in real time over Socket.io: warnings, terminations, and per-student status. |
+| 📄 **AI paper parser** | Upload a PDF/DOCX/TXT exam paper — the FastAPI + Groq service extracts every question into an editable question bank (scanned PDFs are OCR'd). |
+| 🛡️ **Live proctoring monitor** | Teachers watch active sessions in real time over Socket.io: warnings, terminations, and per-student status. This is an event/status feed — video never leaves the student's device. |
 | 🎯 **Draft → publish workflow** | Exams stay `DRAFT` until the teacher publishes them; only `ACTIVE` exams can be joined. |
 | 📊 **Class-level analytics** | Results and stats across sessions, right in the teacher dashboard. |
 | 🧑‍🏫 **Teacher accounts** | JWT-based sign-up / sign-in with per-teacher exam isolation. |
@@ -55,6 +58,7 @@ Examora is a 100% free and open-source AI-proctored online exam platform. Teache
 | Database | PostgreSQL 15 via Prisma ORM |
 | Cache / pub-sub | Redis 7 (Socket.io adapter for multi-instance scaling) |
 | AI proctoring | TensorFlow.js + Blazeface (runs in the browser) |
+| AI paper parsing | FastAPI (Python) + Groq free tier — PDF/DOCX/TXT → structured questions |
 | Realtime | Socket.io rooms: one room per exam, teacher & student namespaces |
 | Testing | Playwright (E2E happy path), ESLint, `tsc --noEmit` |
 | Auth | Teacher JWT (API) + Auth.js / NextAuth v5 (session), anonymous student session tokens |
@@ -84,6 +88,10 @@ flowchart LR
         GRADE[Grading service]
     end
 
+    subgraph "AI Service - FastAPI (:5001)"
+        PARSER[Groq - document parsing & exam generation]
+    end
+
     subgraph Data
         DB[(PostgreSQL 15)]
         CACHE[(Redis 7 - adapter)]
@@ -94,6 +102,7 @@ flowchart LR
     P -->|violations: look-away, tab-switch, no-face| S
     S -->|beep x3 → termination| S
     APP --> REW --> API
+    API -->|/api/exams/parse-document proxy| PARSER
     T <-->|warnings, status, termination| IO
     S <-->|answers, warnings, status| IO
     IO -->|redis adapter| CACHE
@@ -102,7 +111,7 @@ flowchart LR
     DB -->|Prisma Client| API
 ```
 
-**Request flow:** the Next.js app serves the UI on `:3000` and proxies every `/api/*` call (including `/api/auth/login` and `/api/auth/register`) to the Express API on `:4000`. Socket.io connects directly for live proctoring events. The database layer (Prisma client + exam/grading services) is shared between the API and server code.
+**Request flow:** the Next.js app serves the UI on `:3000` and proxies every `/api/*` call (including `/api/auth/login` and `/api/auth/register`) to the Express API on `:4000`. Socket.io connects directly for live proctoring events. Document-parse uploads are proxied by Express to the FastAPI AI service on `:5001` (`AI_SERVICE_URL`). The database layer (Prisma client + exam/grading services) is shared between the API and server code.
 
 ---
 
@@ -151,7 +160,10 @@ npx prisma db push         # applies the schema (dev); or: npm run prisma:migrat
 ```bash
 npm run dev        # Next.js frontend on http://localhost:3000
 npm run server     # Express API + Socket.io on http://localhost:4000
+npm run ai:service # FastAPI AI service on http://localhost:5001 (document parsing)
 ```
+
+> The AI service is optional for core flows (AI question generation has a built-in fallback), but **required for the "Upload paper" parser**. Run it via `npm run ai:service` (after `npm run ai:service:install`) or `docker compose up -d ai-service`. Set `GROQ_API_KEY` in `.env` to enable it.
 
 Open [http://localhost:3000](http://localhost:3000), create a teacher account, publish your first exam, and share the join link with students.
 
@@ -216,7 +228,7 @@ export SMTP_USER=youraddress@gmail.com
 export SMTP_PASS=your-gmail-app-password
 export GROQ_API_KEY=your-groq-key
 
-# 2. Start the full stack (Postgres + Redis + backend + frontend + nginx)
+# 2. Start the full stack (Postgres + Redis + AI service + backend + frontend + nginx)
 docker compose -f docker-compose.prod.yml up -d --build
 
 # 3. Obtain a Let's Encrypt certificate (once)
@@ -296,8 +308,9 @@ examora/
 ├── apps/backend/src/           # Shared backend modules (proctoring handler, security)
 ├── packages/database/src/      # Prisma-backed services (exams, grading)
 ├── prisma/                     # Prisma schema
+├── services/ai-service/        # FastAPI AI service (document parsing, exam generation)
 ├── e2e/                        # Playwright end-to-end tests
-├── docker-compose.yml          # Dev: Postgres + Redis
+├── docker-compose.yml          # Dev: Postgres + Redis + AI service
 ├── docker-compose.prod.yml     # Prod: full stack + Nginx
 ├── playwright.config.ts        # E2E configuration
 └── next.config.mjs             # /api rewrites → Express on :4000
@@ -321,6 +334,7 @@ examora/
 | POST | `/api/exams/:id/publish` | Teacher JWT | Publish a DRAFT exam |
 | GET | `/api/exams/:examId/sessions/:sessionId/events` | Teacher JWT | Proctoring event timeline |
 | POST | `/api/exams/generate-questions` | Teacher JWT | AI question generation (Groq free tier + fallback) |
+| POST | `/api/exams/parse-document` | Teacher JWT | Parse a PDF/DOCX/TXT paper into questions (FastAPI AI service) |
 | POST | `/api/exams/:examId/invite-bulk` | Teacher JWT | Bulk invite via CSV upload or JSON (email join links) |
 | DELETE | `/api/exams/:id` | Teacher JWT | Delete exam + cascade |
 

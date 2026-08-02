@@ -17,6 +17,7 @@ import {
   getExamResults,
 } from '../controllers/exam.controller.js';
 import { generateAIQuestions } from '../../apps/backend/src/controllers/ai.controller.js';
+import { parseDocument } from '../../apps/backend/src/controllers/document.controller.js';
 import { inviteBulkStudents } from '../../apps/backend/src/controllers/invite.controller.js';
 import {
   createExamSchema,
@@ -50,6 +51,23 @@ router.post(
   requireTeacher,
   validateBody(aiGenerateSchema),
   generateAIQuestions,
+);
+
+/**
+ * POST /api/exams/parse-document
+ * Parse a PDF/DOCX/TXT exam paper into structured questions via the FastAPI
+ * AI service (services/ai-service). Proxied to AI_SERVICE_URL.
+ * Protected — valid teacher JWT required.
+ */
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+});
+router.post(
+  '/parse-document',
+  requireTeacher,
+  documentUpload.single('file'),
+  parseDocument,
 );
 
 /**

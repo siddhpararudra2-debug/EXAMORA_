@@ -438,6 +438,109 @@ function TakeExamContent() {
       document.removeEventListener("visibilitychange", onVisibility);
   }, [submitted, loading, exam, emitViolation]);
 
+  // -------- Mobile hardware back button + screen-recording detection --------
+  useEffect(() => {
+    if (submitted || terminated || loading || !exam) return;
+
+    const HISTORY_SENTINEL_KEY = "__examoraLockdownSentinel";
+    const pushHistorySentinel = () => {
+      try {
+        window.history.pushState(
+          { ...(window.history.state || {}), [HISTORY_SENTINEL_KEY]: true },
+          "",
+          window.location.href
+        );
+      } catch {
+        /* history locked by the browser — ignore */
+      }
+    };
+
+    const onPopState = () => {
+      void emitViolation(
+        "Hardware back button or back swipe detected",
+        "MOBILE_BUTTON"
+      );
+      pushHistorySentinel();
+    };
+
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        void emitViolation(
+          "Page restored from back-forward cache",
+          "MOBILE_BUTTON"
+        );
+        pushHistorySentinel();
+      }
+    };
+
+    // Screen-recording / virtual-capture device detection (best-effort heuristic).
+    const SCREEN_CAPTURE_KEYWORDS = [
+      "obs",
+      "virtual cam",
+      "screen capture",
+      "display capture",
+      "mirroring",
+      "manycam",
+      "elgato",
+      "splitcam",
+      "recorder",
+    ];
+    let lastScreenCaptureViolation = 0;
+    const scanCaptureDevices = async () => {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const captureDevice = devices.find(
+          (d) =>
+            d.kind === "videoinput" &&
+            SCREEN_CAPTURE_KEYWORDS.some((kw) =>
+              d.label.toLowerCase().includes(kw)
+            )
+        );
+        if (captureDevice) {
+          const now = Date.now();
+          if (now - lastScreenCaptureViolation > 60_000) {
+            lastScreenCaptureViolation = now;
+            void emitViolation(
+              `Screen-capture device detected: ${captureDevice.label}`,
+              "SCREEN_CAPTURE"
+            );
+          }
+        }
+      } catch {
+        /* device labels unavailable — ignore */
+      }
+    };
+
+    const onDeviceChange = () => void scanCaptureDevices();
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = e.key ? e.key.toLowerCase() : "";
+      const isScreenRecordHotkey =
+        (e.metaKey && e.altKey && key === "r") ||
+        (e.metaKey && e.shiftKey && (key === "3" || key === "4" || key === "5"));
+      if (isScreenRecordHotkey) {
+        e.preventDefault();
+        e.stopPropagation();
+        void emitViolation("Screen-record hotkey blocked", "SCREEN_CAPTURE");
+      }
+    };
+
+    pushHistorySentinel();
+    window.addEventListener("popstate", onPopState);
+    window.addEventListener("pageshow", onPageShow);
+    navigator.mediaDevices?.addEventListener?.("devicechange", onDeviceChange);
+    window.addEventListener("keydown", onKeyDown, true);
+    const captureScan = setInterval(() => void scanCaptureDevices(), 5000);
+
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("pageshow", onPageShow);
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
+      window.removeEventListener("keydown", onKeyDown, true);
+      clearInterval(captureScan);
+    };
+  }, [submitted, terminated, loading, exam, emitViolation]);
+
   // -------- AI face detection (BlazeFace, client-side) --------
   // Runs only while the exam is live; reports missing / multiple faces
   // through the canonical /violation endpoint (AI_OVERLAY type).

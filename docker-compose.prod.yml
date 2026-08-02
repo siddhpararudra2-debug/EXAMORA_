@@ -11,7 +11,7 @@ version: '3.8'
 #   POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
 #   JWT_SECRET / SESSION_SECRET / AUTH_SECRET
 #   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM
-#   GROQ_API_KEY        (optional — enables AI question generation)
+#   GROQ_API_KEY        (optional — enables AI question generation & document parsing)
 # ──────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -71,6 +71,7 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      AI_SERVICE_URL: http://ai-service:5001
     volumes:
       # Persistent storage for any uploaded files (e.g. CSV invites, exports)
       - uploads_prod_data:/app/uploads
@@ -81,6 +82,25 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - examora_net
+
+  # 3b. AI Service — document parsing & exam generation (FastAPI + Groq free tier)
+  ai-service:
+    build:
+      context: ./services/ai-service
+    container_name: examora_ai_service_prod
+    restart: unless-stopped
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama3-70b-8192}
+      PORT: 5001
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
       interval: 30s
       timeout: 5s
       retries: 3

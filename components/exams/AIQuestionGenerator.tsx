@@ -25,6 +25,8 @@ export interface GeneratedQuestion {
     | "FILL_BLANK";
   questionText: string;
   options?: string[];
+  /** Optional correct answer — used when AI providers return one (e.g. parsed documents). */
+  correctAnswer?: string;
   marks: number;
 }
 

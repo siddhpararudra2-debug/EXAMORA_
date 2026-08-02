@@ -286,6 +286,36 @@ Uses Groq `llama-3.3-70b-versatile` when `GROQ_API_KEY` is set; otherwise (or on
 }
 ```
 
+### POST `/api/exams/parse-document` — Parse a paper into questions (FastAPI AI service)
+
+Auth: Teacher JWT. Multipart form-data, field name `file` (PDF / DOCX / TXT / MD, max 10 MB). The Express backend proxies the upload to the FastAPI AI service (`AI_SERVICE_URL`, default `http://localhost:5001`), which extracts questions with Groq (scanned PDFs are OCR'd).
+
+Response `200`:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "topic": "…",
+    "subtopics": [],
+    "difficulty": "mixed",
+    "blooms_level": null,
+    "questions": [
+      { "id": "q1", "question_text": "…", "type": "mcq_single", "options": ["A","B","C","D"], "correct_answer": "B", "explanation": "…", "marks": 2, "difficulty": "medium", "blooms_level": "understand", "confidence": 0.9 }
+    ],
+    "generation_metadata": { "model": "llama3-70b-8192", "source": "parse_document", "document": "paper.pdf" }
+  }
+}
+```
+
+Errors: `400` no file, `413` over 10 MB, `503` AI service not running, `415` unsupported extension, `422` no readable text / no questions found.
+
+```bash
+curl -X POST http://localhost:4000/api/exams/parse-document \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@paper.pdf"
+```
+
 ### POST `/api/exams/:examId/invite-bulk` — Bulk invite students by CSV or JSON
 
 Auth: Teacher JWT (owner only).

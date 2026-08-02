@@ -12,7 +12,8 @@ export type ViolationType =
   | "devtools"
   | "blocked_input"
   | "fullscreen_exit"
-  | "mobile_back";
+  | "mobile_back"
+  | "screen_recording";
 
 /**
  * Options configuration for the Exam Lockdown Hook
@@ -69,6 +70,49 @@ const DEFAULT_MAX_WARNINGS = 3;
 const VIOLATION_COOLDOWN_MS = 600;
 const DEVTOOLS_CHECK_INTERVAL_MS = 1000;
 const DEVTOOLS_SIZE_DELTA_PX = 200;
+const SCREEN_CAPTURE_SCAN_INTERVAL_MS = 5000;
+const SCREEN_CAPTURE_VIOLATION_COOLDOWN_MS = 60_000;
+const HISTORY_SENTINEL_KEY = "__examoraLockdownSentinel";
+
+/** Maps client-side violation types to the server's violation enum
+ *  (server/validators/student-session.ts). Unknown types fall back to APP_SWITCH. */
+const SERVER_VIOLATION_TYPES: Record<string, string> = {
+  tab_switch: "TAB_SWITCH",
+  blur: "APP_SWITCH",
+  ai_overlay: "AI_OVERLAY",
+  devtools: "DEVTOOLS",
+  blocked_input: "KEYBOARD_SHORTCUT",
+  fullscreen_exit: "MINIMIZE",
+  mobile_back: "MOBILE_BUTTON",
+  screen_recording: "SCREEN_CAPTURE",
+};
+
+const mapViolationType = (violationType: string): string => {
+  const mapped = SERVER_VIOLATION_TYPES[violationType.toLowerCase()];
+  if (mapped) return mapped;
+  const upper = violationType.toUpperCase();
+  return Object.values(SERVER_VIOLATION_TYPES).includes(upper)
+    ? upper
+    : "APP_SWITCH";
+};
+
+/** Label heuristics for screen-recording / virtual capture devices */
+const SCREEN_CAPTURE_DEVICE_KEYWORDS = [
+  "obs",
+  "virtual cam",
+  "screen capture",
+  "display capture",
+  "mirroring",
+  "manycam",
+  "elgato",
+  "splitcam",
+  "recorder",
+];
+
+const isScreenCaptureDevice = (label: string): boolean => {
+  const lower = label.toLowerCase();
+  return SCREEN_CAPTURE_DEVICE_KEYWORDS.some((kw) => lower.includes(kw));
+};
 
 /** Keywords used to detect injected AI assistant and floating overlay widgets */
 const AI_OVERLAY_KEYWORDS = [
@@ -305,6 +349,7 @@ export function useExamLockdown(
   const isTerminatedRef = useRef<boolean>(false);
   const lastViolationTimeRef = useRef<number>(0);
   const hasBeenFullscreenRef = useRef<boolean>(false);
+  const lastScreenCaptureViolationRef = useRef<number>(0);
 
   const tokenRef = useRef(token);
   const maxWarningsRef = useRef(maxWarnings);
@@ -380,7 +425,7 @@ export function useExamLockdown(
           violationEndpointRef.current || `/api/v1/exam-session/${sessionToken}/violation`;
 
         const payload = {
-          type: violationType.toUpperCase().includes("TAB") ? "TAB_SWITCH" : violationType.toUpperCase(),
+          type: mapViolationType(violationType),
           description: details,
           metadata: {
             warningsCount: currentWarnings,
@@ -571,6 +616,74 @@ export function useExamLockdown(
 
     const devToolsInterval = setInterval(checkDevTools, DEVTOOLS_CHECK_INTERVAL_MS);
 
+    /* ---------------- Requirement C04: Mobile hardware back button ---------------- */
+    // Install a history sentinel so the Android/iOS back button / back-swipe
+    // gesture fires `popstate` (which we intercept) instead of leaving the page.
+    // The existing history.state is merged so Next.js router bookkeeping survives.
+    const pushHistorySentinel = () => {
+      try {
+        window.history.pushState(
+          { ...(window.history.state || {}), [HISTORY_SENTINEL_KEY]: true },
+          "",
+          window.location.href
+        );
+      } catch (err) {
+        console.warn("[ExamLockdown] Could not install back-button sentinel:", err);
+      }
+    };
+
+    const handlePopState = () => {
+      if (isTerminatedRef.current) return;
+      triggerViolation("mobile_back", "Hardware back button or back swipe detected");
+      pushHistorySentinel();
+    };
+
+    // Restored from the back/forward cache — happens after an in-page navigation
+    // (e.g. an app that opened the browser then navigated back into the exam).
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        triggerViolation("mobile_back", "Page restored from back-forward cache");
+        pushHistorySentinel();
+      }
+    };
+
+    pushHistorySentinel();
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("pageshow", handlePageShow);
+
+    /* ---------------- Requirement C09: Screen-recording / capture detection ---------------- */
+    const reportScreenCapture = (deviceLabel: string) => {
+      const now = Date.now();
+      if (now - lastScreenCaptureViolationRef.current < SCREEN_CAPTURE_VIOLATION_COOLDOWN_MS) {
+        return;
+      }
+      lastScreenCaptureViolationRef.current = now;
+      triggerViolation(
+        "screen_recording",
+        `Screen-capture device detected: ${deviceLabel}`
+      );
+    };
+
+    const scanScreenCaptureDevices = async () => {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return;
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const captureDevice = devices.find(
+          (d) => d.kind === "videoinput" && isScreenCaptureDevice(d.label)
+        );
+        if (captureDevice) reportScreenCapture(captureDevice.label);
+      } catch (err) {
+        console.warn("[ExamLockdown] Screen-capture device scan failed:", err);
+      }
+    };
+
+    const handleDeviceChange = () => void scanScreenCaptureDevices();
+    navigator.mediaDevices?.addEventListener?.("devicechange", handleDeviceChange);
+    const screenCaptureInterval = setInterval(
+      () => void scanScreenCaptureDevices(),
+      SCREEN_CAPTURE_SCAN_INTERVAL_MS
+    );
+
     /* ---------------- REQUIREMENT 5: INPUT BLOCKING & KEYBOARD SHORTCUTS ---------------- */
     const handleBlockedInputEvent = (e: Event) => {
       e.preventDefault();
@@ -600,6 +713,9 @@ export function useExamLockdown(
         isModifier && e.shiftKey && (key === "i" || key === "j" || keyCode === 73 || keyCode === 74);
       const isViewSource = isModifier && (key === "u" || keyCode === 85);
       const isPrintScreen = key === "printscreen" || keyCode === 44;
+      const isScreenRecordHotkey =
+        (e.metaKey && e.altKey && key === "r") || // Win+Alt+R — Xbox Game Bar record
+        (e.metaKey && e.shiftKey && (key === "3" || key === "4" || key === "5")); // Cmd+Shift+3/4/5 — macOS capture
 
       if (
         isCtrlC ||
@@ -610,7 +726,8 @@ export function useExamLockdown(
         isAltTab ||
         isDevToolsCombo ||
         isViewSource ||
-        isPrintScreen
+        isPrintScreen ||
+        isScreenRecordHotkey
       ) {
         e.preventDefault();
         e.stopPropagation();
@@ -625,8 +742,13 @@ export function useExamLockdown(
         else if (isDevToolsCombo) shortcutName = "Ctrl+Shift+I/J (DevTools)";
         else if (isViewSource) shortcutName = "Ctrl+U (View Source)";
         else if (isPrintScreen) shortcutName = "PrintScreen";
+        else if (isScreenRecordHotkey) shortcutName = "Screen-record hotkey";
 
-        triggerViolation("blocked_input", shortcutName);
+        if (isScreenRecordHotkey) {
+          triggerViolation("screen_recording", shortcutName);
+        } else {
+          triggerViolation("blocked_input", shortcutName);
+        }
       }
     };
 
@@ -661,8 +783,13 @@ export function useExamLockdown(
       window.removeEventListener("contextmenu", handleBlockedInputEvent, true);
       window.removeEventListener("keydown", handleKeyDown, true);
 
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("pageshow", handlePageShow);
+      navigator.mediaDevices?.removeEventListener?.("devicechange", handleDeviceChange);
+
       observer.disconnect();
       clearInterval(devToolsInterval);
+      clearInterval(screenCaptureInterval);
     };
   }, [enabled, enableFullscreen, triggerViolation]);
 
