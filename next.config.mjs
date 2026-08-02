@@ -1,4 +1,5 @@
 import withPWAInit from "next-pwa";
+import defaultCache from "next-pwa/cache.js";
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -8,6 +9,14 @@ const withPWA = withPWAInit({
   fallbacks: {
     document: "/offline",
   },
+  runtimeCaching: [
+    {
+      urlPattern: /^https?:\/\/.*\/api\/.*/i,
+      handler: "NetworkOnly",
+      options: {},
+    },
+    ...defaultCache,
+  ],
 });
 
 /** @type {import('next').NextConfig} */
@@ -23,14 +32,19 @@ const nextConfig = {
     ],
   },
   async rewrites() {
+    const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000';
     return [
       {
-        source: '/api/auth/:path(login|register)',
-        destination: 'http://localhost:4000/api/auth/:path*',
+        source: '/api/auth/:path*',
+        destination: `${BACKEND_URL}/api/auth/:path*`,
       },
       {
-        source: '/api/:path((?!auth).*)',
-        destination: 'http://localhost:4000/api/:path*',
+        source: '/api/:path*',
+        destination: `${BACKEND_URL}/api/:path*`,
+      },
+      {
+        source: '/socket.io/:path*',
+        destination: `${BACKEND_URL}/socket.io/:path*`,
       },
     ];
   },

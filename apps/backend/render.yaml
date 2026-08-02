@@ -1,11 +1,14 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Examora Backend — Render.com deployment (free tier friendly)
+# Examora Backend — Render.com deployment (backend service only)
+#
+# Note: This file deploys the Express backend service on Render only.
+# The Next.js frontend is deployed separately on Vercel.
 #
 # Steps:
 #   1. Create a free PostgreSQL + Redis (or Upstash) instance on Render.
 #   2. In the dashboard, create a new "Web Service" pointing at this repo:
 #        Root Directory: (empty — monorepo root)
-#        Build Command:  npm ci && npx prisma generate && npm run server:build
+#        Build Command:  npm ci && npx prisma generate && npx prisma migrate deploy && npm run server:build
 #        Start Command:  npm run server:start
 #      (or use "Blueprint" and reference this file directly)
 #   3. Provide the env vars below (DATABASE_URL, REDIS_URL, JWT_SECRET, ...).
@@ -18,7 +21,7 @@ services:
     region: oregon
     plan: free
     rootDir: .
-    buildCommand: npm ci && npx prisma generate && npm run server:build
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run server:build
     startCommand: npm run server:start
     healthCheckPath: /health
     autoDeploy: true
@@ -38,7 +41,7 @@ services:
       - key: AUTH_SECRET
         generateValue: true
       - key: FRONTEND_URL
-        value: https://examora.onrender.com   # ← replace with your frontend URL
+        value: https://examora.vercel.app     # ← replace with your Vercel frontend URL
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
@@ -51,24 +54,3 @@ services:
         sync: false            # e.g. "Examora" <noreply@example.com>
       - key: GROQ_API_KEY
         sync: false            # optional — enables free-tier AI question generation
-
-  # Optional: deploy the Next.js frontend as a second service
-  - type: web
-    name: examora-frontend
-    env: node
-    region: oregon
-    plan: free
-    rootDir: .
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
-    healthCheckPath: /
-    autoDeploy: true
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 3000
-      - key: NEXT_PUBLIC_SOCKET_URL
-        value: https://examora-backend.onrender.com
-      - key: NEXT_PUBLIC_API_URL
-        value: https://examora-backend.onrender.com/api

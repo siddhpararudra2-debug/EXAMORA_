@@ -13,7 +13,7 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: npm ci && npx prisma generate && npm run server:build
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run server:build
     startCommand: npm run server:start
     healthCheckPath: /health
     autoDeploy: true
