@@ -13,6 +13,8 @@ import {
   createExamWithQuestions,
   getExamForStudent,
   recordSubmissions,
+  publishExamService,
+  unpublishExamService,
 } from '../../packages/database/src/exam.service.js';
 import { gradeAllSubmissionsForExam } from '../../packages/database/src/grading.service.js';
 
@@ -363,7 +365,8 @@ export const getExamStatus = async (
 
 // ── POST /api/exams/:id/publish ───────────────────────────────────────────────
 // Protected: requires valid teacher JWT (applied at the router level). Owner only.
-// Transitions a DRAFT exam to ACTIVE so students can join it.
+// Verifies DRAFT status and at least one question, generates unique access_uuid
+// and QR code data URL, updates status to PUBLISHED inside a Prisma transaction.
 
 export const publishExam = async (
   req: Request,
@@ -374,48 +377,73 @@ export const publishExam = async (
     const { teacher } = req as AuthenticatedRequest;
     const { id: examId } = req.params;
 
-    const exam = await prisma.exam.findUnique({
-      where: { id: examId },
-      select: { id: true, title: true, status: true, created_by: true },
-    });
+    const result = await publishExamService(examId, teacher.userId);
 
-    if (!exam) {
+    res.json({
+      status: 'success',
+      data: {
+        access_uuid: result.access_uuid,
+        shareable_link: result.shareable_link,
+        qr_code_url: result.qr_code_url,
+        exam: result.exam,
+      },
+    });
+  } catch (err: any) {
+    if (err.message === 'EXAM_NOT_FOUND') {
       res.status(404).json({ status: 'error', message: 'Exam not found' });
       return;
     }
-
-    if (exam.created_by !== teacher.userId) {
-      res.status(403).json({
-        status: 'error',
-        message: 'You do not have access to this exam',
-      });
+    if (err.message === 'UNAUTHORIZED') {
+      res.status(403).json({ status: 'error', message: 'You do not have access to this exam' });
       return;
     }
-
-    if (exam.status === 'COMPLETED') {
-      res.status(409).json({
-        status: 'error',
-        message: 'Completed exams cannot be republished',
-      });
+    if (err.message?.startsWith('INVALID_STATUS')) {
+      res.status(400).json({ status: 'error', message: err.message.replace('INVALID_STATUS: ', '') });
       return;
     }
-
-    if (exam.status === 'ACTIVE') {
-      res.json({
-        status: 'success',
-        data: { exam: { id: exam.id, status: exam.status } },
-      });
+    if (err.message?.startsWith('NO_QUESTIONS')) {
+      res.status(400).json({ status: 'error', message: err.message.replace('NO_QUESTIONS: ', '') });
       return;
     }
+    next(err);
+  }
+};
 
-    const published = await prisma.exam.update({
-      where: { id: examId },
-      data: { status: 'ACTIVE' },
-      select: { id: true, status: true },
+// ── POST /api/exams/:id/unpublish ─────────────────────────────────────────────
+// Protected: requires valid teacher JWT (applied at the router level). Owner only.
+// Reverts an active or published exam back to DRAFT status and resets access_uuid.
+
+export const unpublishExam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const updatedExam = await unpublishExamService(examId, teacher.userId);
+
+    res.json({
+      status: 'success',
+      data: {
+        message: 'Exam unpublished successfully and reset to draft status',
+        exam: updatedExam,
+      },
     });
-
-    res.json({ status: 'success', data: { exam: published } });
-  } catch (err) {
+  } catch (err: any) {
+    if (err.message === 'EXAM_NOT_FOUND') {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+    if (err.message === 'UNAUTHORIZED') {
+      res.status(403).json({ status: 'error', message: 'You do not have access to this exam' });
+      return;
+    }
+    if (err.message?.startsWith('INVALID_STATUS')) {
+      res.status(400).json({ status: 'error', message: err.message.replace('INVALID_STATUS: ', '') });
+      return;
+    }
     next(err);
   }
 };

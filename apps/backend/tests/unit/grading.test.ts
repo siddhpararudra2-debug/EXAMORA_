@@ -13,6 +13,7 @@ jest.mock('../../../../prisma/client.js', () => ({
     },
     answer: {
       findMany: jest.fn(),
+      updateMany: jest.fn(),
     },
     question: {
       findMany: jest.fn(),

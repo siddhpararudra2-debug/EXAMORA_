@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Socket } from "socket.io-client";
 import {
@@ -133,7 +133,7 @@ function mockSessionInit(examId: string): SessionInit {
 
 const TERMINATED_REDIRECT_DELAY_MS = 3_000;
 
-export default function TakeExamPage() {
+function TakeExamContent() {
   const params = useParams<{ examId: string }>();
   const search = useSearchParams();
   const router = useRouter();
@@ -1047,5 +1047,13 @@ export default function TakeExamPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function TakeExamPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-slate-900 text-slate-400">Loading exam...</div>}>
+      <TakeExamContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import prisma from '../../../prisma/client.js';
-import { createApp } from '../../server/app.js';
+import { createApp } from '../../../server/app.js';
 
 // ── Mock external services (hoisted by Jest) ─────────────────────────────────
 

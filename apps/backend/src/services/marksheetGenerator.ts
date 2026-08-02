@@ -1,4 +1,5 @@
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, degrees, rgb } from 'pdf-lib';
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, degrees, rgb } from 'pdf-lib';
+import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 
 export interface QuestionResultData {
   id: string;
@@ -39,13 +40,95 @@ export interface ClassAnalytics {
   min: number | null;
   average: number | null;
   totalStudents: number;
+  /** Raw percentage scores of every graded student — feeds the histogram. */
+  scores: number[];
 }
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
 const MARGIN = 48;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
-const FOOTER_TOP = 96;
+const FOOTER_TOP = 175;
+
+// ── Score distribution histogram (chartjs-node-canvas) ─────────────────────────
+// A single reusable renderer; node-canvas instances are cheap enough to build
+// per call, and the Chart.js config stays inline so no global state leaks.
+const HISTOGRAM_WIDTH = 500;
+const HISTOGRAM_HEIGHT = 200;
+const HISTOGRAM_BUCKETS = 10;
+
+const chartRenderer = new ChartJSNodeCanvas({
+  width: HISTOGRAM_WIDTH,
+  height: HISTOGRAM_HEIGHT,
+  backgroundColour: 'rgba(0, 0, 0, 0)',
+});
+
+/**
+ * Buckets percentage scores into 10-point bins ("0-10" ... "90-100") and
+ * renders a bar chart of the distribution to a PNG buffer.
+ */
+export async function renderScoreDistributionChart(
+  scores: number[],
+): Promise<Buffer> {
+  const labels: string[] = [];
+  const counts: number[] = [];
+
+  for (let i = 0; i < HISTOGRAM_BUCKETS; i += 1) {
+    labels.push(`${i * 10}-${i * 10 + 10}`);
+    counts.push(0);
+  }
+
+  for (const score of scores) {
+    const value = Number.isFinite(score) ? score : 0;
+    const bucket = Math.min(HISTOGRAM_BUCKETS - 1, Math.max(0, Math.floor(value / 10)));
+    counts[bucket] += 1;
+  }
+
+  return chartRenderer.renderToBuffer({
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Students',
+          data: counts,
+          backgroundColor: 'rgba(79, 70, 229, 0.75)',
+          borderColor: 'rgba(67, 56, 202, 1)',
+          borderWidth: 1,
+          borderRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Score Distribution',
+          color: '#312e81',
+          font: { family: 'sans-serif', size: 14, weight: 'bold' },
+        },
+        tooltip: { enabled: false },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Percentage (%)', color: '#64748b' },
+          ticks: { color: '#64748b', maxRotation: 0, autoSkip: false, font: { size: 9 } },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Students', color: '#64748b' },
+          ticks: { color: '#64748b', precision: 0, font: { size: 9 } },
+          grid: { color: 'rgba(148, 163, 184, 0.25)' },
+        },
+      },
+    },
+  });
+}
 
 const COLOR_BRAND = rgb(0.31, 0.27, 0.9);
 const COLOR_BRAND_DARK = rgb(0.21, 0.17, 0.6);
@@ -294,31 +377,45 @@ function drawQuestionTable(ctx: DrawContext, questionResults: QuestionResultData
   ctx.y -= 12;
 }
 
-function drawFooter(ctx: DrawContext, classAnalytics: ClassAnalytics): void {  const { page, bold, font } = ctx;
-  const height = 46;
+function drawFooter(
+  ctx: DrawContext,
+  classAnalytics: ClassAnalytics,
+  histogram: PDFImage | null,
+): void {
+  const { page, bold, font } = ctx;
+
   page.drawRectangle({
     x: MARGIN,
-    y: ctx.y - height,
+    y: ctx.y - FOOTER_TOP + 24,
     width: CONTENT_WIDTH,
-    height,
-    color: rgb(0.94, 0.93, 0.99),
-    borderColor: COLOR_BRAND,
+    height: FOOTER_TOP - 24,
+    color: rgb(0.96, 0.96, 0.99),
+    borderColor: COLOR_BORDER,
     borderWidth: 1,
   });
-  page.drawText('CLASS ANALYTICS', { x: MARGIN + 10, y: ctx.y - 14, size: 8.5, font: bold, color: COLOR_BRAND_DARK });
 
-  const stats: Array<[string, string]> = [
-    ['Max', formatNumber(classAnalytics.max)],
-    ['Min', formatNumber(classAnalytics.min)],
-    ['Average', formatNumber(classAnalytics.average)],
-    ['Students', String(classAnalytics.totalStudents)],
-  ];
-  const colWidth = CONTENT_WIDTH / stats.length;
-  stats.forEach(([label, value], i) => {
-    const x = MARGIN + i * colWidth;
-    page.drawText(label.toUpperCase(), { x: x + 8, y: ctx.y - height + 8, size: 7.5, font: bold, color: COLOR_MUTED });
-    page.drawText(`${value}%`, { x: x + 8, y: ctx.y - height + 20, size: 12, font: bold, color: COLOR_TEXT });
-  });
+  page.drawText('CLASS ANALYTICS — SCORE DISTRIBUTION', { x: MARGIN + 10, y: ctx.y - 14, size: 8.5, font: bold, color: COLOR_BRAND_DARK });
+
+  const statsLine =
+    `Class Max: ${formatNumber(classAnalytics.max)}%   Min: ${formatNumber(classAnalytics.min)}%   Avg: ${formatNumber(classAnalytics.average)}%`;
+
+  if (histogram) {
+    const imageWidth = 290;
+    const imageHeight = (histogram.height / histogram.width) * imageWidth;
+    page.drawImage(histogram, {
+      x: MARGIN + 10,
+      y: ctx.y - FOOTER_TOP + 30,
+      width: imageWidth,
+      height: imageHeight,
+    });
+
+    const statsX = MARGIN + 10 + imageWidth + 12;
+    page.drawText(statsLine, { x: statsX, y: ctx.y - FOOTER_TOP + 96, size: 11, font: bold, color: COLOR_TEXT });
+    page.drawText(`Students: ${classAnalytics.totalStudents}`, { x: statsX, y: ctx.y - FOOTER_TOP + 78, size: 10, font, color: COLOR_MUTED });
+  } else {
+    page.drawText('No class data available for this exam.', { x: MARGIN + 12, y: ctx.y - 44, size: 10, font, color: COLOR_MUTED });
+    page.drawText(statsLine, { x: MARGIN + 12, y: ctx.y - 62, size: 11, font: bold, color: COLOR_TEXT });
+  }
 
   page.drawText('EXAMORA - Verified Result', { x: PAGE_WIDTH - MARGIN - 110, y: 30, size: 8, font: bold, color: COLOR_MUTED });
   page.drawText(`Generated ${new Date().toLocaleString()} • ${ctx.page.getWidth().toFixed(0)}x${ctx.page.getHeight().toFixed(0)}`, { x: MARGIN, y: 30, size: 8, font, color: COLOR_MUTED });
@@ -360,7 +457,18 @@ export async function generateMarksheet(
   drawBrandHeader(ctx, examData);
   drawStudentBlock(ctx, sessionData);
   drawQuestionTable(ctx, sessionData.questionResults);
-  drawFooter(ctx, classAnalytics);
+
+  let histogram: PDFImage | null = null;
+  try {
+    const histogramPng = await renderScoreDistributionChart(classAnalytics.scores);
+    histogram = await doc.embedPng(histogramPng);
+  } catch (err) {
+    // The marksheet must not fail because the chart renderer is unavailable
+    // (missing canvas font, etc.) — degrade to the text-only footer.
+    console.error('[Marksheet] Failed to render score distribution chart:', err);
+  }
+
+  drawFooter(ctx, classAnalytics, histogram);
 
   const bytes = await doc.save();
   return Buffer.from(bytes);

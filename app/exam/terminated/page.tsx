@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -66,7 +67,7 @@ function getReasonInfo(reason: Reason) {
   } as const;
 }
 
-export default function TerminatedPage() {
+function TerminatedContent() {
   const router = useRouter();
   const params = useSearchParams();
   const reason = (params.get("reason") ?? "warnings") as Reason;
@@ -256,5 +257,13 @@ export default function TerminatedPage() {
         </CardContent>
       </Card>
     </main>
+  );
+}
+
+export default function TerminatedPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Loading...</div>}>
+      <TerminatedContent />
+    </Suspense>
   );
 }

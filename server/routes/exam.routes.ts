@@ -12,6 +12,7 @@ import {
   gradeAllSessions,
   deleteExam,
   publishExam,
+  unpublishExam,
   getSessionEvents,
   getExamResults,
 } from '../controllers/exam.controller.js';
@@ -108,6 +109,13 @@ router.post(
  * Protected — valid teacher JWT required (owner only).
  */
 router.post('/:id/publish', requireTeacher, publishExam);
+
+/**
+ * POST /api/exams/:id/unpublish
+ * Revert a published exam back to DRAFT status.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.post('/:id/unpublish', requireTeacher, unpublishExam);
 
 /**
  * POST /api/exams/:id/grade-all

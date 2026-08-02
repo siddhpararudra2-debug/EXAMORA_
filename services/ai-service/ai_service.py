@@ -22,11 +22,16 @@ from schemas import (
 
 logger = logging.getLogger("examora.ai")
 
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "llama3-70b-8192"
 MAX_GENERATION_ATTEMPTS = 3
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 MAX_DOCUMENT_CHARS_FOR_LLM = 60_000
 SUPPORTED_DOCUMENT_EXTENSIONS = frozenset({"pdf", "docx", "txt", "md"})
+
+# Below this many characters, PyPDF2 extraction is treated as failed
+# (scanned/image-only PDF) and the OCR fallback kicks in.
+MIN_PDF_TEXT_CHARS = 20
+OCR_DPI = 200
 
 MIXED_DISTRIBUTION = {"easy": 0.3, "medium": 0.5, "hard": 0.2}
 
@@ -275,7 +280,16 @@ class AIQuestionService:
         if extension == "pdf":
             reader = PyPDF2.PdfReader(io.BytesIO(content))
             pages = [page.extract_text() or "" for page in reader.pages]
-            return "\n\n".join(pages)
+            text = "\n\n".join(pages).strip()
+            # Scanned PDFs yield empty (or near-empty) text from PyPDF2 —
+            # fall back to OCR (pdf2image + pytesseract) in that case.
+            if len(text) < MIN_PDF_TEXT_CHARS:
+                ocr_text = AIQuestionService._ocr_pdf(content)
+                if ocr_text.strip():
+                    logger.info("Scanned PDF detected — OCR extracted %d characters", len(ocr_text))
+                    return ocr_text
+                logger.warning("OCR fallback produced no text for the scanned PDF")
+            return text
 
         if extension == "docx":
             document = Document(io.BytesIO(content))
@@ -291,6 +305,42 @@ class AIQuestionService:
             except UnicodeDecodeError:
                 continue
         raise AIServiceError("could not decode the text file", code="no_readable_text", status_code=422)
+
+    @staticmethod
+    def _ocr_pdf(content: bytes) -> str:
+        """OCR a scanned PDF page-by-page.
+
+        Lazily imports pdf2image + pytesseract so the rest of the service
+        keeps working when the system OCR dependencies (tesseract binary,
+        poppler) are not installed.
+        """
+        try:
+            from pdf2image import convert_from_bytes  # type: ignore[import-not-found]
+            import pytesseract  # type: ignore[import-not-found]
+        except ImportError as exc:
+            logger.warning(
+                "OCR fallback unavailable (%s) — install pytesseract + pdf2image and "
+                "the tesseract/poppler system binaries to parse scanned PDFs",
+                exc,
+            )
+            return ""
+
+        try:
+            images = convert_from_bytes(content, dpi=OCR_DPI)
+        except Exception as exc:
+            logger.warning("pdf2image failed to render PDF pages: %s", exc)
+            return ""
+
+        ocr_parts: list[str] = []
+        for index, image in enumerate(images, start=1):
+            try:
+                page_text = pytesseract.image_to_string(image).strip()
+            except Exception as exc:
+                logger.warning("pytesseract failed on page %d: %s", index, exc)
+                continue
+            if page_text:
+                ocr_parts.append(page_text)
+        return "\n\n".join(ocr_parts)
 
     @staticmethod
     def _enforce_mixed_distribution(response: ExamGenerationResponse) -> ExamGenerationResponse:

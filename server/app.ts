@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.js';
 import studentRoutes from './routes/student.js';
 import examRoutes from './routes/exam.routes.js';
 import resultsRoutes from './routes/results.routes.js';
+import studentSessionRoutes from './routes/student-session.routes.js';
 import { registerProctoringHandlers } from '../apps/backend/src/socket/proctoring.handler.js';
 import { securityMiddleware, apiRateLimiter } from './middleware/security.js';
 import { requestLogger } from './middleware/logger.js';
@@ -81,8 +82,10 @@ export function createApp(options: CreateAppOptions = {}): AppBundle {
   // ── API routes ───────────────────────────────────────────────────────────
   app.use('/api/auth', authRoutes);
   app.use('/api/exams', examRoutes);
+  app.use('/api/v1/exams', examRoutes);
   app.use('/api', studentRoutes);
   app.use('/api/v1', resultsRoutes);
+  app.use('/api/v1/exam-session', studentSessionRoutes);
 
   // 404 + global error handler (must be registered last)
   app.use(notFoundHandler);

@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Home, Lock, ShieldCheck } from "lucide-react";
@@ -13,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export default function AlreadyCompletedPage() {
+function AlreadyCompletedContent() {
   const search = useSearchParams();
   const examId = search.get("examId");
 
@@ -56,5 +57,13 @@ export default function AlreadyCompletedPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function AlreadyCompletedPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Loading...</div>}>
+      <AlreadyCompletedContent />
+    </Suspense>
   );
 }

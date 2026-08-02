@@ -1,4 +1,5 @@
-import { Exam, ExamStatus, Prisma, QuestionType } from '@prisma/client';
+import QRCode from 'qrcode';
+import { Answer, Exam, ExamStatus, Prisma, QuestionType } from '@prisma/client';
 import prisma from '../../../prisma/client.js';
 
 /** Camel-case API input shape (what the REST layer accepts). */
@@ -21,6 +22,13 @@ export interface QuestionCreationData {
 export interface SubmissionCreationData {
   questionId: string;
   answerText: string;
+}
+
+export interface PublishExamResult {
+  access_uuid: string;
+  shareable_link: string;
+  qr_code_url: string;
+  exam: Exam;
 }
 
 const STUDENT_QUESTION_SELECT = {
@@ -80,13 +88,138 @@ export async function getExamForStudent(examId: string) {
 export async function recordSubmissions(
   sessionId: string,
   submissions: SubmissionCreationData[],
-) {
-  return prisma.answer.createMany({
-    data: submissions.map(({ questionId, answerText }) => ({
-      session_id: sessionId,
-      question_id: questionId,
-      answer_text: answerText,
-    })),
-    skipDuplicates: true,
+): Promise<Answer[]> {
+  const saved: Answer[] = [];
+
+  for (const { questionId, answerText } of submissions) {
+    saved.push(
+      await prisma.answer.upsert({
+        where: {
+          session_id_question_id: { session_id: sessionId, question_id: questionId },
+        },
+        create: {
+          session_id: sessionId,
+          question_id: questionId,
+          answer_text: answerText,
+        },
+        update: {
+          answer_text: answerText,
+        },
+      }),
+    );
+  }
+
+  return saved;
+}
+
+/**
+ * Publishes a DRAFT exam after verifying it has at least one question.
+ * Generates a unique access_uuid and a QR code Data URL pointing to the shareable link.
+ * Updates exam status to PUBLISHED in a Prisma transaction.
+ */
+export async function publishExamService(
+  examId: string,
+  teacherId: string,
+  baseUrl = process.env.FRONTEND_URL || 'https://examora.app'
+): Promise<PublishExamResult> {
+  const exam = await prisma.exam.findUnique({
+    where: { id: examId },
+    include: {
+      _count: {
+        select: { questions: true },
+      },
+    },
+  });
+
+  if (!exam) {
+    throw new Error('EXAM_NOT_FOUND');
+  }
+
+  if (exam.created_by !== teacherId) {
+    throw new Error('UNAUTHORIZED');
+  }
+
+  if (exam.status !== ExamStatus.DRAFT) {
+    throw new Error(`INVALID_STATUS: Exam must be in DRAFT status to publish. Current status: ${exam.status}`);
+  }
+
+  if (exam._count.questions === 0) {
+    throw new Error('NO_QUESTIONS: Cannot publish an exam without questions. Please add at least one question.');
+  }
+
+  const access_uuid = crypto.randomUUID();
+  const shareable_link = `${baseUrl}/exam/${access_uuid}`;
+
+  // Requirement 2: Generate QR code Data URL pointing to https://examora.app/exam/${access_uuid}
+  const qr_code_url = await QRCode.toDataURL(shareable_link, {
+    errorCorrectionLevel: 'M',
+    type: 'image/png',
+    margin: 2,
+    scale: 6,
+  });
+
+  // Requirement 2: Update exam in Prisma transaction
+  const updatedExam = await prisma.$transaction(async (tx) => {
+    return tx.exam.update({
+      where: { id: examId },
+      data: {
+        status: ExamStatus.PUBLISHED,
+        published_at: new Date(),
+        access_uuid,
+        qr_code_url,
+      },
+    });
+  });
+
+  return {
+    access_uuid,
+    shareable_link,
+    qr_code_url,
+    exam: updatedExam,
+  };
+}
+
+/**
+ * Unpublishes an active/published exam, returning it back to DRAFT status.
+ * Resets published_at and qr_code_url in a Prisma transaction.
+ */
+export async function unpublishExamService(
+  examId: string,
+  teacherId: string
+): Promise<Exam> {
+  const exam = await prisma.exam.findUnique({
+    where: { id: examId },
+    select: { id: true, status: true, created_by: true },
+  });
+
+  if (!exam) {
+    throw new Error('EXAM_NOT_FOUND');
+  }
+
+  if (exam.created_by !== teacherId) {
+    throw new Error('UNAUTHORIZED');
+  }
+
+  if (exam.status === ExamStatus.DRAFT) {
+    throw new Error('INVALID_STATUS: Exam is already in DRAFT status');
+  }
+
+  if (exam.status === ExamStatus.COMPLETED) {
+    throw new Error('INVALID_STATUS: Completed exams cannot be unpublished');
+  }
+
+  const freshAccessUuid = crypto.randomUUID();
+
+  // Requirement 3: Reverts status to DRAFT and nullifies/resets access in Prisma transaction
+  return prisma.$transaction(async (tx) => {
+    return tx.exam.update({
+      where: { id: examId },
+      data: {
+        status: ExamStatus.DRAFT,
+        published_at: null,
+        access_uuid: freshAccessUuid,
+        qr_code_url: null,
+      },
+    });
   });
 }

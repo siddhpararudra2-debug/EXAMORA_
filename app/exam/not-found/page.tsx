@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, CalendarX2, Home, SearchX } from "lucide-react";
@@ -13,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export default function ExamNotFoundPage() {
+function ExamNotFoundContent() {
   const search = useSearchParams();
   const reason = search.get("reason");
   const inactive = reason === "inactive";
@@ -63,5 +64,13 @@ export default function ExamNotFoundPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function ExamNotFoundPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Loading...</div>}>
+      <ExamNotFoundContent />
+    </Suspense>
   );
 }

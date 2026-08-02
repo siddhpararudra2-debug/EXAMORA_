@@ -151,6 +151,7 @@ export async function dispatchResults(examId: string): Promise<DispatchSummary> 
     min: percentages.length ? Math.min(...percentages) : null,
     average: percentages.length ? percentages.reduce((sum, value) => sum + value, 0) / percentages.length : null,
     totalStudents: percentages.length,
+    scores: percentages,
   };
 
   summary.total = exam.sessions.length;

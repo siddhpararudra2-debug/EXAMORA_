@@ -6,7 +6,7 @@ module.exports = {
   testMatch: ['**/*.test.ts'],
   // The server code uses ESM-style ".js" import specifiers; map them back to .ts
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^(\\.+/.*)\\.js$': '$1',
   },
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.server.json' }],
