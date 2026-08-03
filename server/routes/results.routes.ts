@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { requireTeacher } from '../middleware/auth.js';
-import { declareExamResults, downloadSessionMarksheet } from '../controllers/results.controller.js';
+import {
+  declareExamResults,
+  downloadSessionMarksheet,
+  exportExamResultsCsv,
+} from '../controllers/results.controller.js';
 
 const router = Router();
 
@@ -10,6 +14,12 @@ const router = Router();
  * student their marksheet (PDF). Protected — teacher JWT required (owner only).
  */
 router.post('/exams/:examId/declare-results', requireTeacher, declareExamResults);
+
+/**
+ * GET /api/v1/exams/:examId/results/export
+ * Download the full results sheet as CSV. Protected — teacher JWT required (owner only).
+ */
+router.get('/exams/:examId/results/export', requireTeacher, exportExamResultsCsv);
 
 /**
  * GET /api/v1/exams/:examId/sessions/:sessionId/marksheet

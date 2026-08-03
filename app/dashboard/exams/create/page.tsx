@@ -9,6 +9,7 @@ import { z } from "zod";
 import {
   ArrowLeft,
   ArrowRight,
+  BookMarked,
   CheckCircle2,
   FileText,
   GripVertical,
@@ -52,6 +53,7 @@ import { authHeaders } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
 import { AIQuestionGenerator, GeneratedQuestion } from "@/components/exams/AIQuestionGenerator";
 import { DocumentUploader } from "@/components/exams/DocumentUploader";
+import { QuestionBankPicker } from "@/components/exams/QuestionBankPicker";
 
 // ---------- Types & Schemas ----------
 
@@ -120,6 +122,10 @@ const examSchema = z.object({
     .number({ invalid_type_error: "Total marks must be a number." })
     .int("Total marks must be an integer.")
     .min(1, { message: "Minimum 1 mark." }),
+  shuffleQuestions: z.boolean().optional(),
+  shuffleOptions: z.boolean().optional(),
+  supervisionCamera: z.boolean().optional(),
+  supervisionMic: z.boolean().optional(),
   questions: z
     .array(questionSchema)
     .min(1, { message: "Add at least one question to your exam." }),
@@ -142,6 +148,10 @@ const DEFAULT_VALUES: ExamFormValues = {
   description: "",
   durationMinutes: 60,
   totalMarks: 20,
+  shuffleQuestions: true,
+  shuffleOptions: true,
+  supervisionCamera: false,
+  supervisionMic: false,
   questions: [DEFAULT_QUESTION(0)],
 };
 
@@ -158,6 +168,47 @@ function QuestionIcon({ type }: { type: QuestionTypeValue }) {
   return <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 ring-1 ring-inset ring-emerald-100">Short</span>;
 }
 
+function Toggle({
+  checked,
+  onChange,
+  label,
+  description,
+  accent = "indigo",
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  description: string;
+  accent?: "indigo" | "rose";
+}) {
+  const onColor = accent === "rose" ? "bg-rose-600" : "bg-indigo-600";
+  return (
+    <div className="flex items-start justify-between gap-6 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-800">{label}</p>
+        <p className="mt-0.5 text-xs leading-5 text-slate-500">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500",
+          checked ? onColor : "bg-slate-300"
+        )}
+      >
+        <span
+          className={cn(
+            "inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform",
+            checked ? "translate-x-[22px]" : "translate-x-0.5"
+          )}
+        />
+      </button>
+    </div>
+  );
+}
+
 // ---------- Page ----------
 
 export default function CreateExamPage() {
@@ -167,6 +218,8 @@ export default function CreateExamPage() {
   const [submitting, setSubmitting] = useState(false);
   const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
   const [isUploaderOpen, setIsUploaderOpen] = useState(false);
+  const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
+  const [savingToBank, setSavingToBank] = useState<number | null>(null);
 
   const handleAIQuestionsAdded = (questions: GeneratedQuestion[]) => {
     questions.forEach((q) => {
@@ -200,6 +253,71 @@ export default function CreateExamPage() {
       title: "Questions Added! ✨",
       description: `Added ${questions.length} question(s) to your exam draft.`,
     });
+  };
+
+  const handleBankQuestionsAdded = (questions: QuestionFormValue[]) => {
+    questions.forEach((q) => append(q));
+    setIsBankPickerOpen(false);
+    toast({
+      title: "Questions added from bank",
+      description: `Added ${questions.length} question(s) from your question bank.`,
+    });
+  };
+
+  const handleSaveToBank = async (index: number) => {
+    const q = getValues(`questions.${index}` as const) as QuestionFormValue;
+    if (!q.questionText.trim()) {
+      toast({
+        title: "Question is empty",
+        description: "Write the question text before saving it to the bank.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSavingToBank(index);
+    try {
+      const res = await fetch("/api/v1/question-bank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        credentials: "include",
+        body: JSON.stringify({
+          type: q.type,
+          questionText: q.questionText.trim(),
+          options:
+            q.type === "MCQ_SINGLE"
+              ? (q.options ?? []).map((o) => o.trim())
+              : q.type === "TRUE_FALSE"
+              ? ["True", "False"]
+              : undefined,
+          correctAnswer: q.correctAnswer.trim(),
+          marks: Number(q.marks),
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        message?: string;
+      };
+      if (!res.ok) {
+        toast({
+          title: "Couldn't save to question bank",
+          description: payload?.message ?? "The server returned an error.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Saved to question bank",
+        description:
+          "You can reuse this question in any future exam draft.",
+      });
+    } catch {
+      toast({
+        title: "Couldn't save to question bank",
+        description: "Network unavailable. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingToBank(null);
+    }
   };
 
   const form = useForm<ExamFormValues>({
@@ -339,6 +457,14 @@ export default function CreateExamPage() {
         description: data.description?.trim() || null,
         durationMinutes: Number(data.durationMinutes),
         totalMarks: Number(data.totalMarks),
+        settings: {
+          shuffleQuestions: data.shuffleQuestions ?? false,
+          shuffleOptions: data.shuffleOptions ?? false,
+          supervision: {
+            camera: data.supervisionCamera ?? false,
+            mic: data.supervisionMic ?? false,
+          },
+        },
         questions: data.questions.map((q) => ({
           type: q.type,
           questionText: q.questionText.trim(),
@@ -591,6 +717,72 @@ export default function CreateExamPage() {
             </Card>
           )}
 
+          {step === 1 && (
+            <Card className="border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-100">
+              <CardHeader className="px-6 pb-4 pt-6">
+                <CardTitle className="text-xl font-semibold tracking-tight text-slate-900">
+                  Anti-cheat &amp; supervision
+                </CardTitle>
+                <CardDescription className="text-sm text-slate-500">
+                  Shuffle the paper per student and require live camera/mic
+                  supervision during the exam.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 gap-3 px-6 pb-6 md:grid-cols-2">
+                <FormField
+                  control={control}
+                  name="shuffleQuestions"
+                  render={({ field }) => (
+                    <Toggle
+                      checked={field.value ?? false}
+                      onChange={field.onChange}
+                      label="Shuffle question order"
+                      description="Every student sees the same questions in a different, fixed order (seeded per session)."
+                    />
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="shuffleOptions"
+                  render={({ field }) => (
+                    <Toggle
+                      checked={field.value ?? false}
+                      onChange={field.onChange}
+                      label="Shuffle MCQ options"
+                      description="Randomize the order of answer options for each multiple-choice question."
+                    />
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="supervisionCamera"
+                  render={({ field }) => (
+                    <Toggle
+                      checked={field.value ?? false}
+                      onChange={field.onChange}
+                      accent="rose"
+                      label="Require live camera"
+                      description="Stream the student's webcam to your live dashboard while they take the exam."
+                    />
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="supervisionMic"
+                  render={({ field }) => (
+                    <Toggle
+                      checked={field.value ?? false}
+                      onChange={field.onChange}
+                      accent="rose"
+                      label="Require live microphone"
+                      description="Stream the student's microphone too; you can listen in by enlarging a student tile."
+                    />
+                  )}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           {step === 2 && (
             <section className="space-y-6">
               {/* Question list */}
@@ -642,6 +834,21 @@ export default function CreateExamPage() {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleSaveToBank(index)}
+                            disabled={savingToBank === index}
+                            className="h-9 text-slate-600"
+                          >
+                            {savingToBank === index ? (
+                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            ) : (
+                              <BookMarked className="mr-1 h-4 w-4" />
+                            )}
+                            Save to bank
+                          </Button>
                           <Button
                             type="button"
                             size="sm"
@@ -971,7 +1178,7 @@ export default function CreateExamPage() {
                 })}
 
                 {/* Add question CTA & AI Question Generator CTA */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <button
                     type="button"
                     onClick={() => addQuestion()}
@@ -984,6 +1191,17 @@ export default function CreateExamPage() {
                     <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-400 ring-1 ring-inset ring-slate-200">
                       {fields.length} so far
                     </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsBankPickerOpen(true)}
+                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50/60 px-6 py-5 text-base font-semibold text-violet-700 transition hover:border-violet-500 hover:bg-violet-100/50 shadow-sm"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white shadow-md shadow-violet-200">
+                      <BookMarked className="h-5 w-5" />
+                    </span>
+                    Question bank
                   </button>
 
                   <button
@@ -1100,6 +1318,13 @@ export default function CreateExamPage() {
         isOpen={isUploaderOpen}
         onClose={() => setIsUploaderOpen(false)}
         onAddQuestions={handleAIQuestionsAdded}
+      />
+
+      {/* Question Bank Picker Modal */}
+      <QuestionBankPicker
+        isOpen={isBankPickerOpen}
+        onClose={() => setIsBankPickerOpen(false)}
+        onAddQuestions={handleBankQuestionsAdded}
       />
     </div>
   );

@@ -34,9 +34,11 @@ import {
   StudentStatusUpdateEvent,
   SessionStatus,
   getSocket,
+  getSocketForAuth,
 } from "@/lib/socket";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthToken } from "@/lib/auth-token";
+import { SupervisionGrid } from "@/components/live/SupervisionGrid";
 
 const DEFAULT_WARNINGS_LIMIT = 3;
 
@@ -263,7 +265,7 @@ export default function LiveProctoringDashboard() {
       if (canceled) return;
 
       try {
-        socket = getSocket({ token: getAuthToken() ?? undefined });
+        socket = getSocketForAuth(getAuthToken() ?? undefined);
         socketRef.current = socket;
 
         socket.on("connect", () => {
@@ -490,6 +492,14 @@ export default function LiveProctoringDashboard() {
           </CardContent>
         </Card>
       </section>
+
+      {/* Live camera & mic supervision (WebRTC mesh) — S02/S03/S07 */}
+      <SupervisionGrid
+        examId={examId}
+        socket={socketRef.current}
+        roomJoined={roomJoined}
+        sessions={sessions}
+      />
 
       {/* Grid */}
       {loading ? (

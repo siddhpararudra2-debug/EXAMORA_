@@ -26,17 +26,24 @@ const ExamStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'ARC
 /**
  * A single question inside the exam-creation payload.
  * Validates options and metadata structure based on the specific QuestionType.
+ *
+ * Split into a plain object schema + shared refinements so other schemas
+ * (e.g. the question bank) can extend the object without re-implementing
+ * the per-type validation.
  */
-export const questionSchema = z
-  .object({
-    type: QuestionTypeEnum,
-    questionText: z.string().min(1, 'Question text is required'),
-    options: z.unknown().optional(),
-    correctAnswer: z.string().optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-    marks: z.number().int().positive('Marks must be a positive integer'),
-  })
-  .superRefine((q, ctx) => {
+export const questionBaseSchema = z.object({
+  type: QuestionTypeEnum,
+  questionText: z.string().min(1, 'Question text is required'),
+  options: z.unknown().optional(),
+  correctAnswer: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  marks: z.number().int().positive('Marks must be a positive integer'),
+});
+
+export const questionRefinements = (
+  q: z.infer<typeof questionBaseSchema>,
+  ctx: z.RefinementCtx,
+): void => {
     // 1. correctAnswer: required for all types except FILE_UPLOAD
     if (q.type !== 'FILE_UPLOAD' && (!q.correctAnswer || q.correctAnswer.trim() === '')) {
       ctx.addIssue({
@@ -116,7 +123,24 @@ export const questionSchema = z
         });
       }
     }
-  });
+};
+
+export const questionSchema = questionBaseSchema.superRefine(questionRefinements);
+
+// ── Exam settings (E15 shuffling + S02/S03 live supervision) ────────────────
+
+export const examSettingsSchema = z.object({
+  shuffleQuestions: z.boolean().optional(),
+  shuffleOptions: z.boolean().optional(),
+  supervision: z
+    .object({
+      camera: z.boolean().optional(),
+      mic: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+export type ExamSettingsInput = z.infer<typeof examSettingsSchema>;
 
 // ── Create Exam ───────────────────────────────────────────────────────────────
 
@@ -132,6 +156,7 @@ export const createExamSchema = z.object({
     .int()
     .positive('Total marks must be a positive integer'),
   status: ExamStatusEnum.optional().default('DRAFT'),
+  settings: examSettingsSchema.optional(),
   questions: z
     .array(questionSchema)
     .min(1, 'Exam must have at least one question'),

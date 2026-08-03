@@ -13,6 +13,12 @@ export interface UseAIFaceDetectionOptions {
   enabled?: boolean;
   /** Optional video element reference if an external stream is provided */
   externalVideoRef?: React.RefObject<HTMLVideoElement>;
+  /**
+   * Reuse a stream captured elsewhere (e.g. live supervision's camera) instead
+   * of requesting a second camera. When provided and active, no getUserMedia
+   * call is made by this hook.
+   */
+  externalStream?: MediaStream | null;
 }
 
 export interface UseAIFaceDetectionReturn {
@@ -110,6 +116,7 @@ export function useAIFaceDetection({
   gracePeriodMs = 5000,
   enabled = true,
   externalVideoRef,
+  externalStream = null,
 }: UseAIFaceDetectionOptions = {}): UseAIFaceDetectionReturn {
   const internalVideoRef = useRef<HTMLVideoElement | null>(null);
   const videoRef = externalVideoRef || internalVideoRef;
@@ -155,6 +162,17 @@ export function useAIFaceDetection({
         setIsModelLoading(false);
       }
 
+      // Reuse an externally captured stream (live supervision) when provided
+      // and active — avoids a second camera request.
+      if (externalStream && externalStream.active) {
+        streamRef.current = externalStream;
+        setStream(externalStream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = externalStream;
+        }
+        return;
+      }
+
       // Initialize Webcam if external video ref is not attached or has no srcObject
       if (!videoRef.current?.srcObject) {
         try {
@@ -187,14 +205,16 @@ export function useAIFaceDetection({
 
     init();
 
-    // Step 5: Clean up model & webcam tracks on unmount
+    // Step 5: Clean up model & webcam tracks on unmount.
+    // External streams (live supervision) are owned by their own hook and
+    // must NOT be stopped here.
     return () => {
       isMounted = false;
 
-      if (streamRef.current) {
+      if (streamRef.current && streamRef.current !== externalStream) {
         streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
       }
+      streamRef.current = null;
 
       if (internalStream) {
         internalStream.getTracks().forEach((track) => track.stop());
@@ -209,7 +229,7 @@ export function useAIFaceDetection({
         modelRef.current = null;
       }
     };
-  }, [enabled, videoRef]);
+  }, [enabled, videoRef, externalStream]);
 
   // Step 3 & Step 4: Run face detection every intervalMs with 5-Second Grace Period
   useEffect(() => {

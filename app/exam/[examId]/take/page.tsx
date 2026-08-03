@@ -21,11 +21,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAIFaceDetection } from "@/components/proctoring/useAIFaceDetection";
+import { useLiveSupervision } from "@/components/proctoring/useLiveSupervision";
 import { isAIOverlayElement } from "@/components/proctoring/useExamLockdown";
 import {
   ExamTerminatedEvent,
   getSocket,
+  getSocketForAuth,
 } from "@/lib/socket";
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+} from "lucide-react";
 
 type QuestionType = "MCQ_SINGLE" | "TRUE_FALSE" | "SHORT_ANSWER";
 
@@ -44,6 +52,12 @@ interface ExamData {
   duration_minutes: number;
   questions: ExamQuestion[];
   warningsLimit: number;
+  settings?: {
+    supervision?: {
+      camera?: boolean;
+      mic?: boolean;
+    };
+  };
 }
 
 interface SessionInit {
@@ -269,7 +283,7 @@ function TakeExamContent() {
     if (!session || !exam || terminated || submitted) return;
     let socket: Socket | null = null;
     try {
-      socket = getSocket({ token: session.sessionToken });
+      socket = getSocketForAuth(session.sessionToken);
       socketRef.current = socket;
 
       socket.on("connect", () => {
@@ -624,9 +638,31 @@ function TakeExamContent() {
   // -------- AI face detection (BlazeFace, client-side) --------
   // Runs only while the exam is live; reports missing / multiple faces
   // through the canonical /violation endpoint (AI_OVERLAY type).
-  const { videoRef } = useAIFaceDetection({
-    enabled: !!session && !submitted && !terminated,
+  // When live supervision is required, the shared supervision stream/video
+  // element is reused so only ONE camera capture happens per student.
+  const supervisionEnabled = Boolean(
+    exam?.settings?.supervision?.camera || exam?.settings?.supervision?.mic
+  );
+  const supervision = useLiveSupervision({
+    enabled:
+      !!session && supervisionEnabled && !submitted && !terminated,
+    examId,
+    sessionToken: session?.sessionToken ?? "",
+    requireMic: exam?.settings?.supervision?.mic ?? false,
+    requireCamera: exam?.settings?.supervision?.camera ?? false,
+  });
+  // With supervision, defer to the supervision stream (once captured) and
+  // never open a second camera for face detection.
+  const faceDetectionEnabled =
+    !!session && !submitted && !terminated &&
+    (!supervisionEnabled || supervision.stream !== null);
+  const { videoRef: faceDetectionVideoRef } = useAIFaceDetection({
+    enabled: faceDetectionEnabled,
     onViolation: (reason) => void emitViolation(reason, "AI_OVERLAY"),
+    externalVideoRef: supervisionEnabled
+      ? supervision.videoRef
+      : undefined,
+    externalStream: supervisionEnabled ? supervision.stream : null,
   });
 
   // -------- Derived --------
@@ -829,16 +865,99 @@ function TakeExamContent() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground relative selection:bg-primary/20">
-      {/* Invisible webcam feed consumed by the BlazeFace proctoring hook.
-          The hook only starts the camera while the exam is live. */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className="pointer-events-none fixed h-px w-px opacity-0"
-        aria-hidden="true"
-      />
+      {/* Webcam feed for the BlazeFace proctoring hook. When live supervision
+          is required the self-view tile below hosts the shared stream; when
+          not, an invisible 1px video still powers face detection. */}
+      {!supervisionEnabled && (
+        <video
+          ref={faceDetectionVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="pointer-events-none fixed h-px w-px opacity-0"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Live supervision self-view (S02/S03) — camera + mic are streamed to
+          the teacher's live dashboard via WebRTC while the exam runs. */}
+      {supervisionEnabled && (
+        <div className="fixed bottom-24 right-4 z-40 w-44 animate-in slide-in-from-bottom-4 fade-in duration-500 sm:bottom-6 sm:right-6">
+          <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-black shadow-2xl">
+            <video
+              ref={supervision.videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="aspect-video w-full object-cover"
+            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              {supervision.cameraDenied ? (
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/90 text-white">
+                  <VideoOff className="h-5 w-5" />
+                </span>
+              ) : null}
+            </div>
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/80 to-transparent p-2">
+              <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-white/90">
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    supervision.streamingToTeacher
+                      ? "bg-red-500 animate-pulse"
+                      : "bg-amber-400"
+                  )}
+                />
+                {supervision.streamingToTeacher ? "Live" : "Camera"}
+              </span>
+              <span className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={supervision.toggleMic}
+                  disabled={supervision.micDenied}
+                  aria-label={supervision.micOn ? "Mute microphone" : "Unmute microphone"}
+                  title={supervision.micDenied ? "Microphone denied" : supervision.micOn ? "Mute microphone" : "Unmute microphone"}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-full text-white transition-colors",
+                    supervision.micDenied
+                      ? "bg-white/20 text-white/50"
+                      : supervision.micOn
+                      ? "bg-white/25 hover:bg-white/40"
+                      : "bg-red-500/80 hover:bg-red-500"
+                  )}
+                >
+                  {supervision.micOn ? (
+                    <Mic className="h-3.5 w-3.5" />
+                  ) : (
+                    <MicOff className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={supervision.toggleCam}
+                  disabled={supervision.cameraDenied}
+                  aria-label={supervision.camOn ? "Turn camera off" : "Turn camera on"}
+                  title={supervision.camOn ? "Turn camera off" : "Turn camera on"}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-full text-white transition-colors",
+                    supervision.cameraDenied
+                      ? "bg-white/20 text-white/50"
+                      : supervision.camOn
+                      ? "bg-white/25 hover:bg-white/40"
+                      : "bg-red-500/80 hover:bg-red-500"
+                  )}
+                >
+                  {supervision.camOn ? (
+                    <Video className="h-3.5 w-3.5" />
+                  ) : (
+                    <VideoOff className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Strict termination overlay */}
       {terminated && (

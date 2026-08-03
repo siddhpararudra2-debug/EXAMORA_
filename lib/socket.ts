@@ -58,6 +58,24 @@ export function getSocketUrl(): string {
   return window.location.origin;
 }
 
+/**
+ * Returns the shared socket, re-creating it when the requested auth token
+ * differs from the one the existing instance was created with.
+ *
+ * The singleton is shared app-wide; without this check, the FIRST page that
+ * touches it locks in its handshake token. A teacher opening the live
+ * dashboard after having viewed the student take page (or vice versa) would
+ * otherwise keep the wrong identity — the server's teacher-role checks read
+ * `auth.token` and would reject them.
+ */
+export function getSocketForAuth(token?: string): Socket {
+  const desired = token ?? undefined;
+  const current = getSocket();
+  const currentToken = (current as unknown as { auth?: { token?: unknown } })
+    .auth?.token as string | undefined;
+  return getSocket({ token, forceNew: currentToken !== desired });
+}
+
 export type SessionStatus =
   | "IN_PROGRESS"
   | "SUBMITTED"

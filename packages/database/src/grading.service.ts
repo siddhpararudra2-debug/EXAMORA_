@@ -2,19 +2,22 @@ import { GradedBy, Question, QuestionType, SubmissionStatus } from '@prisma/clie
 import prisma from '../../../prisma/client.js';
 
 const AI_GRADING_URL =
-  process.env.AI_GRADING_URL ?? 'http://localhost:8001/api/v1/ai/grade-subjective';
+  process.env.AI_GRADING_URL ?? 'http://localhost:5001/api/v1/ai/grade-subjective';
 const AI_GRADING_TIMEOUT_MS = 10_000;
+
+/** Subjective answers with confidence below this are flagged for manual review (Document 12). */
+export const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.6;
 
 /**
  * Statuses whose sessions are eligible for grading and result dispatch.
  * Shared by the grade-all controller, the result emails, and anything else
  * that needs the canonical "this session can be graded" set.
  */
-export const GRADED_STATUSES = [
+export const GRADED_STATUSES: SubmissionStatus[] = [
   SubmissionStatus.SUBMITTED,
   SubmissionStatus.AUTO_SUBMITTED,
   SubmissionStatus.TERMINATED,
-] as const;
+];
 
 export interface GradingResult {
   sessionId: string;
@@ -43,6 +46,7 @@ interface AnswerGradingUpdate {
   gradedBy: GradedBy;
   teacherFeedback: string | null;
   aiConfidence: number | null;
+  needsReview: boolean;
 }
 
 const normalize = (value: string): string => value.trim().toLowerCase();
@@ -204,6 +208,7 @@ export async function gradeSubmission(
         gradedBy: GradedBy.TEACHER,
         teacherFeedback: 'File upload submission requires teacher grading.',
         aiConfidence: null,
+        needsReview: true,
       });
       continue;
     }
@@ -218,6 +223,7 @@ export async function gradeSubmission(
         gradedBy: GradedBy.AUTO,
         teacherFeedback: null,
         aiConfidence: null,
+        needsReview: false,
       });
       continue;
     }
@@ -234,13 +240,17 @@ export async function gradeSubmission(
         );
 
         rawScore += ai.marksAwarded;
+        const needsReview = ai.confidence < AI_CONFIDENCE_REVIEW_THRESHOLD;
         updates.push({
           questionId: question.id,
           isCorrect: ai.marksAwarded > 0,
           marksAwarded: ai.marksAwarded,
           gradedBy: GradedBy.AI,
-          teacherFeedback: ai.feedback || null,
+          teacherFeedback: needsReview
+            ? `${ai.feedback}\n\nFlagged for manual review — AI confidence ${ai.confidence.toFixed(2)}.`
+            : ai.feedback || null,
           aiConfidence: ai.confidence,
+          needsReview,
         });
       } catch (error) {
         // AI service unavailable — do not guess. Flag the answer for manual
@@ -256,6 +266,7 @@ export async function gradeSubmission(
           gradedBy: GradedBy.TEACHER,
           teacherFeedback: null,
           aiConfidence: null,
+          needsReview: true,
         });
       }
       continue;
@@ -275,6 +286,7 @@ export async function gradeSubmission(
       gradedBy: GradedBy.AUTO,
       teacherFeedback: null,
       aiConfidence: null,
+      needsReview: false,
     });
   }
 
@@ -298,6 +310,7 @@ export async function gradeSubmission(
           graded_by: update.gradedBy,
           teacher_feedback: update.teacherFeedback,
           ai_confidence: update.aiConfidence,
+          needs_review: update.needsReview,
         },
       });
     }

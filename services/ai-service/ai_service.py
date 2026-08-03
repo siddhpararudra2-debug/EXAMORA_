@@ -17,6 +17,8 @@ from schemas import (
     Difficulty,
     ExamGenerationResponse,
     GenerateExamRequest,
+    GradeSubjectiveRequest,
+    GradeSubjectiveResponse,
     QuestionSchema,
 )
 
@@ -131,6 +133,27 @@ def compute_target_counts(count: int) -> dict[str, int]:
     return counts
 
 
+GRADE_SUBJECTIVE_SYSTEM_PROMPT = """You are the Examora AI Subjective Grader, an expert examiner who marks long/short-answer responses against a rubric.
+
+OUTPUT FORMAT (STRICT):
+Respond with ONLY a valid raw JSON object. No markdown, no code fences, no commentary.
+The JSON MUST exactly match this schema:
+{
+  "marks_awarded": 3.5,
+  "confidence": 0.85,
+  "feedback": "Concise, constructive feedback for the student (1-3 sentences)."
+}
+
+GRADING RUBRIC (apply strictly):
+1. Read the question, the student's answer, and the maximum marks.
+2. Award marks proportionally for the correct ideas, definitions, steps and keywords the answer contains. Partial credit is encouraged for partially correct answers.
+3. Deduct marks for unsupported claims, contradictions or off-topic content. NEVER award marks for an empty or blank answer.
+4. marks_awarded MUST be a non-negative number between 0 and max_marks inclusive. Prefer halves (e.g. 0.5, 1.5) for partial credit.
+5. "confidence" (0.0-1.0) reflects how certain you are that the marks are fair and the answer was unambiguous. Subjective, vague, or borderline answers must score BELOW 0.6.
+6. "feedback" must be constructive, specific and in the same language as the answer.
+7. If the answer is unrelated to the question, blank, or just repeated question text, award 0 marks and explain why."""
+
+
 class AIServiceError(Exception):
     def __init__(self, message: str, code: str = "ai_error", status_code: int = 500):
         super().__init__(message)
@@ -215,6 +238,47 @@ class AIQuestionService:
             return response
 
         raise AIServiceError("Groq repeatedly returned output that failed schema validation", code="invalid_response", status_code=502)
+
+    def grade_subjective(self, request: GradeSubjectiveRequest) -> GradeSubjectiveResponse:
+        """Grades a short/long-answer response against the question with Groq.
+
+        Returns marks (0..max_marks), a confidence score (0..1) and feedback.
+        Low-confidence (< 0.6) results are flagged for manual review by the
+        Express grading service.
+        """
+        if not self._client:
+            raise AIServiceError("GROQ_API_KEY is not configured", code="service_unavailable", status_code=503)
+
+        user_prompt = (
+            f"Question:\n{request.question_text}\n\n"
+            f"Maximum marks: {request.max_marks}\n\n"
+            f"Student answer:\n{request.student_answer}\n\n"
+            "Grade this answer now and return the JSON object only."
+        )
+
+        attempts = MAX_GENERATION_ATTEMPTS
+        last_errors: list[str] = []
+        while attempts > 0:
+            corrective = f"\n\nCORRECTION (previous attempt rejected): {'. '.join(last_errors)}\nReturn the corrected JSON object only." if last_errors else ""
+            payload = self._complete_json(
+                user_prompt + corrective,
+                GRADE_SUBJECTIVE_SYSTEM_PROMPT,
+                max_tokens=1024,
+            )
+            try:
+                response = GradeSubjectiveResponse.model_validate(payload)
+            except ValidationError as exc:
+                last_errors = [error["msg"] for error in exc.errors()][:5]
+                logger.warning("Groq grading failed validation (attempt %d): %s", MAX_GENERATION_ATTEMPTS - attempts + 1, last_errors)
+                attempts -= 1
+                continue
+
+            response.marks_awarded = min(float(response.marks_awarded), float(request.max_marks))
+            response.confidence = max(0.0, min(1.0, float(response.confidence)))
+            response.model = self.model
+            return response
+
+        raise AIServiceError("Groq repeatedly returned output that failed validation", code="invalid_response", status_code=502)
 
     def _build_generation_user_prompt(self, request: GenerateExamRequest) -> str:
         subtopics = ", ".join(request.subtopics) if request.subtopics else "any relevant subtopics"

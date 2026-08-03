@@ -92,7 +92,8 @@ model Teacher {
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
-  exams        Exam[]
+  exams          Exam[]
+  bank_questions BankQuestion[]
 
   @@map("teachers")
 }
@@ -186,6 +187,8 @@ model ExamSession {
   submitted_at      DateTime?
   total_score       Decimal?         @db.Decimal(10, 2)
   percentage        Decimal?         @db.Decimal(5, 2)
+  /// Deterministic RNG seed used to shuffle questions/options per student.
+  shuffle_seed      Int?
   created_at        DateTime         @default(now())
   updated_at        DateTime         @updatedAt
 
@@ -211,6 +214,8 @@ model Answer {
   graded_by        GradedBy?
   teacher_feedback String?
   ai_confidence    Decimal?   @db.Decimal(5, 4)
+  /// True when the answer was flagged for manual teacher review (low AI confidence, file upload, or AI outage).
+  needs_review     Boolean    @default(false)
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
 
@@ -248,4 +253,26 @@ model EmailLog {
   @@index([session_id])
   @@index([status])
   @@map("email_log")
+}
+
+/// Teacher-owned question bank. Questions can be saved from an exam draft and
+/// reused (copied) into any other exam — E16.
+model BankQuestion {
+  id             String       @id @default(uuid())
+  teacher_id     String
+  teacher        Teacher      @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  type           QuestionType
+  question_text  String
+  options        Json?
+  correct_answer String?
+  explanation    String?
+  marks          Int
+  negative_marks Decimal      @default(0) @db.Decimal(5, 2)
+  metadata       Json?        @db.JsonB
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @updatedAt
+
+  @@index([teacher_id])
+  @@index([type])
+  @@map("bank_questions")
 }

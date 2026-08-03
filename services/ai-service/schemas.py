@@ -158,3 +158,20 @@ class ExamGenerationResponse(BaseModel):
     blooms_level: BloomsLevel | None = None
     questions: list[QuestionSchema] = Field(..., min_length=1)
     generation_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class GradeSubjectiveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question_text: str = Field(..., min_length=3, max_length=10_000)
+    student_answer: str = Field(..., min_length=1, max_length=20_000)
+    max_marks: int = Field(default=5, ge=1, le=100)
+
+
+class GradeSubjectiveResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    marks_awarded: float = Field(..., ge=0)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    feedback: str = Field(..., min_length=1, max_length=2000)
+    model: str | None = None

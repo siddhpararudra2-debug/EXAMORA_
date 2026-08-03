@@ -1,6 +1,7 @@
 import QRCode from 'qrcode';
 import { Answer, Exam, ExamStatus, Prisma, QuestionType } from '@prisma/client';
 import prisma from '../../../prisma/client.js';
+import { ExamSettingsShape } from './shuffle.service.js';
 
 /** Camel-case API input shape (what the REST layer accepts). */
 export interface ExamCreationData {
@@ -9,13 +10,16 @@ export interface ExamCreationData {
   durationMinutes: number;
   totalMarks: number;
   status?: ExamStatus;
+  settings?: ExamSettingsShape;
 }
 
 export interface QuestionCreationData {
   type: QuestionType;
   questionText: string;
-  options?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
-  correctAnswer: string;
+  /** JSON-serializable options (array of strings, grid structure, etc.). Validated upstream. */
+  options?: unknown;
+  /** Required for objective questions; optional for e.g. subjective types. */
+  correctAnswer?: string;
   marks: number;
 }
 
@@ -52,14 +56,20 @@ export async function createExamWithQuestions(
         duration_minutes: examData.durationMinutes,
         total_marks: examData.totalMarks,
         status: examData.status ?? ExamStatus.DRAFT,
+        settings: examData.settings
+          ? (examData.settings as Prisma.InputJsonValue)
+          : undefined,
         created_by: teacherId,
         access_uuid: crypto.randomUUID(),
         questions: {
           create: questionsData.map((q) => ({
             type: q.type,
             question_text: q.questionText,
-            options: q.options ?? undefined,
-            correct_answer: q.correctAnswer,
+            options:
+              q.options !== undefined && q.options !== null
+                ? (q.options as Prisma.InputJsonValue)
+                : undefined,
+            correct_answer: q.correctAnswer ?? null,
             marks: q.marks,
           })),
         },
@@ -78,6 +88,7 @@ export async function getExamForStudent(examId: string) {
       duration_minutes: true,
       total_marks: true,
       status: true,
+      settings: true,
       questions: {
         select: STUDENT_QUESTION_SELECT,
       },

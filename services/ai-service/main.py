@@ -8,7 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ai_service import AIQuestionService, AIServiceError
-from schemas import ExamGenerationResponse, GenerateExamRequest
+from schemas import (
+    ExamGenerationResponse,
+    GenerateExamRequest,
+    GradeSubjectiveRequest,
+    GradeSubjectiveResponse,
+)
 
 app = FastAPI(
     title="Examora AI Service",
@@ -53,6 +58,11 @@ def parse_document(file: UploadFile = File(..., description="PDF, DOCX or TXT ex
 @app.post("/api/v1/ai/generate-exam", response_model=ExamGenerationResponse)
 def generate_exam(payload: GenerateExamRequest) -> ExamGenerationResponse:
     return ai_service.generate_exam(payload)
+
+
+@app.post("/api/v1/ai/grade-subjective", response_model=GradeSubjectiveResponse)
+def grade_subjective(payload: GradeSubjectiveRequest) -> GradeSubjectiveResponse:
+    return ai_service.grade_subjective(payload)
 
 
 if __name__ == "__main__":

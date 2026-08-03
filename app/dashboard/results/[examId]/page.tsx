@@ -13,6 +13,7 @@ import {
   Loader2,
   Mail,
   RefreshCw,
+  ShieldAlert,
   TrendingUp,
   Users2,
 } from "lucide-react";
@@ -41,6 +42,7 @@ interface SessionResult {
     answer_text: string | null;
     is_correct: boolean | null;
     marks_awarded: number | null;
+    needs_review: boolean;
   }[];
 }
 
@@ -227,6 +229,48 @@ export default function ExamResultsPage() {
     }
   }, [examId, loadResults]);
 
+  const [exportingCsv, setExportingCsv] = useState(false);
+
+  const exportCsv = useCallback(async () => {
+    setExportingCsv(true);
+    try {
+      const res = await fetch(`/api/v1/exams/${examId}/results/export`, {
+        credentials: "include",
+        headers: { ...authHeaders() },
+      });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as {
+          message?: string;
+        };
+        toast({
+          title: "Couldn't export results",
+          description: payload?.message ?? "The server returned an error.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? `Results_${examId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({
+        title: "Couldn't export results",
+        description: "Network unavailable. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExportingCsv(false);
+    }
+  }, [examId]);
+
   const downloadMarksheet = useCallback(
     async (sessionId: string) => {
       setDownloads((prev) => ({ ...prev, [sessionId]: true }));
@@ -346,6 +390,19 @@ export default function ExamResultsPage() {
             {grading ? "Grading…" : "Grade remaining"}
           </Button>
           <Button
+            variant="outline"
+            className="h-10 gap-2 border-border/40"
+            onClick={() => void exportCsv()}
+            disabled={exportingCsv || loading}
+          >
+            {exportingCsv ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4" />
+            )}
+            {exportingCsv ? "Exporting…" : "Export CSV"}
+          </Button>
+          <Button
             className="h-10 gap-2"
             onClick={() => void emailScorecards()}
             disabled={emailing || loading}
@@ -417,6 +474,15 @@ export default function ExamResultsPage() {
                     {session.studentName}
                   </p>
                   <StatusBadge status={session.status} />
+                  {session.answers.some((a) => a.needs_review) && (
+                    <span
+                      title="At least one answer was flagged for manual review (low AI confidence)."
+                      className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200"
+                    >
+                      <ShieldAlert className="h-3 w-3" />
+                      Needs review
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 truncate text-xs text-muted-foreground">
                   {session.enrollmentNumber ?? "No enrollment no."} ·{" "}

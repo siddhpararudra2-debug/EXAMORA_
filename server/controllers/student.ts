@@ -69,6 +69,18 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
     // Generate cryptographically secure random session token
     const sessionToken = crypto.randomUUID();
 
+    // E15 — pre-generate the per-session shuffle seed when the exam shuffles
+    // questions OR options, so every student's paper is fixed from the moment
+    // they join (and stays stable across refreshes).
+    const examSettings = (exam.settings ?? {}) as {
+      shuffleQuestions?: boolean;
+      shuffleOptions?: boolean;
+    };
+    const shuffle_seed =
+      examSettings.shuffleQuestions || examSettings.shuffleOptions
+        ? 1 + Math.floor(Math.random() * 2147483646)
+        : null;
+
     // Create student session
     const studentSession = await prisma.examSession.create({
       data: {
@@ -77,6 +89,7 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
         student_email: studentEmail,
         enrollment_number: enrollmentNo,
         session_token: sessionToken,
+        shuffle_seed,
       },
     });
 

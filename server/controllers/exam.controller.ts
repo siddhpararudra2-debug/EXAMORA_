@@ -16,6 +16,11 @@ import {
   publishExamService,
   unpublishExamService,
 } from '../../packages/database/src/exam.service.js';
+import {
+  normalizeExamSettings,
+  shuffleQuestionsForStudent,
+  newShuffleSeed,
+} from '../../packages/database/src/shuffle.service.js';
 import { gradeAllSubmissionsForExam, GRADED_STATUSES } from '../../packages/database/src/grading.service.js';
 
 const prisma = new PrismaClient();
@@ -133,6 +138,27 @@ export const getStudentView = async (
       return;
     }
 
+    // E15 — deterministic per-student question/option shuffling. The seed is
+    // persisted on the session the first time it is needed, so a page refresh
+    // reproduces the exact same paper for this student.
+    const settings = normalizeExamSettings(exam.settings);
+    let seed = session.shuffle_seed;
+    // Options-only shuffling also needs a stable per-session seed — otherwise
+    // every student would derive the same option order from seed 0.
+    const shufflingEnabled = settings.shuffleQuestions || settings.shuffleOptions;
+    if (shufflingEnabled && seed === null) {
+      seed = newShuffleSeed();
+      await prisma.examSession.update({
+        where: { id: session.id },
+        data: { shuffle_seed: seed },
+      });
+    }
+    const questions = shuffleQuestionsForStudent(
+      exam.questions,
+      settings,
+      seed ?? 0,
+    );
+
     const warningsCount = await prisma.violation.count({
       where: { session_id: session.id },
     });
@@ -140,7 +166,12 @@ export const getStudentView = async (
     res.json({
       status: 'success',
       data: {
-        exam,
+        exam: {
+          ...exam,
+          questions,
+          // Only supervision flags are exposed to students — never internal settings.
+          settings: { supervision: settings.supervision },
+        },
         session: {
           id: session.id,
           studentName: session.student_name,
@@ -585,6 +616,7 @@ export const getExamResults = async (
               answer_text: true,
               is_correct: true,
               marks_awarded: true,
+              needs_review: true,
             },
             orderBy: { created_at: 'asc' },
           },
