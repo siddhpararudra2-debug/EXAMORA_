@@ -12,15 +12,13 @@ import {
   LockKeyhole,
   Loader2,
   ShieldCheck,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,7 +32,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { setAuthToken } from "@/lib/auth-token";
 
-const loginSchema = z.object({
+const registerSchema = z.object({
+  name: z.string().min(2, { message: "Name is required (min 2 chars)" }),
   email: z
     .string()
     .min(1, { message: "Email is required" })
@@ -44,26 +43,26 @@ const loginSchema = z.object({
     .min(8, { message: "Password must be at least 8 characters" }),
 });
 
-type LoginForm = z.infer<typeof loginSchema>;
+type RegisterForm = z.infer<typeof registerSchema>;
 
-export default function TeacherLoginPage() {
+export default function TeacherRegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState("");
 
-  const form = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+  const form = useForm<RegisterForm>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: { name: "", email: "", password: "" },
     mode: "onTouched",
   });
 
-  const onSubmit = async (data: LoginForm) => {
+  const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
     setServerError("");
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -72,17 +71,11 @@ export default function TeacherLoginPage() {
       const result = (await res.json().catch(() => ({}))) as {
         status?: string;
         message?: string;
-        ok?: boolean;
-        teacher?: { id: string; name: string; email: string };
         data?: { user: { id: string; name: string; email: string }; token: string };
       };
 
       if (!res.ok) {
-        const msg =
-          result?.message === "CredentialsSignin" || !result?.message
-            ? "Invalid email or password"
-            : result.message;
-        setServerError(msg);
+        setServerError(result?.message || "Failed to create account. Please try again.");
         return;
       }
 
@@ -90,27 +83,18 @@ export default function TeacherLoginPage() {
         setAuthToken(result.data.token);
         if (result.data.user) {
           setAuthUser(result.data.user);
-        } else if (result.teacher) {
-          setAuthUser(result.teacher);
         }
         toast({
-          title: "Signed in",
-          description: result.data.user?.name
-            ? `Welcome back, ${result.data.user.name}.`
-            : "Redirecting to your dashboard.",
+          title: "Account Created!",
+          description: `Welcome, ${result.data.user.name}. Redirecting to your dashboard.`,
         });
+        
+        router.push("/dashboard");
+        router.refresh();
       } else {
-        toast({
-          title: "Signed in",
-          description: result.teacher
-            ? `Welcome back, ${result.teacher.name}.`
-            : "Redirecting to your dashboard.",
-        });
+        setServerError("Invalid server response.");
       }
-
-      router.push("/dashboard");
-      router.refresh();
-    } catch {
+    } catch (err) {
       setServerError("Network error. Please make sure the backend server is running.");
     } finally {
       setIsLoading(false);
@@ -123,16 +107,16 @@ export default function TeacherLoginPage() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
            style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
 
-      <div className="relative z-10 w-full max-w-md px-4 sm:px-8">
+      <div className="relative z-10 w-full max-w-md px-4 sm:px-8 py-10">
         <div className="mb-10 text-center animate-in slide-in-from-bottom-4 fade-in duration-700">
           <Link href="/" className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-6 shadow-sm">
             <GraduationCap className="h-6 w-6" />
           </Link>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Welcome back
+            Create an account
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign in to manage your exams and students.
+            Sign up to manage your exams and students.
           </p>
         </div>
 
@@ -156,6 +140,35 @@ export default function TeacherLoginPage() {
                     <span>{serverError}</span>
                   </div>
                 )}
+
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium">
+                        Full Name
+                      </FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <User
+                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            aria-hidden
+                          />
+                          <Input
+                            placeholder="John Doe"
+                            type="text"
+                            autoComplete="name"
+                            className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white transition-colors"
+                            {...field}
+                            disabled={isLoading}
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
@@ -191,17 +204,9 @@ export default function TeacherLoginPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <div className="flex items-center justify-between">
-                        <FormLabel className="text-sm font-medium">
-                          Password
-                        </FormLabel>
-                        <Link
-                          href="/forgot-password"
-                          className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          Forgot password?
-                        </Link>
-                      </div>
+                      <FormLabel className="text-sm font-medium">
+                        Password
+                      </FormLabel>
                       <FormControl>
                         <div className="relative">
                           <LockKeyhole
@@ -211,7 +216,7 @@ export default function TeacherLoginPage() {
                           <Input
                             placeholder="••••••••"
                             type="password"
-                            autoComplete="current-password"
+                            autoComplete="new-password"
                             className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white transition-colors"
                             {...field}
                             disabled={isLoading}
@@ -231,10 +236,10 @@ export default function TeacherLoginPage() {
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in…
+                      Creating account…
                     </>
                   ) : (
-                    "Sign in"
+                    "Create Account"
                   )}
                 </Button>
               </form>
@@ -243,21 +248,12 @@ export default function TeacherLoginPage() {
 
           <CardFooter className="flex flex-col gap-2 border-t border-border/40 py-6 text-center">
             <p className="text-sm text-muted-foreground">
-              New to Examora?{" "}
+              Already have an account?{" "}
               <Link
-                href="/register"
+                href="/login"
                 className="font-medium text-foreground hover:underline"
               >
-                Create an account
-              </Link>
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Are you a student?{" "}
-              <Link
-                href="/join"
-                className="font-medium text-foreground hover:underline"
-              >
-                Join an exam
+                Sign in
               </Link>
             </p>
           </CardFooter>

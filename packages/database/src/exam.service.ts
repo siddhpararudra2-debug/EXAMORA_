@@ -74,6 +74,9 @@ export async function createExamWithQuestions(
           })),
         },
       },
+      include: {
+        questions: true,
+      },
     });
   });
 }
@@ -174,7 +177,7 @@ export async function publishExamService(
     return tx.exam.update({
       where: { id: examId },
       data: {
-        status: ExamStatus.PUBLISHED,
+        status: ExamStatus.ACTIVE,
         published_at: new Date(),
         access_uuid,
         qr_code_url,

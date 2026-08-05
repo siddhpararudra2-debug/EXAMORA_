@@ -32,8 +32,20 @@ function initials(name: string) {
     .toUpperCase();
 }
 
+import { getAuthUser, clearAuthToken } from "@/lib/auth-token";
+
+// ...
 export function TopNav({ className, onMenuClick, teacher }: TopNavProps) {
-  const t = teacher ?? DEFAULT_TEACHER;
+  const [authUser, setAuthUser] = React.useState<{ name: string; email?: string } | null>(null);
+
+  React.useEffect(() => {
+    const user = getAuthUser();
+    if (user) {
+      setAuthUser(user);
+    }
+  }, []);
+
+  const t = teacher ?? authUser ?? DEFAULT_TEACHER;
   const { toast } = useToast();
   const router = useRouter();
 
@@ -44,6 +56,7 @@ export function TopNav({ className, onMenuClick, teacher }: TopNavProps) {
         credentials: "include",
       }).catch(() => void 0);
     } finally {
+      clearAuthToken();
       toast({
         title: "Signed out",
         description: "You have been logged out of the teacher dashboard.",

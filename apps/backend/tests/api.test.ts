@@ -311,7 +311,7 @@ describe('POST /api/v1/exam-session/:token/submit', () => {
       where: { session_token: sessionToken },
       select: { total_score: true, status: true },
     });
-    expect(session?.total_score).toBe(4);
+    expect(Number(session?.total_score)).toBe(4);
     expect(session?.status).toBe('SUBMITTED');
   });
 });
