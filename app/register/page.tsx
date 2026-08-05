@@ -30,7 +30,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { setAuthToken } from "@/lib/auth-token";
+import { setAuthToken, setAuthUser } from "@/lib/auth-token";
 
 const registerSchema = z.object({
   name: z.string().min(2, { message: "Name is required (min 2 chars)" }),
