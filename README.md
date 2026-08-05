@@ -24,7 +24,8 @@ Examora is a 100% free and open-source AI-proctored online exam platform. Teache
   <img alt="Docs" src="https://img.shields.io/badge/docs-API_Reference-blueviolet" />
 </p>
 
-> 📖 Full endpoint documentation (Zod schemas, curl examples, error codes): **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)**
+> 🚀 **Live Vercel Production Deployment**: **[https://examora-delta.vercel.app](https://examora-delta.vercel.app)**  
+> 📖 Full API Documentation (Zod schemas, curl examples, error codes): **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)**
 
 ---
 
