@@ -1,6 +1,5 @@
 import request from 'supertest';
 import prisma from '../../../prisma/client.js';
-import { createApp } from '../../../server/app.js';
 
 // ── Mock external services (hoisted by Jest) ─────────────────────────────────
 
@@ -40,7 +39,7 @@ jest.mock('groq-sdk', () => ({
 }));
 
 import nodemailer from 'nodemailer';
-import { createApp } from '../../server/app.js';
+import { createApp } from '../../../server/app.js';
 
 const { app } = createApp({ withSocket: false });
 
