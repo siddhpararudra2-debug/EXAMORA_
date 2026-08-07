@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Socket } from "socket.io-client";
+import { authHeaders } from "@/lib/auth-token";
 import {
   Activity,
   ArrowLeft,
@@ -227,6 +228,7 @@ export default function LiveProctoringDashboard() {
     try {
       const res = await fetch(`/api/exams/${examId}/sessions`, {
         credentials: "include",
+        headers: { ...authHeaders() },
       });
       if (res.ok) {
         const data = (await res.json()) as {

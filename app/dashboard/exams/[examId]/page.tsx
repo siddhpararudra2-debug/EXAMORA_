@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BulkInviteModal } from "@/components/exams/BulkInviteModal";
+import { authHeaders } from "@/lib/auth-token";
 
 interface ExamDetail {
   id: string;
@@ -47,6 +48,7 @@ export default function TeacherExamDetailsPage() {
       try {
         const res = await fetch(`/api/exams/${params.examId}`, {
           credentials: "include",
+          headers: { ...authHeaders() },
         });
         if (res.ok) {
           const data = await res.json();

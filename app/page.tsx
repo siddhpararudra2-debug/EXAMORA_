@@ -126,8 +126,8 @@ export default function HomePage() {
             © {new Date().getFullYear()} Examora. MIT License.
           </p>
           <div className="flex gap-6 text-sm text-muted-foreground font-medium">
-            <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
-            <a href="#" className="hover:text-foreground transition-colors">Terms</a>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+            <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
             <a href="https://github.com/siddhpararudra2-debug/EXAMORA_" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">GitHub</a>
           </div>
         </div>

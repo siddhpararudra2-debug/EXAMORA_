@@ -32,9 +32,8 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-import { getAuthUser, clearAuthToken } from "@/lib/auth-token";
+import { getAuthUser, setAuthUser as saveAuthUser, clearAuthToken, authHeaders } from "@/lib/auth-token";
 
-// ...
 export function TopNav({ className, onMenuClick, teacher }: TopNavProps) {
   const [authUser, setAuthUser] = React.useState<{ name: string; email?: string } | null>(null);
 
@@ -43,6 +42,26 @@ export function TopNav({ className, onMenuClick, teacher }: TopNavProps) {
     if (user) {
       setAuthUser(user);
     }
+    async function verifyAuth() {
+      const headers = authHeaders();
+      if (!headers.Authorization) return;
+      try {
+        const res = await fetch("/api/auth/me", {
+          credentials: "include",
+          headers,
+        });
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload.data?.user) {
+            saveAuthUser(payload.data.user);
+            setAuthUser(payload.data.user);
+          }
+        }
+      } catch {
+        // Silently keep local state if offline
+      }
+    }
+    void verifyAuth();
   }, []);
 
   const t = teacher ?? authUser ?? DEFAULT_TEACHER;

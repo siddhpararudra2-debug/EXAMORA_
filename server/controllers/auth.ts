@@ -101,3 +101,30 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     next(error);
   }
 };
+
+export const getMe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const teacherPayload = (req as any).teacher;
+    if (!teacherPayload || !teacherPayload.userId) {
+      res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      return;
+    }
+
+    const user = await prisma.teacher.findUnique({
+      where: { id: teacherPayload.userId },
+      select: { id: true, name: true, email: true, created_at: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ status: 'error', message: 'User not found' });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      data: { user },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

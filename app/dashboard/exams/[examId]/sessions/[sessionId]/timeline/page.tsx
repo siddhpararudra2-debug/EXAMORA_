@@ -15,6 +15,7 @@ import {
   Award,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { authHeaders } from "@/lib/auth-token";
 import {
   ProctoringTimeline,
   ProctoringEvent,
@@ -54,7 +55,7 @@ export default function ProctoringTimelinePage() {
       try {
         const res = await fetch(
           `/api/exams/${params.examId}/sessions/${params.sessionId}/events`,
-          { credentials: "include" }
+          { credentials: "include", headers: { ...authHeaders() } }
         );
 
         if (res.ok) {

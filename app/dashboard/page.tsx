@@ -138,11 +138,13 @@ export default function DashboardHomePage() {
         setExams(payload.data.exams);
         return;
       }
+      setExams(DEMO_EXAMS);
     } catch {
-      // Backend unavailable — fall back to demo data below.
+      // Backend unavailable — fall back to demo data.
+      setExams(DEMO_EXAMS);
+    } finally {
+      setLoading(false);
     }
-    setExams(DEMO_EXAMS);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
