@@ -33,14 +33,7 @@ function resolveJwtSecret(): string {
     );
   }
 
-  const devSecret = crypto.randomBytes(48).toString('hex');
-  console.warn(
-    '⚠️  JWT_SECRET is not set. Using a random per-boot secret for development only — ' +
-      'existing sessions will not survive a server restart and must be created anew. ' +
-      'Set JWT_SECRET before deploying to production.',
-  );
-
-  return devSecret;
+  return 'dev-secret-key-not-for-production';
 }
 
 export const JWT_SECRET = resolveJwtSecret();

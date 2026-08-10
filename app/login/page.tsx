@@ -67,43 +67,51 @@ export default function TeacherLoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          email: data.email.trim().toLowerCase(),
+          password: data.password,
+        }),
       });
+
       const result = (await res.json().catch(() => ({}))) as {
         status?: string;
         message?: string;
+        error?: string;
         ok?: boolean;
+        user?: { id: string; name: string; email: string };
+        token?: string;
         teacher?: { id: string; name: string; email: string };
         data?: { user: { id: string; name: string; email: string }; token: string };
       };
 
       if (!res.ok) {
         const msg =
-          result?.message === "CredentialsSignin" || !result?.message
+          result?.message === "CredentialsSignin" || (!result?.message && !result?.error)
             ? "Invalid email or password"
-            : result.message;
-        setServerError(msg);
+            : result.message || result.error;
+        setServerError(msg ?? "Invalid credentials");
         return;
       }
 
-      if (result?.data?.token) {
-        setAuthToken(result.data.token);
-        if (result.data.user) {
-          setAuthUser(result.data.user);
-        } else if (result.teacher) {
-          setAuthUser(result.teacher);
+      const token = result?.data?.token || result?.token;
+      const user = result?.data?.user || result?.user || result?.teacher;
+
+      if (token) {
+        setAuthToken(token);
+        if (user) {
+          setAuthUser(user);
         }
         toast({
           title: "Signed in",
-          description: result.data.user?.name
-            ? `Welcome back, ${result.data.user.name}.`
+          description: user?.name
+            ? `Welcome back, ${user.name}.`
             : "Redirecting to your dashboard.",
         });
       } else {
         toast({
           title: "Signed in",
-          description: result.teacher
-            ? `Welcome back, ${result.teacher.name}.`
+          description: user?.name
+            ? `Welcome back, ${user.name}.`
             : "Redirecting to your dashboard.",
         });
       }

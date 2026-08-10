@@ -25,7 +25,8 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
-    const { name, email, password } = validation.data!;
+    const { name, email: rawEmail, password } = validation.data!;
+    const email = rawEmail.trim().toLowerCase();
 
     // Check if teacher already exists
     const existingUser = await prisma.teacher.findUnique({ where: { email } });
@@ -39,7 +40,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
     // Create teacher
     const user = await prisma.teacher.create({
-      data: { name, email, password_hash: hashedPassword },
+      data: { name: name.trim(), email, password_hash: hashedPassword },
       select: { id: true, name: true, email: true, created_at: true },
     });
 
@@ -53,6 +54,8 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     res.status(201).json({
       status: 'success',
       data: { user, token },
+      user,
+      token,
     });
   } catch (error) {
     next(error);
@@ -67,7 +70,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       return;
     }
 
-    const { email, password } = validation.data!;
+    const { email: rawEmail, password } = validation.data!;
+    const email = rawEmail.trim().toLowerCase();
 
     // Find teacher
     const user = await prisma.teacher.findUnique({ where: { email } });
@@ -96,6 +100,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         user: { id: user.id, name: user.name, email: user.email },
         token,
       },
+      user: { id: user.id, name: user.name, email: user.email },
+      token,
     });
   } catch (error) {
     next(error);

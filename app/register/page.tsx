@@ -66,36 +66,50 @@ export default function TeacherRegisterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          name: data.name.trim(),
+          email: data.email.trim().toLowerCase(),
+          password: data.password,
+        }),
       });
+
       const result = (await res.json().catch(() => ({}))) as {
         status?: string;
         message?: string;
+        error?: string;
+        user?: { id: string; name: string; email: string };
+        token?: string;
         data?: { user: { id: string; name: string; email: string }; token: string };
       };
 
       if (!res.ok) {
-        setServerError(result?.message || "Failed to create account. Please try again.");
+        setServerError(result?.message || result?.error || "Failed to create account. Please try again.");
         return;
       }
 
-      if (result?.data?.token) {
-        setAuthToken(result.data.token);
-        if (result.data.user) {
-          setAuthUser(result.data.user);
+      const token = result?.data?.token || result?.token;
+      const user = result?.data?.user || result?.user;
+
+      if (token) {
+        setAuthToken(token);
+        if (user) {
+          setAuthUser(user);
         }
         toast({
           title: "Account Created!",
-          description: `Welcome, ${result.data.user.name}. Redirecting to your dashboard.`,
+          description: user?.name
+            ? `Welcome, ${user.name}. Redirecting to your dashboard.`
+            : "Redirecting to your dashboard.",
         });
         
         router.push("/dashboard");
         router.refresh();
       } else {
-        setServerError("Invalid server response.");
+        setServerError("Account created, but authentication token was not returned. Please sign in.");
       }
     } catch (err) {
-      setServerError("Network error. Please make sure the backend server is running.");
+      console.error("Register request failed:", err);
+      setServerError("Network error. Please make sure the backend server is reachable.");
     } finally {
       setIsLoading(false);
     }
