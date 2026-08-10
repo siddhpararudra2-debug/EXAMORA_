@@ -14,6 +14,7 @@ import {
   Share2,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export default function TeacherExamDetailsPage() {
 
   const [exam, setExam] = useState<ExamDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
@@ -51,11 +53,16 @@ export default function TeacherExamDetailsPage() {
           headers: { ...authHeaders() },
         });
         if (res.ok) {
-          const data = await res.json();
-          if (isMounted) setExam(data);
+          const payload = await res.json();
+          const data = payload.data?.exam ?? payload.exam ?? payload;
+          if (isMounted) {
+            setExam(data);
+            setIsDemoMode(false);
+          }
         } else {
           // Fallback mock exam detail
           if (isMounted) {
+            setIsDemoMode(true);
             setExam({
               id: params.examId,
               title: "Midterm Examination — Computer Networks & Security",
@@ -69,7 +76,9 @@ export default function TeacherExamDetailsPage() {
           }
         }
       } catch (err) {
+        console.warn("Error loading exam details from server:", err);
         if (isMounted) {
+          setIsDemoMode(true);
           setExam({
             id: params.examId,
             title: "Midterm Examination — Computer Networks & Security",
@@ -131,6 +140,16 @@ export default function TeacherExamDetailsPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-6 sm:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
+        {/* Demo Mode Banner */}
+        {isDemoMode && (
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="flex-1 text-sm leading-tight">
+              <span className="font-semibold">Demo / Preview Mode:</span> Could not retrieve live exam details from server. Showing sample exam information.
+            </div>
+          </div>
+        )}
+
         {/* Navigation Top Bar */}
         <div className="flex items-center justify-between">
           <Link

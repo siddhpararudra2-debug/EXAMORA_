@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   Award,
   BarChart3,
   CheckCircle2,
@@ -72,9 +74,25 @@ function StatusBadge({ status }: { status: ExamListItem["status"] }) {
   );
 }
 
-export default function ResultsPage() {
+function ResultsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const examIdParam = searchParams.get("examId");
+  const sessionIdParam = searchParams.get("sessionId");
+
   const [exams, setExams] = useState<ExamListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  // Auto-redirect if examId is present in query string
+  useEffect(() => {
+    if (examIdParam) {
+      const target = `/dashboard/results/${encodeURIComponent(examIdParam)}${
+        sessionIdParam ? `?sessionId=${encodeURIComponent(sessionIdParam)}` : ""
+      }`;
+      router.replace(target);
+    }
+  }, [examIdParam, sessionIdParam, router]);
 
   const loadExams = useCallback(async () => {
     setLoading(true);
@@ -87,22 +105,26 @@ export default function ResultsPage() {
         const payload = (await res.json()) as {
           data: { exams: ExamListItem[] };
         };
-        setExams(payload.data.exams);
-        return;
+        if (payload.data?.exams) {
+          setExams(payload.data.exams);
+          setIsDemoMode(false);
+          return;
+        }
       }
-    } catch {
-      // Backend unavailable — fall back to demo data below.
+      setIsDemoMode(true);
+      setExams(DEMO_EXAMS);
+    } catch (err) {
+      console.warn("Could not fetch exams for results page:", err);
+      setIsDemoMode(true);
+      setExams(DEMO_EXAMS);
+    } finally {
+      setLoading(false);
     }
-    setExams(DEMO_EXAMS);
   }, []);
 
   useEffect(() => {
     void loadExams();
   }, [loadExams]);
-
-  useEffect(() => {
-    if (exams) setLoading(false);
-  }, [exams]);
 
   const stats = useMemo(() => {
     const list = exams ?? [];
@@ -118,6 +140,24 @@ export default function ResultsPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Demo / Offline Mode Banner */}
+      {isDemoMode && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1 text-sm leading-tight">
+            <span className="font-semibold">Demo / Preview Mode:</span> Backend server is unreachable. Displaying sample exam results.
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void loadExams()}
+            className="h-8 border-amber-500/40 text-xs text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -236,5 +276,22 @@ export default function ResultsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[400px] items-center justify-center">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            Loading results…
+          </div>
+        </div>
+      }
+    >
+      <ResultsContent />
+    </Suspense>
   );
 }

@@ -45,6 +45,7 @@ export default function ProctoringTimelinePage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState<boolean>(true);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [session, setSession] = useState<StudentSessionDetail | null>(null);
 
   useEffect(() => {
@@ -59,11 +60,17 @@ export default function ProctoringTimelinePage() {
         );
 
         if (res.ok) {
-          const data = await res.json();
-          if (isMounted) setSession(data);
+          const payload = await res.json();
+          const sessionData: StudentSessionDetail = payload.data?.session ?? payload.session ?? payload;
+          const eventsList = payload.data?.events ?? payload.events ?? sessionData.events ?? [];
+          if (isMounted) {
+            setSession({ ...sessionData, events: eventsList });
+            setIsDemoMode(false);
+          }
         } else {
           // Fallback mock data for testing/demo
           if (isMounted) {
+            setIsDemoMode(true);
             const now = new Date();
             const start = new Date(now.getTime() - 25 * 60 * 1000).toISOString();
             setSession({
@@ -105,6 +112,40 @@ export default function ProctoringTimelinePage() {
         }
       } catch (err) {
         console.warn("API timeline load error, falling back to demo view:", err);
+        if (isMounted) {
+          setIsDemoMode(true);
+          const now = new Date();
+          const start = new Date(now.getTime() - 25 * 60 * 1000).toISOString();
+          setSession({
+            id: params.sessionId,
+            examId: params.examId,
+            examTitle: "Midterm Examination — Computer Networks & Security",
+            studentName: "Rudra Siddhpara",
+            studentEmail: "rudra@examora.edu",
+            enrollmentNo: "ENR20268892",
+            totalWarnings: 2,
+            warningsLimit: 3,
+            finalScore: 85,
+            maxScore: 100,
+            status: "SUBMITTED",
+            examStartTime: start,
+            examDurationMinutes: 60,
+            events: [
+              {
+                id: "e1",
+                type: "TAB_SWITCH",
+                occurred_at: new Date(new Date(start).getTime() + 4 * 60 * 1000).toISOString(),
+                description: "Tab switch detected: switched to browser window.",
+              },
+              {
+                id: "e2",
+                type: "AI_OVERLAY",
+                occurred_at: new Date(new Date(start).getTime() + 12 * 60 * 1000).toISOString(),
+                description: "AI overlay detected over the exam window.",
+              },
+            ],
+          });
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -152,14 +193,33 @@ export default function ProctoringTimelinePage() {
   return (
     <div className="min-h-screen bg-slate-50 p-6 sm:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
+        {/* Demo Mode Banner */}
+        {isDemoMode && (
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="flex-1 text-sm leading-tight">
+              <span className="font-semibold">Demo / Preview Mode:</span> Proctoring telemetry server unreachable. Showing sample violation timeline events.
+            </div>
+          </div>
+        )}
+
         {/* Navigation Top Bar */}
         <div className="flex items-center justify-between">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600 transition"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back to Live Proctoring
-          </button>
+          <div className="flex items-center gap-4">
+            <Link
+              href={`/dashboard/results/${params.examId}?sessionId=${params.sessionId}`}
+              className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600 transition"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back to Results
+            </Link>
+            <span className="text-slate-300">|</span>
+            <Link
+              href={`/dashboard/live/${params.examId}`}
+              className="text-xs font-medium text-slate-500 hover:text-indigo-600 transition"
+            >
+              Live Monitor
+            </Link>
+          </div>
           <span className="rounded-full bg-indigo-50 border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-700">
             Audit Log ID: {session.id.substring(0, 8)}
           </span>

@@ -7,8 +7,10 @@ import { Socket } from "socket.io-client";
 import { authHeaders } from "@/lib/auth-token";
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   CircleDot,
+  History,
   Loader2,
   MonitorPlay,
   OctagonX,
@@ -169,6 +171,7 @@ export default function LiveProctoringDashboard() {
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [examMeta, setExamMeta] = useState<{
     title: string;
     startedAt?: string;
@@ -239,14 +242,18 @@ export default function LiveProctoringDashboard() {
         setSessions(
           (data.sessions ?? []).map((s) => ({ ...s, _new: false }))
         );
+        setIsDemoMode(false);
       } else {
+        setIsDemoMode(true);
         setExamMeta({
           title: "Midterm Examination — Introduction to Computer Science",
           startedAt: new Date(Date.now() - 22 * 60_000).toISOString(),
         });
         setSessions(mockSessions(examId).map((s) => ({ ...s, _new: false })));
       }
-    } catch {
+    } catch (err) {
+      console.warn("Failed to load live sessions from server:", err);
+      setIsDemoMode(true);
       setExamMeta({
         title: "Midterm Examination — Introduction to Computer Science",
         startedAt: new Date(Date.now() - 22 * 60_000).toISOString(),
@@ -335,7 +342,9 @@ export default function LiveProctoringDashboard() {
       if (socket) {
         try {
           socket.emit("teacher_leave_exam_room", { examId });
-        } catch {}
+        } catch (err) {
+          console.debug("Error while leaving teacher exam room:", err);
+        }
         socket.off("connect");
         socket.off("disconnect");
         socket.off("exam_room_joined");
@@ -358,6 +367,24 @@ export default function LiveProctoringDashboard() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+      {/* Demo Mode Banner */}
+      {isDemoMode && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1 text-sm leading-tight">
+            <span className="font-semibold">Demo / Offline Monitor Mode:</span> Live session backend is unreachable. Displaying simulated student telemetry.
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void loadInitial()}
+            className="h-8 border-amber-500/40 text-xs text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
       {/* Header */}
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between animate-in slide-in-from-bottom-2 fade-in duration-500">
         <div>
@@ -587,23 +614,37 @@ export default function LiveProctoringDashboard() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between border-t border-border/40 pt-5 mt-1">
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground/50">
+                  <div className="flex items-center justify-between border-t border-border/40 pt-5 mt-1 gap-2">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground/50 truncate">
                       {s.id.length > 10
                         ? `…${s.id.slice(s.id.length - 10)}`
                         : s.id}
                     </p>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-8 px-3 text-xs font-semibold rounded-full"
-                      asChild
-                    >
-                      <Link href={`/dashboard/results?examId=${encodeURIComponent(examId)}&sessionId=${encodeURIComponent(s.id)}`}>
-                        View Session
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs font-semibold rounded-full gap-1 border-border/40 hover:bg-primary/5 hover:text-primary"
+                        asChild
+                      >
+                        <Link href={`/dashboard/exams/${encodeURIComponent(examId)}/sessions/${encodeURIComponent(s.id)}/timeline`}>
+                          <History className="h-3.5 w-3.5 text-primary" />
+                          Timeline
+                        </Link>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 px-3 text-xs font-semibold rounded-full"
+                        asChild
+                      >
+                        <Link href={`/dashboard/results/${encodeURIComponent(examId)}?sessionId=${encodeURIComponent(s.id)}`}>
+                          View Session
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

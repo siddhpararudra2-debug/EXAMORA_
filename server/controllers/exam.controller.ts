@@ -75,6 +75,161 @@ export const createExam = async (
   }
 };
 
+// ── GET /api/exams/:id ────────────────────────────────────────────────────────
+// Protected: requires valid teacher JWT. Returns full exam details + questions for editing/viewing.
+export const getExamDetails = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const exam = await prisma.exam.findFirst({
+      where: { id: examId, created_by: teacher.userId },
+      include: {
+        questions: {
+          orderBy: { order_index: 'asc' },
+        },
+        _count: {
+          select: { questions: true, sessions: true },
+        },
+      },
+    });
+
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    const [activeCount, completedCount] = await Promise.all([
+      prisma.examSession.count({
+        where: { exam_id: examId, status: SubmissionStatus.IN_PROGRESS },
+      }),
+      prisma.examSession.count({
+        where: {
+          exam_id: examId,
+          status: { in: [SubmissionStatus.SUBMITTED, SubmissionStatus.AUTO_SUBMITTED, SubmissionStatus.TERMINATED] },
+        },
+      }),
+    ]);
+
+    const examData = {
+      id: exam.id,
+      title: exam.title,
+      description: exam.description ?? '',
+      durationMinutes: exam.duration_minutes,
+      totalMarks: exam.total_marks,
+      status: exam.status,
+      settings: exam.settings,
+      accessUuid: exam.access_uuid,
+      qrCodeUrl: exam.qr_code_url,
+      questionsCount: exam._count.questions,
+      sessionsCount: exam._count.sessions,
+      activeSessionsCount: activeCount,
+      completedSessionsCount: completedCount,
+      questions: exam.questions.map((q) => ({
+        id: q.id,
+        type: q.type,
+        questionText: q.question_text,
+        options: q.options,
+        correctAnswer: q.correct_answer,
+        marks: q.marks,
+        orderIndex: q.order_index,
+      })),
+    };
+
+    res.json({
+      status: 'success',
+      data: { exam: examData },
+      exam: examData,
+      id: examData.id,
+      title: examData.title,
+      description: examData.description,
+      durationMinutes: examData.durationMinutes,
+      totalMarks: examData.totalMarks,
+      settings: examData.settings,
+      accessUuid: examData.accessUuid,
+      qrCodeUrl: examData.qrCodeUrl,
+      questionsCount: examData.questionsCount,
+      sessionsCount: examData.sessionsCount,
+      activeSessionsCount: examData.activeSessionsCount,
+      completedSessionsCount: examData.completedSessionsCount,
+      questions: examData.questions,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── PUT /api/exams/:id ────────────────────────────────────────────────────────
+// Protected: requires valid teacher JWT. Updates an existing draft exam.
+export const updateExam = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const parsed = validate<CreateExamInput>(createExamSchema, req.body);
+    if (!parsed.success) {
+      res.status(400).json({ status: 'error', message: parsed.error });
+      return;
+    }
+
+    const existing = await prisma.exam.findFirst({
+      where: { id: examId, created_by: teacher.userId },
+    });
+
+    if (!existing) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    const { questions, ...examData } = parsed.data;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Delete previous questions
+      await tx.question.deleteMany({ where: { exam_id: examId } });
+
+      return tx.exam.update({
+        where: { id: examId },
+        data: {
+          title: examData.title,
+          description: examData.description ?? null,
+          duration_minutes: examData.durationMinutes,
+          total_marks: examData.totalMarks,
+          settings: examData.settings ? (examData.settings as any) : undefined,
+          questions: {
+            create: questions.map((q, idx) => ({
+              type: q.type,
+              question_text: q.questionText,
+              options:
+                q.options !== undefined && q.options !== null
+                  ? (q.options as any)
+                  : undefined,
+              correct_answer: q.correctAnswer ?? null,
+              marks: q.marks,
+              order_index: idx + 1,
+            })),
+          },
+        },
+        include: { questions: true },
+      });
+    });
+
+    res.json({
+      status: 'success',
+      data: { exam: updated },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ── GET /api/exams/:id/student-view ──────────────────────────────────────────
 // Public route — no teacher auth.
 // Requires a valid `sessionToken` in query-string OR x-session-token header.
@@ -537,7 +692,14 @@ export const getSessionEvents = async (
     const session = await prisma.examSession.findFirst({
       where: { id: sessionId, exam_id: examId },
       include: {
-        exam: { select: { created_by: true } },
+        exam: {
+          select: {
+            created_by: true,
+            title: true,
+            duration_minutes: true,
+            total_marks: true,
+          },
+        },
       },
     });
 
@@ -551,14 +713,48 @@ export const getSessionEvents = async (
       return;
     }
 
-    const events = await prisma.violation.findMany({
-      where: { session_id: sessionId },
-      orderBy: { occurred_at: 'asc' },
-    });
+    const [events, warningsCount] = await Promise.all([
+      prisma.violation.findMany({
+        where: { session_id: sessionId },
+        orderBy: { occurred_at: 'asc' },
+      }),
+      prisma.violation.count({
+        where: { session_id: sessionId },
+      }),
+    ]);
+
+    const formattedEvents = events.map((ev) => ({
+      id: ev.id,
+      type: ev.type,
+      occurred_at: ev.occurred_at.toISOString(),
+      description: ev.description || (ev.metadata ? (typeof ev.metadata === 'string' ? ev.metadata : JSON.stringify(ev.metadata)) : `${ev.type} violation detected`),
+    }));
+
+    const sessionDetail = {
+      id: session.id,
+      examId: session.exam_id,
+      examTitle: session.exam.title,
+      studentName: session.student_name,
+      studentEmail: session.student_email ?? '',
+      enrollmentNo: session.enrollment_number ?? '',
+      totalWarnings: warningsCount,
+      warningsLimit: 3,
+      finalScore: session.total_score !== null && session.total_score !== undefined ? Number(session.total_score) : undefined,
+      maxScore: session.exam.total_marks,
+      sessionStatus: session.status,
+      examStartTime: session.started_at.toISOString(),
+      examDurationMinutes: session.exam.duration_minutes,
+      events: formattedEvents,
+    };
 
     res.json({
       status: 'success',
-      data: { events },
+      data: {
+        events: formattedEvents,
+        session: { ...sessionDetail, status: session.status },
+      },
+      session: { ...sessionDetail, status: session.status },
+      events: formattedEvents,
     });
   } catch (err) {
     next(err);

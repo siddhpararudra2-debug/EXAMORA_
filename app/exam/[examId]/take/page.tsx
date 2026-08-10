@@ -159,6 +159,7 @@ function TakeExamContent() {
   const initialSessionToken = search.get("token") ?? undefined;
 
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [exam, setExam] = useState<ExamData | null>(null);
   const [session, setSession] = useState<SessionInit | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -254,15 +255,22 @@ function TakeExamContent() {
                   sessionToken: initialSessionToken,
                   studentName: serverSession.studentName,
                 };
+                setIsDemoMode(false);
               }
             }
-          } catch {
-            // Network failure — fall back to demo data below.
+          } catch (err) {
+            console.warn("Student view network fetch failed, using offline demo mode:", err);
           }
         }
 
-        if (!examData) examData = mockExamData(examId);
-        if (!sessionData) sessionData = mockSessionInit(examId);
+        if (!examData) {
+          examData = mockExamData(examId);
+          setIsDemoMode(true);
+        }
+        if (!sessionData) {
+          sessionData = mockSessionInit(examId);
+          setIsDemoMode(true);
+        }
 
         if (!canceled) {
           setExam(examData);
@@ -1097,6 +1105,14 @@ function TakeExamContent() {
 
       {!submitted && (
         <>
+          {/* Demo Mode Banner */}
+          {isDemoMode && (
+            <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 text-center text-xs sm:text-sm font-medium text-amber-900 dark:text-amber-200 flex items-center justify-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>Preview / Demo Mode: Live backend connection unavailable. Your answers will not be persisted to the server.</span>
+            </div>
+          )}
+
           {/* Top Bar */}
           <header className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-xl">
             <div className="mx-auto flex h-20 w-full max-w-5xl flex-wrap items-center gap-4 px-4 sm:px-6 lg:px-8">

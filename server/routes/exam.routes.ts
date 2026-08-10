@@ -6,6 +6,8 @@ import { validateBody } from '../middleware/security.js';
 import {
   createExam,
   listExams,
+  getExamDetails,
+  updateExam,
   getStudentView,
   getExamStatus,
   submitExam,
@@ -86,6 +88,20 @@ router.post(
   csvUpload.single('file'),
   inviteBulkStudents,
 );
+
+/**
+ * GET /api/exams/:id
+ * Fetch full exam details with questions for editing/viewing.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.get('/:id', requireTeacher, getExamDetails);
+
+/**
+ * PUT /api/exams/:id
+ * Update an existing draft exam.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.put('/:id', requireTeacher, validateBody(createExamSchema), updateExam);
 
 /**
  * GET /api/exams/:id/status

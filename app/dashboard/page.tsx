@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -116,8 +117,11 @@ function StatusIcon({ status }: { status: ExamStatus }) {
   return <Clock className="h-5 w-5" />;
 }
 
-export default function DashboardHomePage() {
+function DashboardHomeContent() {
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get("q") || "";
 
   const [loading, setLoading] = useState(true);
   const [exams, setExams] = useState<ExamListItem[]>([]);
@@ -300,18 +304,38 @@ export default function DashboardHomePage() {
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="glass-panel xl:col-span-2 animate-in slide-in-from-bottom-8 fade-in duration-700">
           <CardHeader className="border-b border-border/40 px-6 py-5">
-            <div>
-              <CardTitle className="text-xl font-bold tracking-tight text-foreground">
-                Recent Exams
-              </CardTitle>
-              <CardDescription className="mt-1 text-sm text-muted-foreground">
-                Track status and manage your ongoing assessments.
-              </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <CardTitle className="text-xl font-bold tracking-tight text-foreground">
+                  {searchQuery ? `Search Results for "${searchQuery}"` : "Recent Exams"}
+                </CardTitle>
+                <CardDescription className="mt-1 text-sm text-muted-foreground">
+                  {searchQuery ? `Showing exams matching "${searchQuery}".` : "Track status and manage your ongoing assessments."}
+                </CardDescription>
+              </div>
+              {searchQuery && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push("/dashboard")}
+                  className="h-8 text-xs border-border/40"
+                >
+                  Clear search
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent className="divide-y divide-border/40 p-0">
-            {loading
-              ? Array.from({ length: 3 }).map((_, i) => (
+            {(() => {
+              const filteredExams = exams.filter((e) =>
+                searchQuery
+                  ? e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    e.description?.toLowerCase().includes(searchQuery.toLowerCase())
+                  : true
+              );
+
+              if (loading) {
+                return Array.from({ length: 3 }).map((_, i) => (
                   <div
                     key={i}
                     className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between"
@@ -328,28 +352,46 @@ export default function DashboardHomePage() {
                       <Skeleton className="h-10 w-10 rounded-lg" />
                     </div>
                   </div>
-                ))
-              : exams.length === 0
-              ? (
+                ));
+              }
+
+              if (filteredExams.length === 0) {
+                return (
                   <div className="flex flex-col items-center justify-center gap-4 p-12 text-center">
                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
                       <ClipboardList className="h-8 w-8" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-foreground">No exams found</h3>
+                      <h3 className="text-xl font-bold text-foreground">
+                        {searchQuery ? "No matching exams" : "No exams found"}
+                      </h3>
                       <p className="mt-2 text-sm text-muted-foreground max-w-sm">
-                        You haven&apos;t created any exams yet. Start by creating a new assessment.
+                        {searchQuery
+                          ? `No exams found matching "${searchQuery}". Try a different search term.`
+                          : "You haven't created any exams yet. Start by creating a new assessment."}
                       </p>
                     </div>
-                    <Button asChild className="mt-4 h-11 gap-2">
-                      <Link href="/dashboard/exams/create">
-                        <PlusCircle className="h-4 w-4" />
-                        Create your first exam
-                      </Link>
-                    </Button>
+                    {searchQuery ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push("/dashboard")}
+                        className="mt-4 h-10 gap-2"
+                      >
+                        Clear search
+                      </Button>
+                    ) : (
+                      <Button asChild className="mt-4 h-11 gap-2">
+                        <Link href="/dashboard/exams/create">
+                          <PlusCircle className="h-4 w-4" />
+                          Create your first exam
+                        </Link>
+                      </Button>
+                    )}
                   </div>
-                )
-              : exams.map((e) => (
+                );
+              }
+
+              return filteredExams.map((e) => (
                   <div
                     key={e.id}
                     className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between transition-colors hover:bg-secondary/20"
@@ -430,7 +472,8 @@ export default function DashboardHomePage() {
                       </Button>
                     </div>
                   </div>
-                ))}
+                ));
+            })()}
           </CardContent>
         </Card>
 
@@ -537,5 +580,22 @@ export default function DashboardHomePage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function DashboardHomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[400px] items-center justify-center">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            Loading dashboard…
+          </div>
+        </div>
+      }
+    >
+      <DashboardHomeContent />
+    </Suspense>
   );
 }

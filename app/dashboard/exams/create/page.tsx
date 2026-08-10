@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -209,13 +209,20 @@ function Toggle({
   );
 }
 
-// ---------- Page ----------
+// ---------- Page Component ----------
 
-export default function CreateExamPage() {
+function CreateExamContent() {
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromId = searchParams.get("from") || searchParams.get("id") || searchParams.get("edit");
+
   const [step, setStep] = useState<1 | 2>(1);
   const [submitting, setSubmitting] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isLoadingDraft, setIsLoadingDraft] = useState(false);
+  const [draftTitle, setDraftTitle] = useState<string | null>(null);
+
   const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
   const [isUploaderOpen, setIsUploaderOpen] = useState(false);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
@@ -333,6 +340,7 @@ export default function CreateExamPage() {
     watch,
     setValue,
     getValues,
+    reset,
     trigger,
     formState: { errors, isSubmitting },
   } = form;
@@ -341,6 +349,84 @@ export default function CreateExamPage() {
     control,
     name: "questions",
   });
+
+  // Load existing draft if fromId is present
+  useEffect(() => {
+    if (!fromId) return;
+    let active = true;
+
+    async function loadDraft() {
+      setIsLoadingDraft(true);
+      try {
+        const res = await fetch(`/api/exams/${fromId}`, {
+          headers: { ...authHeaders() },
+          credentials: "include",
+        });
+        if (res.ok) {
+          const payload = await res.json();
+          const exam = payload.data?.exam ?? payload.exam ?? payload;
+          if (exam && active) {
+            setIsEditMode(true);
+            setDraftTitle(exam.title || null);
+            const parsedQuestions: QuestionFormValue[] = (exam.questions || []).map((q: any) => {
+              const rawOptions = Array.isArray(q.options) ? q.options : [];
+              if (q.type === "TRUE_FALSE") {
+                return {
+                  type: "TRUE_FALSE",
+                  questionText: q.questionText || q.question_text || "",
+                  marks: Number(q.marks) || 1,
+                  options: ["True", "False"],
+                  correctAnswer: q.correctAnswer || q.correct_answer || "True",
+                };
+              }
+              if (q.type === "SHORT_ANSWER") {
+                return {
+                  type: "SHORT_ANSWER",
+                  questionText: q.questionText || q.question_text || "",
+                  marks: Number(q.marks) || 5,
+                  options: [],
+                  correctAnswer: q.correctAnswer || q.correct_answer || "Sample answer",
+                };
+              }
+              return {
+                type: "MCQ_SINGLE",
+                questionText: q.questionText || q.question_text || "",
+                marks: Number(q.marks) || 2,
+                options: rawOptions.length >= 2 ? rawOptions : ["Option A", "Option B"],
+                correctAnswer: q.correctAnswer || q.correct_answer || rawOptions[0] || "",
+              };
+            });
+
+            reset({
+              title: exam.title || "",
+              description: exam.description || "",
+              durationMinutes: Number(exam.durationMinutes || exam.duration_minutes || 60),
+              totalMarks: Number(exam.totalMarks || exam.total_marks || 20),
+              shuffleQuestions: exam.settings?.shuffleQuestions ?? true,
+              shuffleOptions: exam.settings?.shuffleOptions ?? true,
+              supervisionCamera: exam.settings?.supervision?.camera ?? false,
+              supervisionMic: exam.settings?.supervision?.mic ?? false,
+              questions: parsedQuestions.length > 0 ? parsedQuestions : [DEFAULT_QUESTION(0)],
+            });
+
+            toast({
+              title: "Draft loaded ✨",
+              description: `Loaded "${exam.title}" into the editor.`,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load draft from backend:", e);
+      } finally {
+        if (active) setIsLoadingDraft(false);
+      }
+    }
+
+    void loadDraft();
+    return () => {
+      active = false;
+    };
+  }, [fromId, reset, toast]);
 
   const allQuestions = watch("questions");
   const computedMarksSum = useMemo(
@@ -479,8 +565,11 @@ export default function CreateExamPage() {
         })),
       };
 
-      const res = await fetch("/api/exams", {
-        method: "POST",
+      const method = isEditMode && fromId ? "PUT" : "POST";
+      const endpoint = isEditMode && fromId ? `/api/exams/${fromId}` : "/api/exams";
+
+      const res = await fetch(endpoint, {
+        method,
         headers: { "Content-Type": "application/json", ...authHeaders() },
         credentials: "include",
         body: JSON.stringify(payload),
@@ -495,7 +584,7 @@ export default function CreateExamPage() {
 
       if (!res.ok) {
         toast({
-          title: "Couldn't create exam",
+          title: isEditMode ? "Couldn't update exam" : "Couldn't create exam",
           description:
             json?.message ??
             "The server returned an error. Please try again.",
@@ -505,13 +594,14 @@ export default function CreateExamPage() {
       }
 
       toast({
-        title: "Exam created!",
+        title: isEditMode ? "Exam updated! ✨" : "Exam created!",
         description: `"${payload.title}" has been saved to your dashboard.`,
       });
 
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
+      console.warn("Save exam offline fallback:", err);
       // Demo-friendly fallback: show toast + redirect even without backend
       toast({
         title: "Exam saved (demo mode)",
@@ -538,15 +628,17 @@ export default function CreateExamPage() {
             <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
           </Link>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Create a new exam
+            {isEditMode ? (draftTitle ? `Edit Draft: ${draftTitle}` : "Edit Exam Draft") : "Create a new exam"}
           </h1>
           <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-            Configure exam details, then build questions with dynamic options
-            and correct answers.
+            {isEditMode
+              ? "Modify questions, exam duration, marks, and settings for this draft."
+              : "Configure exam details, then build questions with dynamic options and correct answers."}
           </p>
         </div>
         <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-100">
-          <Sparkles className="h-3.5 w-3.5" /> Draft — publish after review
+          <Sparkles className="h-3.5 w-3.5" />
+          {isEditMode ? "Editing draft exam" : "Draft — publish after review"}
         </div>
       </section>
 
@@ -1327,5 +1419,22 @@ export default function CreateExamPage() {
         onAddQuestions={handleBankQuestionsAdded}
       />
     </div>
+  );
+}
+
+export default function CreateExamPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[400px] items-center justify-center">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            Loading exam builder…
+          </div>
+        </div>
+      }
+    >
+      <CreateExamContent />
+    </Suspense>
   );
 }
