@@ -213,7 +213,7 @@ describe('grading.service', () => {
   });
 
   describe('gradeAllSubmissionsForExam', () => {
-    it('grades every SUBMITTED/AUTO_SUBMITTED session of the exam', async () => {
+    it('grades every ungraded SUBMITTED/AUTO_SUBMITTED session of the exam', async () => {
       (prisma.examSession.findMany as jest.Mock).mockResolvedValue([
         { id: 'sess_1' },
         { id: 'sess_2' },
@@ -236,10 +236,68 @@ describe('grading.service', () => {
               SubmissionStatus.TERMINATED,
             ],
           },
+          total_score: null,
         },
         select: { id: true },
       });
       expect(results).toHaveLength(2);
+    });
+
+    it('skips sessions that are already graded', async () => {
+      (prisma.examSession.findMany as jest.Mock).mockResolvedValue([
+        { id: 'sess_already_graded' },
+      ]);
+
+      (txMock.examSession.findFirst as jest.Mock).mockResolvedValue({ id: 'sess' });
+      (txMock.answer.findMany as jest.Mock).mockResolvedValue([]);
+      (txMock.question.findMany as jest.Mock).mockResolvedValue([]);
+      (txMock.examSession.update as jest.Mock).mockResolvedValue({ id: 'sess' });
+
+      const results = await gradeAllSubmissionsForExam(examId);
+
+      expect(prisma.examSession.findMany).toHaveBeenCalledWith({
+        where: {
+          exam_id: examId,
+          status: {
+            in: [
+              SubmissionStatus.SUBMITTED,
+              SubmissionStatus.AUTO_SUBMITTED,
+              SubmissionStatus.TERMINATED,
+            ],
+          },
+          total_score: null,
+        },
+        select: { id: true },
+      });
+      expect(results).toHaveLength(1);
+    });
+
+    it('re-grades everything when force is set', async () => {
+      (prisma.examSession.findMany as jest.Mock).mockResolvedValue([
+        { id: 'sess_force' },
+      ]);
+
+      (txMock.examSession.findFirst as jest.Mock).mockResolvedValue({ id: 'sess' });
+      (txMock.answer.findMany as jest.Mock).mockResolvedValue([]);
+      (txMock.question.findMany as jest.Mock).mockResolvedValue([]);
+      (txMock.examSession.update as jest.Mock).mockResolvedValue({ id: 'sess' });
+
+      const results = await gradeAllSubmissionsForExam(examId, { force: true });
+
+      expect(prisma.examSession.findMany).toHaveBeenCalledWith({
+        where: {
+          exam_id: examId,
+          status: {
+            in: [
+              SubmissionStatus.SUBMITTED,
+              SubmissionStatus.AUTO_SUBMITTED,
+              SubmissionStatus.TERMINATED,
+            ],
+          },
+        },
+        select: { id: true },
+      });
+      expect(results).toHaveLength(1);
     });
   });
 });

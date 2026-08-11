@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BulkInviteModal } from "@/components/exams/BulkInviteModal";
-import { authHeaders } from "@/lib/auth-token";
+import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 
 interface ExamDetail {
   id: string;
@@ -59,6 +59,8 @@ export default function TeacherExamDetailsPage() {
             setExam(data);
             setIsDemoMode(false);
           }
+        } else if (res.status === 401) {
+          if (isMounted) handleAuthFailure();
         } else {
           // Fallback mock exam detail
           if (isMounted) {

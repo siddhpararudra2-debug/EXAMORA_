@@ -91,6 +91,7 @@ export async function getExamForStudent(examId: string) {
       duration_minutes: true,
       total_marks: true,
       status: true,
+      end_time: true,
       settings: true,
       questions: {
         select: STUDENT_QUESTION_SELECT,
@@ -172,10 +173,12 @@ export async function publishExamService(
     scale: 6,
   });
 
-  // Requirement 2: Update exam in Prisma transaction
-  const updatedExam = await prisma.$transaction(async (tx) => {
-    return tx.exam.update({
-      where: { id: examId },
+  // Requirement 2: Update exam in Prisma transaction. The status is guarded
+  // atomically (WHERE status = DRAFT) so two concurrent publish requests cannot
+  // both transition the exam — the loser gets INVALID_STATUS.
+  const result = await prisma.$transaction(async (tx) => {
+    return tx.exam.updateMany({
+      where: { id: examId, created_by: teacherId, status: ExamStatus.DRAFT },
       data: {
         status: ExamStatus.ACTIVE,
         published_at: new Date(),
@@ -183,6 +186,22 @@ export async function publishExamService(
         qr_code_url,
       },
     });
+  });
+
+  if (result.count === 0) {
+    const fresh = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { status: true },
+    });
+    throw new Error(
+      fresh
+        ? `INVALID_STATUS: Exam was already ${fresh.status.toLowerCase()}`
+        : 'EXAM_NOT_FOUND',
+    );
+  }
+
+  const updatedExam = await prisma.exam.findUniqueOrThrow({
+    where: { id: examId },
   });
 
   return {
@@ -224,10 +243,16 @@ export async function unpublishExamService(
 
   const freshAccessUuid = crypto.randomUUID();
 
-  // Requirement 3: Reverts status to DRAFT and nullifies/resets access in Prisma transaction
-  return prisma.$transaction(async (tx) => {
-    return tx.exam.update({
-      where: { id: examId },
+  // Requirement 3: Reverts status to DRAFT and nullifies/resets access in a
+  // Prisma transaction. The WHERE status guard makes the transition atomic —
+  // a concurrent unpublish/publish call cannot double-fire.
+  const result = await prisma.$transaction(async (tx) => {
+    return tx.exam.updateMany({
+      where: {
+        id: examId,
+        created_by: teacherId,
+        status: { in: [ExamStatus.ACTIVE, ExamStatus.PUBLISHED] },
+      },
       data: {
         status: ExamStatus.DRAFT,
         published_at: null,
@@ -236,4 +261,18 @@ export async function unpublishExamService(
       },
     });
   });
+
+  if (result.count === 0) {
+    const fresh = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { status: true },
+    });
+    throw new Error(
+      fresh
+        ? `INVALID_STATUS: Exam is already in ${fresh.status.toLowerCase()} status`
+        : 'EXAM_NOT_FOUND',
+    );
+  }
+
+  return prisma.exam.findUniqueOrThrow({ where: { id: examId } });
 }

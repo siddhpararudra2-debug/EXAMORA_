@@ -87,3 +87,66 @@ export async function sendExamInviteEmail({
     return false;
   }
 }
+
+/**
+ * Sends a password reset email with the tokenized reset link.
+ */
+export async function sendPasswordResetEmail({
+  to,
+  teacherName,
+  resetLink,
+}: {
+  to: string;
+  teacherName: string;
+  resetLink: string;
+}): Promise<boolean> {
+  const from = process.env.SMTP_FROM || `"Examora Platform" <noreply@examora.edu>`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+      <h2 style="color: #4338ca; margin-bottom: 8px;">Reset your Examora password</h2>
+      <p style="color: #334155; font-size: 15px;">Hello <strong>${teacherName}</strong>,</p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+        We received a request to reset the password for your Examora educator account.
+        Click the button below to choose a new password. This link expires in 1 hour.
+      </p>
+
+      <div style="margin: 24px 0; text-align: center;">
+        <a href="${resetLink}" target="_blank" style="background-color: #4f46e5; color: #ffffff; padding: 12px 28px; font-weight: bold; font-size: 15px; border-radius: 8px; text-decoration: none; display: inline-block;">
+          Reset Password
+        </a>
+      </div>
+
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5;">
+        If you did not request this, you can safely ignore this email. Your password will not change.
+      </p>
+
+      <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+      <p style="color: #94a3b8; font-size: 11px; text-align: center;">
+        Examora Platform • Free & Open-Source AI Proctoring
+      </p>
+    </div>
+  `;
+
+  try {
+    const transporter = createTransporter();
+
+    // In local development or if SMTP credentials are omitted, log link gracefully
+    if (!process.env.SMTP_USER && process.env.NODE_ENV !== "production") {
+      console.log(`[Email Service Mock] Reset link for ${to}: ${resetLink}`);
+      return true;
+    }
+
+    await transporter.sendMail({
+      from,
+      to,
+      subject: "Reset your Examora password",
+      html: htmlContent,
+    });
+
+    return true;
+  } catch (err) {
+    console.error(`[Email Service] Failed to send reset email to ${to}:`, err);
+    return false;
+  }
+}

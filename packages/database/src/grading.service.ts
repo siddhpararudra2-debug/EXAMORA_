@@ -335,6 +335,7 @@ export async function gradeSubmission(
 
 export async function gradeAllSubmissionsForExam(
   examId: string,
+  options: { force?: boolean } = {},
 ): Promise<GradingResult[]> {
   const sessions = await prisma.examSession.findMany({
     where: {
@@ -342,6 +343,10 @@ export async function gradeAllSubmissionsForExam(
       status: {
         in: [...GRADED_STATUSES],
       },
+      // Idempotency: by default skip sessions that already have a total_score
+      // so re-running grade-all never re-grades (or re-invokes AI for)
+      // subjective answers. Pass { force: true } to deliberately re-grade.
+      ...(options.force ? {} : { total_score: null }),
     },
     select: { id: true },
   });

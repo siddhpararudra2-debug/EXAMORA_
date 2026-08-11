@@ -88,6 +88,7 @@ export const validateStudentSession = (
           id: true,
           session_token: true,
           status: true,
+          expires_at: true,
           exam: {
             select: { id: true, status: true, end_time: true },
           },
@@ -98,6 +99,17 @@ export const validateStudentSession = (
         res.status(401).json({
           status: 'error',
           message: 'Invalid or expired session token',
+        });
+        return;
+      }
+
+      if (
+        session.expires_at &&
+        new Date() > session.expires_at
+      ) {
+        res.status(403).json({
+          status: 'error',
+          message: 'This session has expired — please contact your educator',
         });
         return;
       }

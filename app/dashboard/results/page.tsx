@@ -22,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { authHeaders } from "@/lib/auth-token";
+import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 
 interface ExamListItem {
   id: string;
@@ -97,7 +97,7 @@ function ResultsContent() {
   const loadExams = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/exams", {
+      const res = await fetch("/api/exams?page=1&pageSize=100", {
         credentials: "include",
         headers: { ...authHeaders() },
       });
@@ -110,6 +110,10 @@ function ResultsContent() {
           setIsDemoMode(false);
           return;
         }
+      }
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
       }
       setIsDemoMode(true);
       setExams(DEMO_EXAMS);

@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { authHeaders } from "@/lib/auth-token";
+import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 
 type ExamStatus = "DRAFT" | "PUBLISHED" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
 
@@ -124,30 +124,59 @@ function DashboardHomeContent() {
   const searchQuery = searchParams.get("q") || "";
 
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [exams, setExams] = useState<ExamListItem[]>([]);
+  const [pagination, setPagination] = useState<{
+    total: number;
+    totalPages: number;
+    page: number;
+    pageSize: number;
+  } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ExamListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const loadExams = useCallback(async () => {
-    setLoading(true);
+  const PAGE_SIZE = 20;
+
+  const loadExams = useCallback(async (targetPage = 1, append = false) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     try {
-      const res = await fetch("/api/exams", {
-        credentials: "include",
-        headers: { ...authHeaders() },
-      });
+      const res = await fetch(
+        `/api/exams?page=${targetPage}&pageSize=${PAGE_SIZE}`,
+        {
+          credentials: "include",
+          headers: { ...authHeaders() },
+        },
+      );
       if (res.ok) {
         const payload = (await res.json()) as {
-          data: { exams: ExamListItem[] };
+          data: {
+            exams: ExamListItem[];
+            pagination: {
+              total: number;
+              totalPages: number;
+              page: number;
+              pageSize: number;
+            };
+          };
         };
-        setExams(payload.data.exams);
+        setExams((prev) =>
+          append ? [...prev, ...payload.data.exams] : payload.data.exams,
+        );
+        setPagination(payload.data.pagination);
         return;
       }
-      setExams(DEMO_EXAMS);
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
+      }
+      if (!append) setExams(DEMO_EXAMS);
     } catch {
       // Backend unavailable — fall back to demo data.
-      setExams(DEMO_EXAMS);
+      if (!append) setExams(DEMO_EXAMS);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
@@ -170,6 +199,8 @@ function DashboardHomeContent() {
           title: "Exam deleted",
           description: `"${deleteTarget.title}" was removed.`,
         });
+      } else if (res.status === 401) {
+        handleAuthFailure();
       } else {
         const payload = (await res.json().catch(() => ({}))) as {
           message?: string;
@@ -193,7 +224,7 @@ function DashboardHomeContent() {
   }, [deleteTarget, deleting, toast]);
 
   const stats = useMemo(() => {
-    const total = exams.length;
+    const total = pagination ? pagination.total : exams.length;
     const active = exams.filter((e) => e.status === "ACTIVE").length;
     const completed = exams.filter((e) => e.status === "COMPLETED").length;
     const totalSessions = exams.reduce((s, e) => s + e._count.sessions, 0);
@@ -223,7 +254,7 @@ function DashboardHomeContent() {
         icon: TrendingUp,
       },
     ];
-  }, [exams]);
+  }, [exams, pagination]);
 
   return (
     <div className="flex flex-col gap-10">
@@ -474,6 +505,22 @@ function DashboardHomeContent() {
                   </div>
                 ));
             })()}
+            {pagination && exams.length < pagination.total && !loading ? (
+              <div className="border-t border-border/40 p-4">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={loadingMore}
+                  onClick={() =>
+                    void loadExams(pagination.page + 1, true)
+                  }
+                >
+                  {loadingMore
+                    ? "Loading…"
+                    : `Load more exams (${exams.length} of ${pagination.total})`}
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

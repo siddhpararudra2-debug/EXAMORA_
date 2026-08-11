@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { authHeaders } from "@/lib/auth-token";
+import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 
 interface LiveExamItem {
   id: string;
@@ -52,7 +52,7 @@ export default function LiveExamsOverviewPage() {
   useEffect(() => {
     async function fetchLiveExams() {
       try {
-        const res = await fetch("/api/exams", {
+        const res = await fetch("/api/exams?page=1&pageSize=100", {
           credentials: "include",
           headers: { ...authHeaders() },
         });
@@ -63,6 +63,10 @@ export default function LiveExamsOverviewPage() {
           );
           setLiveExams(activeOnly.length > 0 ? activeOnly : DEMO_LIVE_EXAMS);
           setLoading(false);
+          return;
+        }
+        if (res.status === 401) {
+          handleAuthFailure();
           return;
         }
       } catch {

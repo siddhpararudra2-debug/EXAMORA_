@@ -49,7 +49,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { authHeaders } from "@/lib/auth-token";
+import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
 import { AIQuestionGenerator, GeneratedQuestion } from "@/components/exams/AIQuestionGenerator";
 import { DocumentUploader } from "@/components/exams/DocumentUploader";
@@ -414,6 +414,8 @@ function CreateExamContent() {
               description: `Loaded "${exam.title}" into the editor.`,
             });
           }
+        } else if (res.status === 401) {
+          handleAuthFailure();
         }
       } catch (e) {
         console.warn("Failed to load draft from backend:", e);

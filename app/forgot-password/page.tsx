@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { GraduationCap, Mail, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { GraduationCap, Mail, ArrowLeft, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,16 +12,39 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setError("");
+
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      const result = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        status?: string;
+      };
+
+      if (!res.ok) {
+        setError(result?.message || "Failed to send the reset link. Please try again.");
+        return;
+      }
+
       setSubmitted(true);
-    }, 1000);
+    } catch {
+      setError("Network error. Please make sure the backend server is running.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -59,6 +82,12 @@ export default function ForgotPasswordPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
+                {error && (
+                  <div className="flex items-center gap-2 rounded-lg border border-red-200/50 bg-red-50/50 px-4 py-3 text-sm text-red-700">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                    <span>{error}</span>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm font-medium">
                     Email address
@@ -70,7 +99,10 @@ export default function ForgotPasswordPage() {
                       type="email"
                       placeholder="teacher@school.edu"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (error) setError("");
+                      }}
                       className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white"
                       disabled={loading}
                     />

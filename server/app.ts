@@ -75,9 +75,25 @@ export function createApp(options: CreateAppOptions = {}): AppBundle {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // Health check endpoint
-  app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  // Health check endpoint — verifies DB connectivity so load balancers and
+  // Docker HEALTHCHECKs can distinguish "process up" from "actually serving".
+  app.get('/health', async (_req: Request, res: Response) => {
+    try {
+      const prisma = (await import('../prisma/client.js')).default ?? null;
+      if (!prisma) {
+        res.status(503).json({ status: 'degraded', db: 'unavailable' });
+        return;
+      }
+      await Promise.race([
+        prisma.$queryRaw`SELECT 1`,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('db probe timeout')), 3000),
+        ),
+      ]);
+      res.json({ status: 'ok', db: 'up', timestamp: new Date().toISOString() });
+    } catch {
+      res.status(503).json({ status: 'degraded', db: 'down' });
+    }
   });
 
   // ── API routes ───────────────────────────────────────────────────────────

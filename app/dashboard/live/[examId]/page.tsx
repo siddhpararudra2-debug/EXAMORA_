@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Socket } from "socket.io-client";
-import { authHeaders } from "@/lib/auth-token";
+import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 import {
   Activity,
   AlertTriangle,
@@ -243,6 +243,9 @@ export default function LiveProctoringDashboard() {
           (data.sessions ?? []).map((s) => ({ ...s, _new: false }))
         );
         setIsDemoMode(false);
+      } else if (res.status === 401) {
+        handleAuthFailure();
+        return;
       } else {
         setIsDemoMode(true);
         setExamMeta({

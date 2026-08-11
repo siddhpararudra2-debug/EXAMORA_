@@ -42,3 +42,15 @@ export function authHeaders(): Record<string, string> {
   const token = getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
+
+/**
+ * Redirects to /login when a request returns 401 (invalid/expired session).
+ * Clears stale credentials first so guards and subsequent fetches see
+ * the user as logged out.
+ */
+export function handleAuthFailure(): void {
+  clearAuthToken();
+  if (typeof window !== "undefined") {
+    window.location.assign("/login");
+  }
+}

@@ -28,7 +28,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { authHeaders } from "@/lib/auth-token";
+import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
 
 interface SessionResult {
@@ -155,6 +155,10 @@ function ExamResultsContent() {
           setLoading(false);
           return;
         }
+      }
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
       }
       setIsDemoMode(true);
       setData(DEMO_EXAM);

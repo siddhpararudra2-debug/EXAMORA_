@@ -42,6 +42,15 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
+    // Check if the exam window has ended (end_time is optional)
+    if (exam.end_time && new Date() > exam.end_time) {
+      res.status(403).json({
+        status: 'error',
+        message: 'The exam window has ended — this exam is no longer joinable',
+      });
+      return;
+    }
+
     // Check if student already has an active session for this exam
     const existingSession = await prisma.examSession.findFirst({
       where: {
@@ -66,6 +75,32 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
+    // A prior completed/terminated session blocks re-takes so results stay
+    // unique per identity and tokens cannot be reused to resit an exam.
+    const completedSession = await prisma.examSession.findFirst({
+      where: {
+        exam_id: examId,
+        student_email: studentEmail,
+        enrollment_number: enrollmentNo,
+        status: {
+          in: [
+            SubmissionStatus.SUBMITTED,
+            SubmissionStatus.AUTO_SUBMITTED,
+            SubmissionStatus.TERMINATED,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+
+    if (completedSession) {
+      res.status(409).json({
+        status: 'error',
+        message: 'You have already completed this exam. Re-attempts are not allowed.',
+      });
+      return;
+    }
+
     // Generate cryptographically secure random session token
     const sessionToken = crypto.randomUUID();
 
@@ -81,6 +116,9 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
         ? 1 + Math.floor(Math.random() * 2147483646)
         : null;
 
+    // Expire the token at the exam's end_time (fallback: join time + duration).
+    const expiresAt = exam.end_time ?? new Date(Date.now() + exam.duration_minutes * 60 * 1000);
+
     // Create student session
     const studentSession = await prisma.examSession.create({
       data: {
@@ -90,6 +128,7 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
         enrollment_number: enrollmentNo,
         session_token: sessionToken,
         shuffle_seed,
+        expires_at: expiresAt,
       },
     });
 
@@ -102,7 +141,16 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
         enrollmentNo: studentSession.enrollment_number,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    // P2003 = FK violation — the exam was deleted between the lookups above
+    // and the session insert. Surface it as a clean 404 instead of a raw 400.
+    if (error?.code === 'P2003') {
+      res.status(404).json({
+        status: 'error',
+        message: 'This exam is no longer available.',
+      });
+      return;
+    }
     next(error);
   }
 };

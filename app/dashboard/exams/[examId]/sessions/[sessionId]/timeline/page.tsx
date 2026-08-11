@@ -15,7 +15,7 @@ import {
   Award,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { authHeaders } from "@/lib/auth-token";
+import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 import {
   ProctoringTimeline,
   ProctoringEvent,
@@ -67,6 +67,8 @@ export default function ProctoringTimelinePage() {
             setSession({ ...sessionData, events: eventsList });
             setIsDemoMode(false);
           }
+        } else if (res.status === 401) {
+          if (isMounted) handleAuthFailure();
         } else {
           // Fallback mock data for testing/demo
           if (isMounted) {

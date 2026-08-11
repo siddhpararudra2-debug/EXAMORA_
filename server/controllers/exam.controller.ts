@@ -270,6 +270,14 @@ export const getStudentView = async (
       return;
     }
 
+    if (session.expires_at && new Date() > session.expires_at) {
+      res.status(403).json({
+        status: 'error',
+        message: 'This session has expired — please contact your educator',
+      });
+      return;
+    }
+
     if (session.status !== SubmissionStatus.IN_PROGRESS) {
       res.status(403).json({
         status: 'error',
@@ -289,6 +297,14 @@ export const getStudentView = async (
       res.status(400).json({
         status: 'error',
         message: 'Exam is not currently active',
+      });
+      return;
+    }
+
+    if (exam.end_time && new Date() > exam.end_time) {
+      res.status(403).json({
+        status: 'error',
+        message: 'The exam window has ended',
       });
       return;
     }
@@ -498,17 +514,38 @@ export const listExams = async (
   try {
     const { teacher } = req as AuthenticatedRequest;
 
-    const exams = await prisma.exam.findMany({
-      where: { created_by: teacher.userId },
-      orderBy: { created_at: 'desc' },
-      include: {
-        _count: { select: { questions: true, sessions: true } },
-      },
-    });
+    // Pagination: ?page=1&pageSize=20 (pageSize capped at 100). Responses
+    // include total/totalPages so the UI can render pager controls.
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const requestedSize = Number(req.query.pageSize) || 20;
+    const pageSize = Math.min(100, Math.max(1, requestedSize));
+
+    const where = { created_by: teacher.userId };
+
+    const [exams, total] = await Promise.all([
+      prisma.exam.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          _count: { select: { questions: true, sessions: true } },
+        },
+      }),
+      prisma.exam.count({ where }),
+    ]);
 
     res.json({
       status: 'success',
-      data: { exams },
+      data: {
+        exams,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        },
+      },
     });
   } catch (err) {
     next(err);

@@ -7,6 +7,18 @@ import { startAutoSubmitSweep } from './server/jobs/autoSubmit.sweep.js';
 // Load environment variables
 dotenv.config();
 
+// Process-level guards: log unhandled rejections (never crash on them) and
+// exit on uncaught exceptions so the process manager restarts us instead of
+// running with corrupted state.
+process.on('unhandledRejection', (reason) => {
+  console.error('[process] Unhandled promise rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[process] Uncaught exception:', err);
+  process.exit(1);
+});
+
 // Build the Express app + Socket.io server (single source of truth in server/app.ts)
 const { app, httpServer, io }: AppBundle = createApp();
 

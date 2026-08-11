@@ -82,16 +82,18 @@ enum EmailLogStatus {
 }
 
 model Teacher {
-  id           String   @id @default(uuid())
-  google_id    String?  @unique
-  email        String   @unique
-  name         String
-  password_hash String? @db.VarChar(255)
-  college_name String?
-  department   String?
-  phone        String?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  google_id           String?   @unique
+  email               String    @unique
+  name                String
+  password_hash       String?   @db.VarChar(255)
+  college_name        String?
+  department          String?
+  phone               String?
+  reset_token         String?   @unique
+  reset_token_expires DateTime?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
 
   exams          Exam[]
   bank_questions BankQuestion[]
@@ -120,13 +122,14 @@ model Exam {
   created_at       DateTime     @default(now())
   updated_at       DateTime     @updatedAt
 
-  sections         Section[]
-  questions        Question[]
-  sessions         ExamSession[]
-  email_logs       EmailLog[]
+  sections   Section[]
+  questions  Question[]
+  sessions   ExamSession[]
+  email_logs EmailLog[]
 
   @@index([created_by])
   @@index([status])
+  @@index([created_by, status])
   @@map("exams")
 }
 
@@ -141,7 +144,7 @@ model Section {
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 
-  questions        Question[]
+  questions Question[]
 
   @@index([exam_id, order_index])
   @@map("sections")
@@ -167,7 +170,7 @@ model Question {
   created_at     DateTime     @default(now())
   updated_at     DateTime     @updatedAt
 
-  answers        Answer[]
+  answers Answer[]
 
   @@index([exam_id])
   @@index([section_id])
@@ -186,6 +189,7 @@ model ExamSession {
   status            SubmissionStatus @default(IN_PROGRESS)
   started_at        DateTime         @default(now())
   submitted_at      DateTime?
+  expires_at        DateTime?
   total_score       Decimal?         @db.Decimal(10, 2)
   percentage        Decimal?         @db.Decimal(5, 2)
   /// Deterministic RNG seed used to shuffle questions/options per student.
@@ -193,32 +197,33 @@ model ExamSession {
   created_at        DateTime         @default(now())
   updated_at        DateTime         @updatedAt
 
-  answers           Answer[]
-  violations        Violation[]
-  email_logs        EmailLog[]
+  answers    Answer[]
+  violations Violation[]
+  email_logs EmailLog[]
 
   @@index([exam_id])
   @@index([status])
+  @@index([exam_id, status])
   @@index([exam_id, student_email, enrollment_number])
   @@map("exam_sessions")
 }
 
 model Answer {
-  id               String     @id @default(uuid())
+  id               String      @id @default(uuid())
   session_id       String
   session          ExamSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
   question_id      String
-  question         Question   @relation(fields: [question_id], references: [id], onDelete: Cascade)
+  question         Question    @relation(fields: [question_id], references: [id], onDelete: Cascade)
   answer_text      String
   is_correct       Boolean?
-  marks_awarded    Decimal?   @db.Decimal(10, 2)
+  marks_awarded    Decimal?    @db.Decimal(10, 2)
   graded_by        GradedBy?
   teacher_feedback String?
-  ai_confidence    Decimal?   @db.Decimal(5, 4)
+  ai_confidence    Decimal?    @db.Decimal(5, 4)
   /// True when the answer was flagged for manual teacher review (low AI confidence, file upload, or AI outage).
-  needs_review     Boolean    @default(false)
-  created_at       DateTime   @default(now())
-  updated_at       DateTime   @updatedAt
+  needs_review     Boolean     @default(false)
+  created_at       DateTime    @default(now())
+  updated_at       DateTime    @updatedAt
 
   @@unique([session_id, question_id])
   @@index([question_id])

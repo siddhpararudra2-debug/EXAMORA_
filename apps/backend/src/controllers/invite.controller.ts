@@ -35,7 +35,13 @@ export const inviteBulkStudents = async (
     // Verify teacher owns the exam
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { id: true, title: true, created_by: true },
+      select: {
+        id: true,
+        title: true,
+        created_by: true,
+        duration_minutes: true,
+        end_time: true,
+      },
     });
 
     if (!exam) {
@@ -109,6 +115,9 @@ export const inviteBulkStudents = async (
             enrollment_number: enrollmentNo,
             session_token: sessionToken,
             status: SubmissionStatus.IN_PROGRESS,
+            expires_at:
+              exam.end_time ??
+              new Date(Date.now() + exam.duration_minutes * 60 * 1000),
           },
         });
 

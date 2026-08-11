@@ -1,9 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
-import { registerSchema, loginSchema, RegisterInput, LoginInput } from '../validators/auth.js';
+import {
+  registerSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  RegisterInput,
+  LoginInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
+} from '../validators/auth.js';
 import { JWT_SECRET } from '../config.js';
+import { sendPasswordResetEmail } from '../../apps/backend/src/services/email.service.js';
 
 const prisma = new PrismaClient();
 
@@ -129,6 +140,86 @@ export const getMe = async (req: Request, res: Response, next: NextFunction): Pr
     res.json({
       status: 'success',
       data: { user },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const validation = validate<ForgotPasswordInput>(forgotPasswordSchema, req.body);
+    if (!validation.success) {
+      res.status(400).json({ status: 'error', message: validation.error });
+      return;
+    }
+
+    const email = validation.data!.email.trim().toLowerCase();
+
+    // Always respond success regardless of whether the account exists to
+    // avoid leaking which emails are registered.
+    const user = await prisma.teacher.findUnique({ where: { email } });
+    if (user && user.email) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await prisma.teacher.update({
+        where: { id: user.id },
+        data: { reset_token: token, reset_token_expires: expiresAt },
+      });
+
+      const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+      const resetLink = `${frontendUrl}/forgot-password/reset?token=${encodeURIComponent(token)}`;
+
+      await sendPasswordResetEmail({
+        to: user.email,
+        teacherName: user.name,
+        resetLink,
+      });
+    }
+
+    res.json({
+      status: 'success',
+      message: 'If an account exists for that email, a reset link has been sent.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const validation = validate<ResetPasswordInput>(resetPasswordSchema, req.body);
+    if (!validation.success) {
+      res.status(400).json({ status: 'error', message: validation.error });
+      return;
+    }
+
+    const { token, password } = validation.data!;
+
+    const user = await prisma.teacher.findUnique({ where: { reset_token: token } });
+    if (!user || !user.reset_token_expires || user.reset_token_expires.getTime() < Date.now()) {
+      res.status(400).json({
+        status: 'error',
+        message: 'This reset link is invalid or has expired. Please request a new one.',
+      });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    await prisma.teacher.update({
+      where: { id: user.id },
+      data: {
+        password_hash: hashedPassword,
+        reset_token: null,
+        reset_token_expires: null,
+      },
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Password updated successfully. You can now sign in.',
     });
   } catch (error) {
     next(error);
