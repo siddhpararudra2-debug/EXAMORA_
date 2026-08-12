@@ -4,65 +4,65 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%; /* Very light gray/almost white */
-    --foreground: 240 10% 3.9%; /* Near black */
+    --background: 220 20% 98%; /* Ultra clean slate-white */
+    --foreground: 222 47% 11%; /* Crisp obsidian */
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 240 5.9% 10%; /* Dark charcoal/black */
-    --primary-foreground: 0 0% 98%;
+    --primary: 239 84% 59%; /* Indigo-600 #4f46e5 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
 
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --accent: 239 84% 97%;
+    --accent-foreground: 239 84% 59%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 239 84% 59%;
 
-    --radius: 0.75rem; /* Larger radius for modern feel */
+    --radius: 0.875rem; /* 14px modern rounded radius */
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    --background: 224 71% 4%; /* Deep slate black */
+    --foreground: 210 40% 98%;
 
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
+    --card: 224 71% 6%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 224 71% 6%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
+    --primary: 239 84% 67%; /* Glowing indigo */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 215 28% 12%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    --muted: 215 28% 12%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 215 28% 17%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 63% 40%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: 215 28% 15%;
+    --input: 215 28% 15%;
+    --ring: 239 84% 67%;
   }
 }
 
@@ -71,19 +71,31 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased selection:bg-primary selection:text-primary-foreground;
+    @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
 @layer utilities {
   .glass-panel {
-    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.04)];
+    @apply bg-white/80 backdrop-blur-xl border border-slate-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300;
   }
   .dark .glass-panel {
-    @apply bg-black/50 backdrop-blur-md border border-white/10 shadow-none;
+    @apply bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.2)];
   }
   .hover-lift {
-    @apply transition-transform duration-300 hover:-translate-y-1 hover:shadow-lg;
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_32px_-4px_rgba(79,70,229,0.12)];
+  }
+  .gradient-text {
+    @apply bg-gradient-to-r from-slate-900 via-indigo-900 to-indigo-600 bg-clip-text text-transparent dark:from-white dark:via-indigo-200 dark:to-indigo-400;
+  }
+  .gradient-brand {
+    @apply bg-gradient-to-r from-indigo-600 via-indigo-500 to-blue-600 text-white;
+  }
+  .mesh-glow {
+    background-image: radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                      radial-gradient(at 80% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
+                      radial-gradient(at 50% 80%, rgba(139, 92, 246, 0.08) 0px, transparent 50%);
   }
 }
+

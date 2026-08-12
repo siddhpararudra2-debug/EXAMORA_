@@ -6,9 +6,9 @@ import { Toaster } from "@/components/ui/toaster";
 const outfit = Outfit({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Examora — Smart Online Exam Platform",
+  title: "Examora — Next-Gen AI Examination & Live Proctoring Platform",
   description:
-    "100% free, open-source AI-proctored online examination platform for educators and students.",
+    "Autonomous online examinations, real-time AI WebRTC proctoring, and instant automated grading for modern educators.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

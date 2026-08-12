@@ -11,16 +11,18 @@ import {
   Mail,
   LockKeyhole,
   Loader2,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Sparkles,
+  ArrowRight,
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -50,6 +52,7 @@ export default function TeacherLoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState("");
 
   const form = useForm<LoginForm>({
@@ -102,63 +105,63 @@ export default function TeacherLoginPage() {
           setAuthUser(user);
         }
         toast({
-          title: "Signed in",
+          title: "Welcome back!",
           description: user?.name
-            ? `Welcome back, ${user.name}.`
-            : "Redirecting to your dashboard.",
+            ? `Signed in as ${user.name}.`
+            : "Redirecting to your educator dashboard.",
         });
       } else {
         toast({
           title: "Signed in",
-          description: user?.name
-            ? `Welcome back, ${user.name}.`
-            : "Redirecting to your dashboard.",
+          description: "Redirecting to dashboard.",
         });
       }
 
       router.push("/dashboard");
       router.refresh();
     } catch {
-      setServerError("Network error. Please make sure the backend server is running.");
+      setServerError("Network error. Please ensure the server is running.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen w-full bg-background relative flex items-center justify-center overflow-hidden">
-      {/* Subtle ambient background glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
-           style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
+    <main className="min-h-screen w-full bg-background relative flex items-center justify-center overflow-hidden px-4 py-12 selection:bg-primary/20 selection:text-primary">
+      {/* Radiant ambient mesh glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] mesh-glow pointer-events-none opacity-90" />
 
-      <div className="relative z-10 w-full max-w-md px-4 sm:px-8">
-        <div className="mb-10 text-center animate-in slide-in-from-bottom-4 fade-in duration-700">
-          <Link href="/" className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-6 shadow-sm">
+      <div className="relative z-10 w-full max-w-md">
+        <div className="mb-8 text-center animate-in slide-in-from-bottom-4 fade-in duration-700">
+          <Link
+            href="/"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white mb-4 shadow-lg shadow-indigo-500/25 hover:scale-105 transition-transform"
+          >
             <GraduationCap className="h-6 w-6" />
           </Link>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Welcome back
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+            Educator Workspace
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign in to manage your exams and students.
+            Sign in to create assessments, supervise candidates, and export gradebooks.
           </p>
         </div>
 
-        <Card className="glass-panel animate-in slide-in-from-bottom-8 fade-in duration-1000">
+        <Card className="glass-panel border-slate-200/80 dark:border-slate-800 shadow-2xl animate-in slide-in-from-bottom-6 fade-in duration-700">
           <CardContent className="pt-8">
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-6"
+                className="space-y-5"
                 noValidate
               >
                 {serverError && (
                   <div
                     role="alert"
-                    className="flex items-start gap-2 rounded-lg border border-red-200/50 bg-red-50/50 px-4 py-3 text-sm text-red-700"
+                    className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300 animate-in fade-in"
                   >
-                    <ShieldCheck
-                      className="mt-0.5 h-4 w-4 shrink-0 text-red-500"
+                    <AlertCircle
+                      className="mt-0.5 h-4 w-4 shrink-0 text-rose-500"
                       aria-hidden
                     />
                     <span>{serverError}</span>
@@ -170,20 +173,20 @@ export default function TeacherLoginPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">
-                        Email address
+                      <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Email Address
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
                           <Mail
-                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                             aria-hidden
                           />
                           <Input
-                            placeholder="teacher@school.edu"
+                            placeholder="professor@university.edu"
                             type="email"
                             autoComplete="email"
-                            className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white transition-colors"
+                            className="h-11 pl-10 pr-3 bg-secondary/30 focus:bg-background border-border/60 transition-colors rounded-xl"
                             {...field}
                             disabled={isLoading}
                           />
@@ -200,12 +203,12 @@ export default function TeacherLoginPage() {
                   render={({ field }) => (
                     <FormItem>
                       <div className="flex items-center justify-between">
-                        <FormLabel className="text-sm font-medium">
+                        <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           Password
                         </FormLabel>
                         <Link
                           href="/forgot-password"
-                          className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                          className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
                         >
                           Forgot password?
                         </Link>
@@ -213,17 +216,29 @@ export default function TeacherLoginPage() {
                       <FormControl>
                         <div className="relative">
                           <LockKeyhole
-                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                             aria-hidden
                           />
                           <Input
                             placeholder="••••••••"
-                            type="password"
+                            type={showPassword ? "text" : "password"}
                             autoComplete="current-password"
-                            className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white transition-colors"
+                            className="h-11 pl-10 pr-10 bg-secondary/30 focus:bg-background border-border/60 transition-colors rounded-xl"
                             {...field}
                             disabled={isLoading}
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            tabIndex={-1}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -233,7 +248,7 @@ export default function TeacherLoginPage() {
 
                 <Button
                   type="submit"
-                  className="h-11 w-full text-[15px]"
+                  className="h-11 w-full gradient-brand text-sm font-semibold rounded-xl shadow-md shadow-indigo-500/20"
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -242,32 +257,35 @@ export default function TeacherLoginPage() {
                       Signing in…
                     </>
                   ) : (
-                    "Sign in"
+                    <>
+                      Sign In to Workspace
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
                   )}
                 </Button>
               </form>
             </Form>
           </CardContent>
 
-          <CardFooter className="flex flex-col gap-2 border-t border-border/40 py-6 text-center">
+          <CardFooter className="flex flex-col gap-3 border-t border-border/40 py-5 text-center bg-secondary/10 rounded-b-[14px]">
             <p className="text-sm text-muted-foreground">
-              New to Examora?{" "}
+              New educator?{" "}
               <Link
                 href="/register"
-                className="font-medium text-foreground hover:underline"
+                className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
                 Create an account
               </Link>
             </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Are you a student?{" "}
+            <div className="flex items-center justify-center gap-2 pt-1 border-t border-border/30 w-full text-xs text-muted-foreground">
+              <span>Are you a student taking an exam?</span>
               <Link
                 href="/join"
-                className="font-medium text-foreground hover:underline"
+                className="font-semibold text-foreground hover:text-indigo-600 transition-colors"
               >
-                Join an exam
+                Enter Exam PIN →
               </Link>
-            </p>
+            </div>
           </CardFooter>
         </Card>
       </div>

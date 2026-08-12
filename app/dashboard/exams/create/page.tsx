@@ -51,8 +51,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
-import { AIQuestionGenerator, GeneratedQuestion } from "@/components/exams/AIQuestionGenerator";
-import { DocumentUploader } from "@/components/exams/DocumentUploader";
 import { QuestionBankPicker } from "@/components/exams/QuestionBankPicker";
 
 // ---------- Types & Schemas ----------
@@ -223,44 +221,8 @@ function CreateExamContent() {
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
 
-  const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
-  const [isUploaderOpen, setIsUploaderOpen] = useState(false);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
   const [savingToBank, setSavingToBank] = useState<number | null>(null);
-
-  const handleAIQuestionsAdded = (questions: GeneratedQuestion[]) => {
-    questions.forEach((q) => {
-      const formatted: QuestionFormValue =
-        q.type === "MCQ_SINGLE"
-          ? {
-              type: "MCQ_SINGLE",
-              questionText: q.questionText,
-              marks: q.marks || 2,
-              options: q.options && q.options.length >= 2 ? q.options : ["Option A", "Option B"],
-              correctAnswer: q.correctAnswer || q.options?.[0] || "",
-            }
-          : q.type === "TRUE_FALSE"
-          ? {
-              type: "TRUE_FALSE",
-              questionText: q.questionText,
-              marks: q.marks || 1,
-              options: ["True", "False"],
-              correctAnswer: q.correctAnswer === "False" ? "False" : "True",
-            }
-          : {
-              type: "SHORT_ANSWER",
-              questionText: q.questionText,
-              marks: q.marks || 5,
-              options: [],
-              correctAnswer: q.correctAnswer || "Model answer sample",
-            };
-      append(formatted);
-    });
-    toast({
-      title: "Questions Added! ✨",
-      description: `Added ${questions.length} question(s) to your exam draft.`,
-    });
-  };
 
   const handleBankQuestionsAdded = (questions: QuestionFormValue[]) => {
     questions.forEach((q) => append(q));
@@ -1297,28 +1259,6 @@ function CreateExamContent() {
                     </span>
                     Question bank
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsAIGeneratorOpen(true)}
-                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 px-6 py-5 text-base font-semibold text-indigo-700 transition hover:border-indigo-500 hover:bg-indigo-100/50 shadow-sm"
-                  >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
-                      <Sparkles className="h-5 w-5" />
-                    </span>
-                    ✨ Generate with AI
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsUploaderOpen(true)}
-                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 px-6 py-5 text-base font-semibold text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-100/50 shadow-sm"
-                  >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-200">
-                      <FileText className="h-5 w-5" />
-                    </span>
-                    📄 Upload paper
-                  </button>
                 </div>
               </div>
 
@@ -1399,20 +1339,6 @@ function CreateExamContent() {
           </div>
         </form>
       </Form>
-
-      {/* AI Question Generator Modal */}
-      <AIQuestionGenerator
-        isOpen={isAIGeneratorOpen}
-        onClose={() => setIsAIGeneratorOpen(false)}
-        onAddQuestions={handleAIQuestionsAdded}
-      />
-
-      {/* Document Upload / AI Parser Modal */}
-      <DocumentUploader
-        isOpen={isUploaderOpen}
-        onClose={() => setIsUploaderOpen(false)}
-        onAddQuestions={handleAIQuestionsAdded}
-      />
 
       {/* Question Bank Picker Modal */}
       <QuestionBankPicker

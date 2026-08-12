@@ -41,78 +41,90 @@ export default function ForgotPasswordPage() {
 
       setSubmitted(true);
     } catch {
-      setError("Network error. Please make sure the backend server is running.");
+      setError("Network error. Please make sure the backend server is reachable.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen w-full bg-background relative flex items-center justify-center overflow-hidden p-4">
+    <main className="min-h-screen w-full bg-background relative flex items-center justify-center overflow-hidden p-4 sm:p-6 selection:bg-primary/20 selection:text-primary">
+      {/* Radiant ambient glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] mesh-glow pointer-events-none opacity-90" />
+
       <div className="relative z-10 w-full max-w-md">
         <div className="mb-8 text-center animate-in slide-in-from-bottom-4 fade-in duration-700">
           <Link
             href="/"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-4 shadow-sm"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white mb-4 shadow-lg shadow-indigo-500/25 hover:scale-105 transition-transform"
           >
             <GraduationCap className="h-6 w-6" />
           </Link>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Reset Password</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+            Account Recovery
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Enter your educator email to receive reset instructions.
+            Enter your registered educator email to receive reset instructions.
           </p>
         </div>
 
-        <Card className="glass-panel animate-in slide-in-from-bottom-8 fade-in duration-1000">
-          <CardHeader className="pt-6">
-            <CardTitle className="text-xl font-bold">Password Recovery</CardTitle>
-            <CardDescription>We will send a reset link to your inbox.</CardDescription>
+        <Card className="glass-panel border-slate-200/80 dark:border-slate-800 shadow-2xl animate-in slide-in-from-bottom-6 fade-in duration-700">
+          <CardHeader className="pt-6 border-b border-border/40 pb-4">
+            <CardTitle className="text-lg font-bold text-foreground">Password Recovery</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">
+              We will send a secure one-time reset link to your institutional inbox.
+            </CardDescription>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="pt-6">
             {submitted ? (
               <div className="text-center py-4 space-y-3">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="h-6 w-6" />
                 </div>
-                <h3 className="text-lg font-semibold">Check your email</h3>
-                <p className="text-sm text-muted-foreground">
-                  If an account exists for <strong>{email}</strong>, password reset instructions have been sent.
+                <h3 className="text-base font-bold text-foreground">Check your inbox</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  If an account exists for <strong className="text-foreground">{email}</strong>, password reset instructions have been dispatched.
                 </p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
-                  <div className="flex items-center gap-2 rounded-lg border border-red-200/50 bg-red-50/50 px-4 py-3 text-sm text-red-700">
-                    <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                  <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-500 mt-0.5" />
                     <span>{error}</span>
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-medium">
-                    Email address
+                  <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Institutional Email Address
                   </Label>
                   <div className="relative">
-                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="email"
                       type="email"
-                      placeholder="teacher@school.edu"
+                      placeholder="professor@university.edu"
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
                         if (error) setError("");
                       }}
-                      className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white"
+                      className="h-11 pl-10 pr-3 bg-secondary/30 focus:bg-background border-border/60 transition-colors rounded-xl text-sm"
                       disabled={loading}
+                      autoFocus
                     />
                   </div>
                 </div>
 
-                <Button type="submit" disabled={loading || !email.trim()} className="h-11 w-full text-[15px]">
+                <Button
+                  type="submit"
+                  disabled={loading || !email.trim()}
+                  className="h-11 w-full gradient-brand text-sm font-semibold rounded-xl shadow-md shadow-indigo-500/20"
+                >
                   {loading ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending reset link…
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending Link…
                     </>
                   ) : (
                     "Send Reset Link"
@@ -122,9 +134,12 @@ export default function ForgotPasswordPage() {
             )}
           </CardContent>
 
-          <CardFooter className="flex justify-center border-t border-border/40 py-4">
-            <Link href="/login" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to Sign In
+          <CardFooter className="flex justify-center border-t border-border/40 py-4 bg-secondary/10 rounded-b-[14px]">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Educator Sign In
             </Link>
           </CardFooter>
         </Card>

@@ -11,8 +11,13 @@ import {
   Mail,
   LockKeyhole,
   Loader2,
-  ShieldCheck,
+  AlertCircle,
+  Eye,
+  EyeOff,
   User,
+  ArrowRight,
+  ShieldCheck,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { setAuthToken, setAuthUser } from "@/lib/auth-token";
 
 const registerSchema = z.object({
-  name: z.string().min(2, { message: "Name is required (min 2 chars)" }),
+  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z
     .string()
     .min(1, { message: "Email is required" })
@@ -49,6 +54,7 @@ export default function TeacherRegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState("");
 
   const form = useForm<RegisterForm>({
@@ -56,6 +62,8 @@ export default function TeacherRegisterPage() {
     defaultValues: { name: "", email: "", password: "" },
     mode: "onTouched",
   });
+
+  const passwordValue = form.watch("password") || "";
 
   const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
@@ -98,7 +106,7 @@ export default function TeacherRegisterPage() {
         toast({
           title: "Account Created!",
           description: user?.name
-            ? `Welcome, ${user.name}. Redirecting to your dashboard.`
+            ? `Welcome, ${user.name}. Setting up your workspace.`
             : "Redirecting to your dashboard.",
         });
         
@@ -116,39 +124,41 @@ export default function TeacherRegisterPage() {
   };
 
   return (
-    <main className="min-h-screen w-full bg-background relative flex items-center justify-center overflow-hidden">
-      {/* Subtle ambient background glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
-           style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
+    <main className="min-h-screen w-full bg-background relative flex items-center justify-center overflow-hidden px-4 py-12 selection:bg-primary/20 selection:text-primary">
+      {/* Radiant ambient glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] mesh-glow pointer-events-none opacity-90" />
 
-      <div className="relative z-10 w-full max-w-md px-4 sm:px-8 py-10">
-        <div className="mb-10 text-center animate-in slide-in-from-bottom-4 fade-in duration-700">
-          <Link href="/" className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-6 shadow-sm">
+      <div className="relative z-10 w-full max-w-md">
+        <div className="mb-8 text-center animate-in slide-in-from-bottom-4 fade-in duration-700">
+          <Link
+            href="/"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white mb-4 shadow-lg shadow-indigo-500/25 hover:scale-105 transition-transform"
+          >
             <GraduationCap className="h-6 w-6" />
           </Link>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Create an account
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+            Create Educator Account
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign up to manage your exams and students.
+            Launch AI exams, supervise live candidate streams, and manage classes.
           </p>
         </div>
 
-        <Card className="glass-panel animate-in slide-in-from-bottom-8 fade-in duration-1000">
+        <Card className="glass-panel border-slate-200/80 dark:border-slate-800 shadow-2xl animate-in slide-in-from-bottom-6 fade-in duration-700">
           <CardContent className="pt-8">
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-6"
+                className="space-y-5"
                 noValidate
               >
                 {serverError && (
                   <div
                     role="alert"
-                    className="flex items-start gap-2 rounded-lg border border-red-200/50 bg-red-50/50 px-4 py-3 text-sm text-red-700"
+                    className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300 animate-in fade-in"
                   >
-                    <ShieldCheck
-                      className="mt-0.5 h-4 w-4 shrink-0 text-red-500"
+                    <AlertCircle
+                      className="mt-0.5 h-4 w-4 shrink-0 text-rose-500"
                       aria-hidden
                     />
                     <span>{serverError}</span>
@@ -160,20 +170,20 @@ export default function TeacherRegisterPage() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">
+                      <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Full Name
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
                           <User
-                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                             aria-hidden
                           />
                           <Input
-                            placeholder="John Doe"
+                            placeholder="Dr. Jordan Mitchell"
                             type="text"
                             autoComplete="name"
-                            className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white transition-colors"
+                            className="h-11 pl-10 pr-3 bg-secondary/30 focus:bg-background border-border/60 transition-colors rounded-xl"
                             {...field}
                             disabled={isLoading}
                           />
@@ -189,20 +199,20 @@ export default function TeacherRegisterPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">
-                        Email address
+                      <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Institutional Email
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
                           <Mail
-                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                             aria-hidden
                           />
                           <Input
-                            placeholder="teacher@school.edu"
+                            placeholder="professor@university.edu"
                             type="email"
                             autoComplete="email"
-                            className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white transition-colors"
+                            className="h-11 pl-10 pr-3 bg-secondary/30 focus:bg-background border-border/60 transition-colors rounded-xl"
                             {...field}
                             disabled={isLoading}
                           />
@@ -218,33 +228,55 @@ export default function TeacherRegisterPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">
+                      <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Password
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
                           <LockKeyhole
-                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                             aria-hidden
                           />
                           <Input
                             placeholder="••••••••"
-                            type="password"
+                            type={showPassword ? "text" : "password"}
                             autoComplete="new-password"
-                            className="h-11 pl-9 pr-3 bg-white/50 focus:bg-white transition-colors"
+                            className="h-11 pl-10 pr-10 bg-secondary/30 focus:bg-background border-border/60 transition-colors rounded-xl"
                             {...field}
                             disabled={isLoading}
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            tabIndex={-1}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
                         </div>
                       </FormControl>
                       <FormMessage />
+
+                      {/* Password check indicator */}
+                      <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span className={`flex items-center gap-1 ${passwordValue.length >= 8 ? 'text-emerald-600 dark:text-emerald-400 font-medium' : ''}`}>
+                          <Check className={`h-3 w-3 ${passwordValue.length >= 8 ? 'text-emerald-500' : 'opacity-40'}`} />
+                          8+ characters
+                        </span>
+                        <span className="opacity-40">•</span>
+                        <span>Encrypted with bcrypt</span>
+                      </div>
                     </FormItem>
                   )}
                 />
 
                 <Button
                   type="submit"
-                  className="h-11 w-full text-[15px]"
+                  className="h-11 w-full gradient-brand text-sm font-semibold rounded-xl shadow-md shadow-indigo-500/20"
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -253,21 +285,24 @@ export default function TeacherRegisterPage() {
                       Creating account…
                     </>
                   ) : (
-                    "Create Account"
+                    <>
+                      Complete Registration
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
                   )}
                 </Button>
               </form>
             </Form>
           </CardContent>
 
-          <CardFooter className="flex flex-col gap-2 border-t border-border/40 py-6 text-center">
+          <CardFooter className="flex flex-col gap-2 border-t border-border/40 py-5 text-center bg-secondary/10 rounded-b-[14px]">
             <p className="text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link
                 href="/login"
-                className="font-medium text-foreground hover:underline"
+                className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
-                Sign in
+                Sign in here
               </Link>
             </p>
           </CardFooter>
