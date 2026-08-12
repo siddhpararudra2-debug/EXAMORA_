@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { ExamStatus, PrismaClient, SubmissionStatus } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { ExamStatus, SubmissionStatus } from '@prisma/client';
+import prisma from '../../prisma/client.js';
 
 /**
  * Shape of the authenticated student session attached to the request.
@@ -83,7 +82,11 @@ export const validateStudentSession = (
       }
 
       const session = await prisma.examSession.findUnique({
-        where: { session_token: token },
+        where: {
+          session_token: token,
+          deleted_at: null,
+          exam: { deleted_at: null },
+        },
         select: {
           id: true,
           session_token: true,

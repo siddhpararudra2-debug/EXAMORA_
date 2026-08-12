@@ -6,6 +6,14 @@ import { ZodSchema, ZodError } from "zod";
 /**
  * Step 1: Configure Helmet with strict Content Security Policy (CSP) headers.
  * Explicitly ALLOWS webcam ('self' blob:) and AI model loading via CDN or self.
+ *
+ * Security note: `script-src` deliberately omits 'unsafe-inline' and
+ * 'unsafe-eval'. These API responses carry no inline scripts, and TensorFlow.js
+ * is bundled by the Next.js frontend (served with its own strict CSP from
+ * next.config.mjs), so neither is needed here. 'wasm-unsafe-eval' keeps the
+ * WebAssembly backend of client-side models working if ever loaded from this
+ * origin. Inline styles stay allowed (Next.js injects them) and are inert for
+ * XSS when script-src is locked down.
  */
 export const securityMiddleware = helmet({
   contentSecurityPolicy: {
@@ -13,8 +21,7 @@ export const securityMiddleware = helmet({
       defaultSrc: ["'self'"],
       scriptSrc: [
         "'self'",
-        "'unsafe-inline'",
-        "'unsafe-eval'", // Required for TensorFlow.js & WASM client-side model execution
+        "'wasm-unsafe-eval'", // WebAssembly for client-side model backends
         "https://cdn.jsdelivr.net",
         "https://*.tensorflow.org",
       ],

@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
 import {
   registerSchema,
   loginSchema,
@@ -15,8 +14,7 @@ import {
 } from '../validators/auth.js';
 import { JWT_SECRET } from '../config.js';
 import { sendPasswordResetEmail } from '../../apps/backend/src/services/email.service.js';
-
-const prisma = new PrismaClient();
+import prisma from '../../prisma/client.js';
 
 // Helper to validate with Zod
 const validate = <T>(schema: any, data: unknown): { success: boolean; data?: T; error?: string } => {
@@ -40,7 +38,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     const email = rawEmail.trim().toLowerCase();
 
     // Check if teacher already exists
-    const existingUser = await prisma.teacher.findUnique({ where: { email } });
+    const existingUser = await prisma.teacher.findFirst({ where: { email } });
     if (existingUser) {
       res.status(409).json({ status: 'error', message: 'Email already registered' });
       return;
@@ -85,7 +83,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     const email = rawEmail.trim().toLowerCase();
 
     // Find teacher
-    const user = await prisma.teacher.findUnique({ where: { email } });
+    const user = await prisma.teacher.findFirst({ where: { email } });
     if (!user || !user.password_hash) {
       res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       return;
@@ -158,7 +156,7 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 
     // Always respond success regardless of whether the account exists to
     // avoid leaking which emails are registered.
-    const user = await prisma.teacher.findUnique({ where: { email } });
+    const user = await prisma.teacher.findFirst({ where: { email } });
     if (user && user.email) {
       const token = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour

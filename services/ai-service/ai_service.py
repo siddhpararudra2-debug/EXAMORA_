@@ -30,6 +30,10 @@ MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 MAX_DOCUMENT_CHARS_FOR_LLM = 60_000
 SUPPORTED_DOCUMENT_EXTENSIONS = frozenset({"pdf", "docx", "txt", "md"})
 
+# Only the first N pages of a PDF are parsed/OCR'd. Rendering a whole
+# hundreds-page PDF page-by-page (or at once) would exhaust container RAM.
+MAX_DOCUMENT_PAGES = 60
+
 # Below this many characters, PyPDF2 extraction is treated as failed
 # (scanned/image-only PDF) and the OCR fallback kicks in.
 MIN_PDF_TEXT_CHARS = 20
@@ -343,7 +347,10 @@ class AIQuestionService:
 
         if extension == "pdf":
             reader = PyPDF2.PdfReader(io.BytesIO(content))
-            pages = [page.extract_text() or "" for page in reader.pages]
+            pages = [page.extract_text() or "" for page in reader.pages[:MAX_DOCUMENT_PAGES]]
+            pages_skipped = max(0, len(reader.pages) - MAX_DOCUMENT_PAGES)
+            if pages_skipped:
+                logger.info("PDF has %d pages — only the first %d were parsed", len(reader.pages), MAX_DOCUMENT_PAGES)
             text = "\n\n".join(pages).strip()
             # Scanned PDFs yield empty (or near-empty) text from PyPDF2 —
             # fall back to OCR (pdf2image + pytesseract) in that case.
@@ -371,12 +378,14 @@ class AIQuestionService:
         raise AIServiceError("could not decode the text file", code="no_readable_text", status_code=422)
 
     @staticmethod
-    def _ocr_pdf(content: bytes) -> str:
-        """OCR a scanned PDF page-by-page.
+    def _ocr_pdf(content: bytes, max_pages: int = MAX_DOCUMENT_PAGES) -> str:
+        """OCR a scanned PDF one page at a time.
 
-        Lazily imports pdf2image + pytesseract so the rest of the service
-        keeps working when the system OCR dependencies (tesseract binary,
-        poppler) are not installed.
+        Rendering only one page per convert_from_bytes call keeps peak memory
+        bounded (a full-document render of a many-page PDF would spike RAM
+        and OOM the container). Lazily imports pdf2image + pytesseract so the
+        rest of the service keeps working when the system OCR dependencies
+        (tesseract binary, poppler) are not installed.
         """
         try:
             from pdf2image import convert_from_bytes  # type: ignore[import-not-found]
@@ -390,20 +399,37 @@ class AIQuestionService:
             return ""
 
         try:
-            images = convert_from_bytes(content, dpi=OCR_DPI)
+            reader = PyPDF2.PdfReader(io.BytesIO(content))
+            total_pages = len(reader.pages)
         except Exception as exc:
-            logger.warning("pdf2image failed to render PDF pages: %s", exc)
-            return ""
+            logger.warning("failed to count PDF pages for OCR: %s", exc)
+            total_pages = max_pages
+
+        pages_to_scan = min(total_pages, max_pages)
+        if total_pages > max_pages:
+            logger.info("OCR: scanning the first %d of %d pages", max_pages, total_pages)
 
         ocr_parts: list[str] = []
-        for index, image in enumerate(images, start=1):
+        for page_no in range(1, pages_to_scan + 1):
             try:
-                page_text = pytesseract.image_to_string(image).strip()
+                images = convert_from_bytes(
+                    content,
+                    dpi=OCR_DPI,
+                    first_page=page_no,
+                    last_page=page_no,
+                )
             except Exception as exc:
-                logger.warning("pytesseract failed on page %d: %s", index, exc)
+                logger.warning("pdf2image failed to render page %d: %s", page_no, exc)
                 continue
-            if page_text:
-                ocr_parts.append(page_text)
+
+            for image in images:
+                try:
+                    page_text = pytesseract.image_to_string(image).strip()
+                except Exception as exc:
+                    logger.warning("pytesseract failed on page %d: %s", page_no, exc)
+                    continue
+                if page_text:
+                    ocr_parts.append(page_text)
         return "\n\n".join(ocr_parts)
 
     @staticmethod

@@ -18,6 +18,9 @@ const NODE_ENV = process.env.NODE_ENV ?? 'development';
  * - Unset in dev/test → loud warning + a random per-boot secret, so local
  *   development works without a config file but sessions do not survive a
  *   restart (tokens signed with a fixed 'dev-secret' are trivially forgeable).
+ *
+ * IMPORTANT: there is deliberately NO hardcoded fallback string. A fixed
+ * public secret would let anyone forge valid teacher/student tokens.
  */
 function resolveJwtSecret(): string {
   const configuredSecret = process.env.JWT_SECRET;
@@ -33,7 +36,12 @@ function resolveJwtSecret(): string {
     );
   }
 
-  return 'dev-secret-key-not-for-production';
+  const ephemeralSecret = crypto.randomBytes(32).toString('hex');
+  console.warn(
+    `[config] No JWT_SECRET set — using an ephemeral per-boot secret (${NODE_ENV}). ` +
+      'Sessions will not survive a restart and multi-instance deployments are unsupported without JWT_SECRET.',
+  );
+  return ephemeralSecret;
 }
 
 export const JWT_SECRET = resolveJwtSecret();

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { Prisma, PrismaClient, SubmissionStatus, ViolationType } from '@prisma/client';
+import { Prisma, SubmissionStatus, ViolationType } from '@prisma/client';
 import { Server } from 'socket.io';
 
 import { AuthenticatedStudentRequest } from '../middleware/validateStudentSession.js';
@@ -10,8 +10,7 @@ import {
   sessionRoomName,
   PROCTORING_EVENTS,
 } from '../../apps/backend/src/socket/proctoring.handler.js';
-
-const prisma = new PrismaClient();
+import prisma from '../../prisma/client.js';
 
 export { MAX_WARNINGS };
 

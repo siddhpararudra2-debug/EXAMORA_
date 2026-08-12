@@ -40,6 +40,21 @@ export function createApp(options: CreateAppOptions = {}): AppBundle {
   const app: Application = express();
   const httpServer = createServer(app);
 
+  // Trust the reverse proxy when deployed behind one (nginx / Render / ingress).
+  // Without this, express-rate-limit keyed on req.ip would rate-limit the
+  // proxy's address instead of the real client, locking out all users.
+  // TRUST_PROXY accepts the express "trust proxy" value (e.g. 1, true,
+  // 'loopback'). Off by default for local single-hop development.
+  const trustProxyValue = process.env.TRUST_PROXY;
+  if (trustProxyValue) {
+    if (trustProxyValue === 'true' || trustProxyValue === '1') {
+      app.set('trust proxy', 1);
+    } else {
+      app.set('trust proxy', trustProxyValue);
+    }
+    console.log(`🌐 Trust proxy enabled (${trustProxyValue}) — rate limiting uses real client IPs`);
+  }
+
   // Socket.io initialization (optional — skipped for API-only tests)
   let io: Server | null = null;
   if (withSocket) {
@@ -51,6 +66,8 @@ export function createApp(options: CreateAppOptions = {}): AppBundle {
       },
       pingTimeout: 60000,
       pingInterval: 25000,
+      // Snapshot frames (JPEG data URLs, ~40-300KB) ride this connection.
+      maxHttpBufferSize: 500_000,
     });
   }
 

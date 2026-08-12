@@ -62,9 +62,14 @@ services:
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-examora}:${POSTGRES_PASSWORD:-examora_secure_pass}@postgres:5432/${POSTGRES_DB:-examora_prod}?schema=public
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-examora_production_jwt_secret_key_2026}
-      SESSION_SECRET: ${SESSION_SECRET:-examora_production_session_secret_2026}
+      # Secrets have NO fallback defaults: compose fails fast when they are
+      # unset, so a public/dev value can never be silently deployed.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it before deploying}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required — set it before deploying}
       FRONTEND_URL: ${FRONTEND_URL:-https://${DOMAIN_NAME:-localhost}}
+      # Backend sits behind nginx which forwards X-Forwarded-For, so rate
+      # limiters must key on the real client IP, not the proxy's.
+      TRUST_PROXY: "1"
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -95,6 +100,8 @@ services:
       context: ./services/ai-service
     container_name: examora_ai_service_prod
     restart: unless-stopped
+    # Bounded memory: document parsing/OCR can spike RAM otherwise.
+    mem_limit: 512m
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama3-70b-8192}

@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { BankQuestionInput } from '../validators/bank.js';
-
-const prisma = new PrismaClient();
+import prisma from '../../prisma/client.js';
 
 /**
  * GET /api/v1/question-bank
@@ -18,7 +17,7 @@ export const listBankQuestions = async (
     const { teacher } = req as AuthenticatedRequest;
 
     const questions = await prisma.bankQuestion.findMany({
-      where: { teacher_id: teacher.userId },
+      where: { teacher_id: teacher.userId, deleted_at: null },
       orderBy: { created_at: 'desc' },
     });
 
@@ -78,7 +77,7 @@ export const deleteBankQuestion = async (
     const { id } = req.params;
 
     const existing = await prisma.bankQuestion.findFirst({
-      where: { id, teacher_id: teacher.userId },
+      where: { id, teacher_id: teacher.userId, deleted_at: null },
       select: { id: true },
     });
 
@@ -90,7 +89,11 @@ export const deleteBankQuestion = async (
       return;
     }
 
-    await prisma.bankQuestion.delete({ where: { id } });
+    // Soft delete: the row is retained for audit/recovery (deleted_at column).
+    await prisma.bankQuestion.update({
+      where: { id },
+      data: { deleted_at: new Date() },
+    });
 
     res.json({
       status: 'success',

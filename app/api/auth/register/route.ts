@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const email = rawEmail.trim().toLowerCase();
 
     // Check if teacher already exists
-    const existingUser = await prisma.teacher.findUnique({
+    const existingUser = await prisma.teacher.findFirst({
       where: { email },
     });
 

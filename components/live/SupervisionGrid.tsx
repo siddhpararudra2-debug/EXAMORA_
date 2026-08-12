@@ -80,6 +80,8 @@ export function SupervisionGrid({
   const [tiles, setTiles] = useState<StreamTile[]>([]);
   const [enlarged, setEnlarged] = useState<StreamTile | null>(null);
   const [requesting, setRequesting] = useState(false);
+  /** sessionId → latest JPEG snapshot frame (data URL) from snapshot-mode students. */
+  const [snapshots, setSnapshots] = useState<Record<string, string>>({});
   const tilesRef = useRef<StreamTile[]>([]);
   const sessionNameById = useMemo(
     () => new Map(sessions.map((s) => [s.id, s.studentName])),
@@ -87,6 +89,20 @@ export function SupervisionGrid({
   );
 
   tilesRef.current = tiles;
+
+  const liveSessionIds = useMemo(
+    () =>
+      new Set(
+        tiles.map((t) => t.sessionId).filter((id): id is string => Boolean(id)),
+      ),
+    [tiles],
+  );
+  // Students that are NOT publishing a live stream and have at least one
+  // server-relayed snapshot frame.
+  const snapshotTiles = useMemo(
+    () => sessions.filter((s) => !liveSessionIds.has(s.id) && snapshots[s.id]),
+    [sessions, liveSessionIds, snapshots],
+  );
 
   const nameFor = useCallback(
     (sessionId: string | null): string | null =>
@@ -239,6 +255,32 @@ export function SupervisionGrid({
     [],
   );
 
+  const handleSnapshot = useCallback(
+    (payload: { from?: string; sessionId?: string; data?: string }) => {
+      if (!payload?.sessionId || typeof payload.data !== "string") return;
+      const { sessionId, data } = payload;
+      setSnapshots((prev) => ({ ...prev, [sessionId]: data }));
+    },
+    [],
+  );
+
+  /** Swaps one snapshot student into the teacher's live-pool (server enforces the cap). */
+  const focusSnapshotTile = useCallback(
+    (sessionId: string) => {
+      if (!socket?.connected) return;
+      socket.emit(
+        "webrtc_focus",
+        { examId, sessionId },
+        (ack?: { status?: string }) => {
+          if (ack?.status !== "success") {
+            console.warn("[SupervisionGrid] focus request rejected:", ack);
+          }
+        },
+      );
+    },
+    [socket, examId],
+  );
+
   // Wire up signaling when the teacher is in the exam room.
   useEffect(() => {
     if (!socket || !roomJoined) return;
@@ -246,6 +288,7 @@ export function SupervisionGrid({
     socket.on("webrtc_offer", handleOffer);
     socket.on("webrtc_ice", handleIce);
     socket.on("webrtc_state", handleState);
+    socket.on("webrtc_snapshot", handleSnapshot);
     socket.on("webrtc_end", (payload: { from?: string }) => {
       if (payload?.from) closeTile(payload.from);
     });
@@ -256,6 +299,7 @@ export function SupervisionGrid({
       socket.off("webrtc_offer", handleOffer);
       socket.off("webrtc_ice", handleIce);
       socket.off("webrtc_state", handleState);
+      socket.off("webrtc_snapshot", handleSnapshot);
       socket.off("webrtc_end");
       // Tear down all peer connections and tell students we're done.
       for (const tile of tilesRef.current) {
@@ -268,7 +312,7 @@ export function SupervisionGrid({
       }
       setTiles([]);
     };
-  }, [socket, roomJoined, examId, handleOffer, handleIce, handleState, closeTile, requestStreams]);
+  }, [socket, roomJoined, examId, handleOffer, handleIce, handleState, handleSnapshot, closeTile, requestStreams]);
 
   const startRecording = useCallback((tile: StreamTile) => {
     if (!tile.stream || tile.recording || !supportsWebmRecording()) return;
@@ -327,9 +371,9 @@ export function SupervisionGrid({
               Live camera &amp; mic
             </h2>
             <p className="text-xs text-muted-foreground">
-              {tiles.length === 0
+              {tiles.length === 0 && snapshotTiles.length === 0
                 ? "Waiting for students to publish their feeds…"
-                : `${tiles.length} student feed${tiles.length === 1 ? "" : "s"} streaming · click a tile to listen in`}
+                : `${tiles.length} live stream${tiles.length === 1 ? "" : "s"} · ${snapshotTiles.length} snapshot tile${snapshotTiles.length === 1 ? "" : "s"} · click a live tile to listen in`}
             </p>
           </div>
         </div>
@@ -350,7 +394,7 @@ export function SupervisionGrid({
         </Button>
       </div>
 
-      {tiles.length === 0 ? (
+      {tiles.length === 0 && snapshotTiles.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border/60 bg-card/40 p-10 text-center">
           <VideoOff className="mx-auto h-6 w-6 text-muted-foreground" />
           <p className="mt-3 text-sm font-medium text-muted-foreground">
@@ -484,6 +528,43 @@ export function SupervisionGrid({
             );
           })}
         </div>
+      )}
+
+      {snapshotTiles.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold text-muted-foreground">
+            Snapshot tiles ({snapshotTiles.length}) — camera frames are
+            relayed by the server every ~2s; click “Live” to stream this
+            student in real time
+          </h3>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            {snapshotTiles.map((session) => (
+              <div
+                key={session.id}
+                className="group relative overflow-hidden rounded-2xl border border-border/50 bg-black shadow-sm"
+              >
+                <img
+                  src={snapshots[session.id]}
+                  alt={`${session.studentName} camera snapshot`}
+                  className="aspect-video w-full object-cover"
+                />
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/85 to-transparent p-2.5">
+                  <span className="min-w-0 truncate text-xs font-bold text-white">
+                    {session.studentName}
+                  </span>
+                  <Button
+                    type="button"
+                    className="h-7 shrink-0 gap-1 bg-white/20 text-white hover:bg-primary hover:text-white"
+                    onClick={() => focusSnapshotTile(session.id)}
+                  >
+                    <Radio className="h-3 w-3" />
+                    Live
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Click-to-enlarge overlay with audio (S03) */}

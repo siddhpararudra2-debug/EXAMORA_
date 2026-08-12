@@ -1,10 +1,27 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { SubmissionStatus } from '@prisma/client';
+import { SubmissionStatus, ViolationType } from '@prisma/client';
 import prisma from '../../../../prisma/client.js';
 import { JWT_SECRET } from '../../../../server/config.js';
 
 export const MAX_WARNINGS = 3;
+
+/**
+ * Maximum number of students whose camera/mic streams a teacher can receive
+ * live over the P2P mesh at once. WebRTC mesh topology does not scale beyond
+ * a handful of peers on the teacher's browser (CPU + bandwidth exhaustion),
+ * so the remaining students fall back to periodic JPEG snapshots relayed by
+ * the server (webrtc_snapshot). Tune with MAX_LIVE_STREAMS_PER_TEACHER.
+ */
+export const MAX_LIVE_STREAMS_PER_TEACHER = Number(
+  process.env.MAX_LIVE_STREAMS_PER_TEACHER ?? 6,
+);
+
+/** Minimum server-side spacing between lockdown heartbeat DB updates. */
+export const HEARTBEAT_MIN_INTERVAL_MS = 5_000;
+
+/** Upper bound for a snapshot frame payload (data URL), ~300KB of JPEG. */
+export const MAX_SNAPSHOT_LENGTH = 400_000;
 
 export const PROCTORING_EVENTS = {
   JOIN_EXAM_ROOM: 'join_exam_room',
@@ -14,26 +31,25 @@ export const PROCTORING_EVENTS = {
   TEACHER_JOIN_EXAM_ROOM: 'teacher_join_exam_room',
   TEACHER_LEAVE_EXAM_ROOM: 'teacher_leave_exam_room',
   EXAM_ROOM_JOINED: 'exam_room_joined',
+  /** Student → server liveness signal; persisted to last_heartbeat_at. */
+  HEARTBEAT: 'heartbeat',
 } as const;
 
 /**
- * S02/S03 — live camera/mic supervision over WebRTC (mesh topology).
+ * S02/S03 — live camera/mic supervision.
  *
- * Signaling rides the existing Socket.io connection; media travels peer to
- * peer between the student's browser and the teacher's browser, so no SFU or
- * media server is required. These events are pure relay/broadcast primitives:
+ * Scalable hybrid topology (no SFU required):
+ * - A capped number of students publish full WebRTC media P2P to the teacher
+ *   (live mesh, MAX_LIVE_STREAMS_PER_TEACHER at a time).
+ * - Every other student sends low-frequency JPEG snapshots (`webrtc_snapshot`)
+ *   that the server relays to the teacher room — bounded server fan-out
+ *   instead of an unbounded P2P mesh that would crash the teacher's browser.
+ * - The teacher can focus any snapshot tile (`webrtc_focus`) to swap it into
+ *   the live pool (evicting the oldest live tile, FIFO).
  *
- * - `webrtc_request_streams` (teacher)   → server fans out `webrtc_begin` to every
- *                                          student socket in the exam room.
- * - `webrtc_offer`  (student)  { to, sdp } → relayed to the target teacher.
- * - `webrtc_answer` (teacher)  { to, sdp } → relayed to the target student.
- * - `webrtc_ice`    (either)   { to, candidate } → relayed.
- * - `webrtc_end`    (either)   { to } → notify the peer to close the connection.
- * - `webrtc_state`  (student)  { micOn, camOn } → broadcast to the exam room
- *                                                 (teacher tiles update).
- *
- * All relays verify both sockets are members of the same exam room, and
- * offer/answer additionally enforce the student/teacher role.
+ * Signaling rides Socket.io; the server also enforces server-side proctoring
+ * evidence (heartbeat + duplicate-session termination) that client-side JS
+ * cannot disable.
  */
 export const WEBRTC_EVENTS = {
   REQUEST_STREAMS: 'webrtc_request_streams',
@@ -43,6 +59,14 @@ export const WEBRTC_EVENTS = {
   ICE: 'webrtc_ice',
   END: 'webrtc_end',
   STATE: 'webrtc_state',
+  /** Teacher → student: enter snapshot mode (send periodic JPEG frames). */
+  SNAPSHOT_BEGIN: 'webrtc_snapshot_begin',
+  /** Teacher → student: leave snapshot mode. */
+  SNAPSHOT_END: 'webrtc_snapshot_end',
+  /** Student → server → teacher room: one JPEG frame (data URL). */
+  SNAPSHOT: 'webrtc_snapshot',
+  /** Teacher → server: swap a snapshot tile into the live pool. */
+  FOCUS: 'webrtc_focus',
 } as const;
 
 export interface JoinExamRoomPayload {
@@ -84,7 +108,26 @@ export type JoinExamRoomResponse =
 export const roomName = (examId: string): string => `exam_${examId}`;
 export const sessionRoomName = (sessionId: string): string => `session_${sessionId}`;
 
-const registerJoinExamRoomHandler = (socket: Socket): void => {
+interface StreamSubscriptions {
+  /** studentSocketId → sessionId, insertion order = FIFO eviction order. */
+  live: Map<string, string>;
+  /** studentSocketIds publishing snapshots instead of a live stream. */
+  snapshot: Set<string>;
+}
+
+const getSubscriptions = (socket: Socket, examId: string): StreamSubscriptions => {
+  const all = (socket.data.streamSubscriptions ??
+    new Map<string, StreamSubscriptions>()) as Map<string, StreamSubscriptions>;
+  socket.data.streamSubscriptions = all;
+  let subs = all.get(examId);
+  if (!subs) {
+    subs = { live: new Map(), snapshot: new Set() };
+    all.set(examId, subs);
+  }
+  return subs;
+};
+
+const registerJoinExamRoomHandler = (io: Server, socket: Socket): void => {
   socket.on(
     PROCTORING_EVENTS.JOIN_EXAM_ROOM,
     async (
@@ -111,8 +154,50 @@ const registerJoinExamRoomHandler = (socket: Socket): void => {
           return;
         }
 
+        // ── Server-side duplicate-session guard ────────────────────────────
+        // A second live socket presenting the same session token means the
+        // exam is running on a second device/tab (or the lockdown JS was
+        // bypassed). This check lives on the server, so it cannot be disabled
+        // from the console. The session is terminated server-side and both
+        // connections are notified.
+        const sessionRoom = sessionRoomName(session.id);
+        const incumbent = Array.from(
+          io.sockets.adapter.rooms.get(sessionRoom) ?? new Set<string>(),
+        ).find((memberId) => memberId !== socket.id);
+
+        if (incumbent) {
+          const now = new Date();
+          await prisma.examSession.updateMany({
+            where: { id: session.id, status: SubmissionStatus.IN_PROGRESS },
+            data: { status: SubmissionStatus.TERMINATED, submitted_at: now },
+          });
+          await prisma.violation.create({
+            data: {
+              session_id: session.id,
+              type: ViolationType.MOBILE_BUTTON,
+              description:
+                'Duplicate session detected: the same session token connected from a second device or tab',
+              metadata: {
+                incumbent_socket_id: incumbent,
+                newcomer_socket_id: socket.id,
+              },
+            },
+          });
+          const payload = {
+            examId,
+            sessionId: session.id,
+            reason: 'duplicate_session',
+            warnings: MAX_WARNINGS,
+            warningsLimit: MAX_WARNINGS,
+          };
+          io.to(sessionRoom).emit(PROCTORING_EVENTS.EXAM_TERMINATED, payload);
+          socket.emit(PROCTORING_EVENTS.EXAM_TERMINATED, payload);
+          ack?.({ status: 'success' });
+          return;
+        }
+
         await socket.join(roomName(examId));
-        await socket.join(sessionRoomName(session.id));
+        await socket.join(sessionRoom);
 
         socket.data.sessionId = session.id;
         socket.data.examId = examId;
@@ -259,32 +344,122 @@ const relayWithinRoom = (
   return true;
 };
 
+/** Students in the exam room, in room-membership (insertion) order. */
+const studentsInRoom = (
+  io: Server,
+  examId: string,
+): { socket: Socket; sessionId: string }[] => {
+  const room = roomName(examId);
+  const students: { socket: Socket; sessionId: string }[] = [];
+  for (const memberId of io.sockets.adapter.rooms.get(room) ?? new Set<string>()) {
+    const member = io.sockets.sockets.get(memberId);
+    if (member && isStudentSocket(member) && member.data.examId === examId) {
+      students.push({ socket: member, sessionId: member.data.sessionId });
+    }
+  }
+  return students;
+};
+
 const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
-  // Teacher: request all students in the room to start publishing their
-  // camera/mic streams (fan-out — each student gets a webrtc_begin).
+  // Teacher: request all students in the room to publish (bounded).
+  // The first MAX_LIVE_STREAMS_PER_TEACHER students publish full WebRTC
+  // media; everyone else switches to snapshot mode instead.
   socket.on(
     WEBRTC_EVENTS.REQUEST_STREAMS,
-    (payload: { examId?: string }, ack?: (response: { status: string }) => void) => {
+    (
+      payload: { examId?: string },
+      ack?: (response: {
+        status: string;
+        live?: number;
+        snapshot?: number;
+      }) => void,
+    ) => {
       const { examId } = payload ?? {};
       if (!examId || !isTeacherForExam(socket, examId)) {
         ack?.({ status: 'error' });
         return;
       }
 
-      const room = roomName(examId);
-      const members = io.sockets.adapter.rooms.get(room) ?? new Set<string>();
-      let published = 0;
-      for (const memberId of members) {
-        const member = io.sockets.sockets.get(memberId);
-        if (member && isStudentSocket(member) && member.data.examId === examId) {
-          io.to(memberId).emit(WEBRTC_EVENTS.BEGIN, { teacherId: socket.id });
-          published += 1;
+      const subs = getSubscriptions(socket, examId);
+
+      // Re-request: release previous subscriptions before re-assigning.
+      for (const studentId of subs.live.keys()) {
+        io.to(studentId).emit(WEBRTC_EVENTS.END, { from: socket.id });
+      }
+      for (const studentId of subs.snapshot) {
+        io.to(studentId).emit(WEBRTC_EVENTS.SNAPSHOT_END, { from: socket.id });
+      }
+      subs.live.clear();
+      subs.snapshot.clear();
+
+      const students = studentsInRoom(io, examId);
+      for (const { socket: student } of students) {
+        if (subs.live.size < MAX_LIVE_STREAMS_PER_TEACHER) {
+          subs.live.set(student.id, student.data.sessionId);
+          io.to(student.id).emit(WEBRTC_EVENTS.BEGIN, { teacherId: socket.id });
+        } else {
+          subs.snapshot.add(student.id);
+          io.to(student.id).emit(WEBRTC_EVENTS.SNAPSHOT_BEGIN, {
+            from: socket.id,
+            examId,
+          });
         }
       }
-      ack?.({ status: 'success' });
+
       console.log(
-        `[webrtc] teacher ${socket.id} requested streams for exam ${examId}; notified ${published} student(s)`,
+        `[webrtc] teacher ${socket.id} requested streams for exam ${examId}: ` +
+          `${subs.live.size} live (cap ${MAX_LIVE_STREAMS_PER_TEACHER}), ${subs.snapshot.size} snapshot`,
       );
+      ack?.({ status: 'success', live: subs.live.size, snapshot: subs.snapshot.size });
+    },
+  );
+
+  // Teacher: swap one snapshot tile into the live pool, evicting the oldest
+  // live tile (FIFO) when the cap is reached.
+  socket.on(
+    WEBRTC_EVENTS.FOCUS,
+    (
+      payload: { examId?: string; sessionId?: string },
+      ack?: (response: { status: string; live?: number; message?: string }) => void,
+    ) => {
+      const { examId, sessionId } = payload ?? {};
+      if (!examId || !sessionId || !isTeacherForExam(socket, examId)) {
+        ack?.({ status: 'error', message: 'Invalid focus request' });
+        return;
+      }
+
+      const subs = getSubscriptions(socket, examId);
+      const target = studentsInRoom(io, examId).find(
+        (student) => student.sessionId === sessionId,
+      );
+
+      if (!target) {
+        ack?.({ status: 'error', message: 'Student is not connected' });
+        return;
+      }
+
+      if (subs.live.has(target.socket.id)) {
+        ack?.({ status: 'success', live: subs.live.size });
+        return;
+      }
+
+      if (subs.live.size >= MAX_LIVE_STREAMS_PER_TEACHER) {
+        const evictId = subs.live.keys().next().value as string | undefined;
+        if (evictId) {
+          subs.live.delete(evictId);
+          io.to(evictId).emit(WEBRTC_EVENTS.END, { from: socket.id });
+          io.to(evictId).emit(WEBRTC_EVENTS.SNAPSHOT_BEGIN, {
+            from: socket.id,
+            examId,
+          });
+          subs.snapshot.add(evictId);
+        }
+      }
+
+      subs.live.set(target.socket.id, sessionId);
+      subs.snapshot.delete(target.socket.id);
+      io.to(target.socket.id).emit(WEBRTC_EVENTS.BEGIN, { teacherId: socket.id });
+      ack?.({ status: 'success', live: subs.live.size });
     },
   );
 
@@ -338,6 +513,27 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
     },
   );
 
+  // Student → server → teacher room: one JPEG snapshot frame.
+  socket.on(
+    WEBRTC_EVENTS.SNAPSHOT,
+    (payload: { data?: string }) => {
+      if (!isStudentSocket(socket)) return;
+      const { data } = payload ?? {};
+      if (
+        typeof data !== 'string' ||
+        data.length === 0 ||
+        data.length > MAX_SNAPSHOT_LENGTH
+      ) {
+        return; // oversized or malformed frame — drop
+      }
+      io.to(roomName(socket.data.examId)).emit(WEBRTC_EVENTS.SNAPSHOT, {
+        from: socket.id,
+        sessionId: socket.data.sessionId,
+        data,
+      });
+    },
+  );
+
   // Student → teacher(s): mic/cam state so the grid can show mute/off badges.
   socket.on(
     WEBRTC_EVENTS.STATE,
@@ -353,8 +549,27 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
     },
   );
 
-  // Cleanup: when a socket drops, tell every peer in its exam rooms to close
-  // the peer connection so the teacher grid does not leak dead tiles.
+  // ── Server-side proctoring liveness heartbeat ────────────────────────────
+  // The client lockdown reports in periodically; the auto-submit sweep
+  // terminates sessions whose heartbeat goes silent (client JS disabled,
+  // crashed, or the student left). Server-inserted evidence the client
+  // cannot remove.
+  socket.on(PROCTORING_EVENTS.HEARTBEAT, () => {
+    if (!isStudentSocket(socket)) return;
+    const now = Date.now();
+    const last = (socket.data.lastHeartbeatAt as number | undefined) ?? 0;
+    if (now - last < HEARTBEAT_MIN_INTERVAL_MS) return;
+    socket.data.lastHeartbeatAt = now;
+    prisma.examSession
+      .update({
+        where: { id: socket.data.sessionId },
+        data: { last_heartbeat_at: new Date(now) },
+      })
+      .catch(() => {
+        /* session closed while heartbeating — ignore */
+      });
+  });
+
   socket.on('disconnect', () => {
     const examIds = new Set<string>();
     const studentExamId = socket.data.examId as string | undefined;
@@ -371,12 +586,24 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
         }
       }
     }
+
+    // Prune the departed student from every teacher's subscription maps.
+    for (const [, member] of io.sockets.sockets) {
+      const subsMap = member.data.streamSubscriptions as
+        | Map<string, StreamSubscriptions>
+        | undefined;
+      if (!subsMap) continue;
+      for (const subs of subsMap.values()) {
+        subs.live.delete(socket.id);
+        subs.snapshot.delete(socket.id);
+      }
+    }
   });
 };
 
 export const registerProctoringHandlers = (io: Server): void => {
   io.on('connection', (socket: Socket) => {
-    registerJoinExamRoomHandler(socket);
+    registerJoinExamRoomHandler(io, socket);
     registerTeacherRoomHandler(socket);
     registerWebRtcHandlers(io, socket);
   });

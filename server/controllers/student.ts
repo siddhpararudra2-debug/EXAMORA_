@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, ExamStatus, SubmissionStatus } from '@prisma/client';
+import { ExamStatus, SubmissionStatus } from '@prisma/client';
 import { studentJoinSchema, StudentJoinInput } from '../validators/student.js';
-
-const prisma = new PrismaClient();
+import prisma from '../../prisma/client.js';
 
 // Helper to validate with Zod
 const validate = <T>(schema: any, data: unknown): { success: boolean; data?: T; error?: string } => {
@@ -26,8 +25,10 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
 
     const { studentName, studentEmail, enrollmentNo } = validation.data!;
 
-    // Check if exam exists
-    const exam = await prisma.exam.findUnique({ where: { id: examId } });
+    // Check if exam exists (soft-deleted exams are not joinable)
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId, deleted_at: null },
+    });
     if (!exam) {
       res.status(404).json({ status: 'error', message: 'Exam not found' });
       return;

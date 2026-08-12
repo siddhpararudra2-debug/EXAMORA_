@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const email = rawEmail.trim().toLowerCase();
 
     // Find teacher
-    const user = await prisma.teacher.findUnique({
+    const user = await prisma.teacher.findFirst({
       where: { email },
     });
 

@@ -53,6 +53,10 @@ enum ViolationType {
   DEVTOOLS
   SCREEN_CAPTURE
   KEYBOARD_SHORTCUT
+  /// Server-side evidence: the lockdown heartbeat went silent (client JS
+  /// disabled, crashed, or the student left the tab). Recorded by the
+  /// auto-submit sweep, not by the client.
+  HEARTBEAT_TIMEOUT
 
   @@map("violation_type")
 }
@@ -84,7 +88,7 @@ enum EmailLogStatus {
 model Teacher {
   id                  String    @id @default(uuid())
   google_id           String?   @unique
-  email               String    @unique
+  email               String
   name                String
   password_hash       String?   @db.VarChar(255)
   college_name        String?
@@ -94,10 +98,16 @@ model Teacher {
   reset_token_expires DateTime?
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
+  /// Soft-delete marker. Active rows are those with deleted_at IS NULL.
+  /// Email uniqueness for active rows is enforced by a PARTIAL unique index
+  /// (see migration 20260812000000_add_soft_deletes) so a deleted teacher
+  /// can be re-registered without forcing a hard cascade wipe.
+  deleted_at          DateTime?
 
   exams          Exam[]
   bank_questions BankQuestion[]
 
+  @@index([deleted_at])
   @@map("teachers")
 }
 
@@ -110,7 +120,7 @@ model Exam {
   duration_minutes Int
   total_marks      Int
   creation_mode    CreationMode @default(MANUAL)
-  access_uuid      String       @unique
+  access_uuid      String
   qr_code_url      String?
   start_time       DateTime?
   end_time         DateTime?
@@ -118,9 +128,13 @@ model Exam {
   status           ExamStatus   @default(DRAFT)
   published_at     DateTime?
   created_by       String
-  creator          Teacher      @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  creator          Teacher      @relation(fields: [created_by], references: [id], onDelete: Restrict)
   created_at       DateTime     @default(now())
   updated_at       DateTime     @updatedAt
+  /// Soft-delete marker — deleting an exam only marks it archived; student
+  /// sessions, questions and grades are retained for audit/recovery. Active
+  /// access_uuid uniqueness is enforced by a partial unique index.
+  deleted_at       DateTime?
 
   sections   Section[]
   questions  Question[]
@@ -130,30 +144,33 @@ model Exam {
   @@index([created_by])
   @@index([status])
   @@index([created_by, status])
+  @@index([deleted_at])
   @@map("exams")
 }
 
 model Section {
   id               String   @id @default(uuid())
   exam_id          String
-  exam             Exam     @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  exam             Exam     @relation(fields: [exam_id], references: [id], onDelete: Restrict)
   title            String
   description      String?
   order_index      Int
   duration_minutes Int?
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
+  deleted_at       DateTime?
 
   questions Question[]
 
   @@index([exam_id, order_index])
+  @@index([deleted_at])
   @@map("sections")
 }
 
 model Question {
   id             String       @id @default(uuid())
   exam_id        String
-  exam           Exam         @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  exam           Exam         @relation(fields: [exam_id], references: [id], onDelete: Restrict)
   section_id     String?
   section        Section?     @relation(fields: [section_id], references: [id], onDelete: SetNull)
   type           QuestionType
@@ -169,19 +186,21 @@ model Question {
   negative_marks Decimal      @default(0) @db.Decimal(5, 2)
   created_at     DateTime     @default(now())
   updated_at     DateTime     @updatedAt
+  deleted_at     DateTime?
 
   answers Answer[]
 
   @@index([exam_id])
   @@index([section_id])
   @@index([exam_id, order_index])
+  @@index([deleted_at])
   @@map("questions")
 }
 
 model ExamSession {
   id                String           @id @default(uuid())
   exam_id           String
-  exam              Exam             @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  exam              Exam             @relation(fields: [exam_id], references: [id], onDelete: Restrict)
   session_token     String           @unique
   student_name      String
   enrollment_number String?
@@ -194,8 +213,13 @@ model ExamSession {
   percentage        Decimal?         @db.Decimal(5, 2)
   /// Deterministic RNG seed used to shuffle questions/options per student.
   shuffle_seed      Int?
+  /// Last time the student's browser reported the lockdown heartbeat.
+  /// Stale heartbeats (client JS disabled/crashed) are flagged by the
+  /// auto-submit sweep as server-side proctoring evidence.
+  last_heartbeat_at DateTime?
   created_at        DateTime         @default(now())
   updated_at        DateTime         @updatedAt
+  deleted_at        DateTime?
 
   answers    Answer[]
   violations Violation[]
@@ -205,6 +229,8 @@ model ExamSession {
   @@index([status])
   @@index([exam_id, status])
   @@index([exam_id, student_email, enrollment_number])
+  @@index([last_heartbeat_at])
+  @@index([deleted_at])
   @@map("exam_sessions")
 }
 
@@ -266,7 +292,7 @@ model EmailLog {
 model BankQuestion {
   id             String       @id @default(uuid())
   teacher_id     String
-  teacher        Teacher      @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  teacher        Teacher      @relation(fields: [teacher_id], references: [id], onDelete: Restrict)
   type           QuestionType
   question_text  String
   options        Json?
@@ -277,8 +303,10 @@ model BankQuestion {
   metadata       Json?        @db.JsonB
   created_at     DateTime     @default(now())
   updated_at     DateTime     @updatedAt
+  deleted_at     DateTime?
 
   @@index([teacher_id])
   @@index([type])
+  @@index([deleted_at])
   @@map("bank_questions")
 }

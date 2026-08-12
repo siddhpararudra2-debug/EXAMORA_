@@ -28,6 +28,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Must stay in sync with ai_service.MAX_DOCUMENT_BYTES.
+MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+
 ai_service = AIQuestionService()
 
 
@@ -50,8 +53,18 @@ def health() -> dict:
 
 
 @app.post("/api/v1/ai/parse-document", response_model=ExamGenerationResponse)
-def parse_document(file: UploadFile = File(..., description="PDF, DOCX or TXT exam paper")) -> ExamGenerationResponse:
-    content = file.file.read()
+async def parse_document(file: UploadFile = File(..., description="PDF, DOCX or TXT exam paper")) -> ExamGenerationResponse:
+    # Reject oversized uploads BEFORE buffering them: the request body can be
+    # arbitrarily large and a naive `file.file.read()` would load it entirely
+    # into RAM (OOM risk for the container). Check the declared size first,
+    # then read at most MAX_DOCUMENT_BYTES + 1 bytes so memory use is bounded.
+    if file.size is not None and file.size > MAX_DOCUMENT_BYTES:
+        raise HTTPException(status_code=413, detail="file exceeds the 10 MB limit")
+
+    content = await file.read(MAX_DOCUMENT_BYTES + 1)
+    if len(content) > MAX_DOCUMENT_BYTES:
+        raise HTTPException(status_code=413, detail="file exceeds the 10 MB limit")
+
     return ai_service.parse_document(file.filename or "upload", content, file.content_type)
 
 

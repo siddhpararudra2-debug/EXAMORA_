@@ -37,6 +37,8 @@ services:
     build: ./services/ai-service
     container_name: examora_ai_service
     restart: always
+    # Bounded memory: document parsing/OCR can spike RAM otherwise.
+    mem_limit: 512m
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama3-70b-8192}

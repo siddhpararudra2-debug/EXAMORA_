@@ -1,11 +1,11 @@
 import { Request, Response, NextFunction } from "express";
-import { PrismaClient, SubmissionStatus } from "@prisma/client";
+import { SubmissionStatus } from "@prisma/client";
 import { Readable } from "stream";
 import csvParser from "csv-parser";
+import crypto from "node:crypto";
 import { AuthenticatedRequest } from "../../../../server/middleware/auth.js";
 import { sendExamInviteEmail } from "../services/email.service.js";
-
-const prisma = new PrismaClient();
+import prisma from "../../../../prisma/client.js";
 
 export interface CSVStudentRow {
   Name?: string;
@@ -16,6 +16,34 @@ export interface CSVStudentRow {
   enrollmentNo?: string;
   [key: string]: string | undefined;
 }
+
+/**
+ * Hard cap on students per invite upload. Processing thousands of rows
+ * sequentially would block the Node.js event loop and exhaust SMTP limits,
+ * so both the row count and the processing concurrency are bounded.
+ */
+const MAX_BULK_INVITES = Number(process.env.MAX_BULK_INVITES ?? 500);
+/** Rows processed concurrently (DB upserts + one email each). */
+const INVITE_CONCURRENCY = Number(process.env.INVITE_CONCURRENCY ?? 10);
+
+/**
+ * Runs `worker` over every row with at most `limit` concurrent executions.
+ * Workers must catch their own errors per-row (the pool never throws).
+ */
+const runBoundedPool = async <T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> => {
+  let nextIndex = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+};
 
 /**
  * TASK 2: POST /api/exams/:examId/invite-bulk
@@ -86,11 +114,31 @@ export const inviteBulkStudents = async (
     }
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+
+    if (rawRows.length === 0) {
+      res.status(400).json({
+        status: "error",
+        message: "The uploaded CSV/JSON contains no student rows",
+      });
+      return;
+    }
+
+    if (rawRows.length > MAX_BULK_INVITES) {
+      res.status(400).json({
+        status: "error",
+        message: `Too many students per upload (max ${MAX_BULK_INVITES}). Split the list into smaller batches.`,
+      });
+      return;
+    }
+
     let successful = 0;
     let failed = 0;
     const errors: string[] = [];
 
-    for (const [idx, row] of rawRows.entries()) {
+    // Bounded concurrency: DB upserts and SMTP sends are I/O-bound, so a
+    // small worker pool keeps the event loop responsive instead of awaiting
+    // every row sequentially.
+    await runBoundedPool(rawRows, INVITE_CONCURRENCY, async (row, idx) => {
       const studentName = (row.Name || row.name || "").trim();
       const studentEmail = (row.Email || row.email || "").trim();
       const enrollmentNo = (row.EnrollmentNo || row.enrollmentNo || `ENR${Date.now()}${idx}`).trim();
@@ -98,7 +146,7 @@ export const inviteBulkStudents = async (
       if (!studentEmail) {
         failed++;
         errors.push(`Row ${idx + 1}: Missing email address`);
-        continue;
+        return;
       }
 
       try {
@@ -136,7 +184,7 @@ export const inviteBulkStudents = async (
         failed++;
         errors.push(`Row ${idx + 1} (${studentEmail}): ${err.message || "Failed to process"}`);
       }
-    }
+    });
 
     res.json({
       status: "success",

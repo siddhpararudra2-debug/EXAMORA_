@@ -6,10 +6,17 @@ import { getSocket } from "@/lib/socket";
 /**
  * S02/S03 — student side of live camera/mic supervision.
  *
- * Captures the camera (and mic when required), shows a local self-view, and
- * publishes the stream to every teacher that requests it via WebRTC mesh
- * signaling. Signaling rides the shared Socket.io connection (see
- * proctoring.handler.ts `webrtc_*` events); media travels peer-to-peer.
+ * Scalable hybrid topology:
+ * - When a teacher asks for a live stream (`webrtc_begin`) the student
+ *   publishes WebRTC media P2P at low resolution (320×240) with a hard
+ *   bitrate cap (~200kbps) so a teacher's browser can decode several
+ *   simultaneous tiles without dying.
+ * - When the teacher is at the live cap, the student gets
+ *   `webrtc_snapshot_begin` instead: a JPEG frame is captured every 2s and
+ *   shipped over the existing Socket.io connection (server-relayed), which
+ *   costs a fraction of the bandwidth/CPU of a video stream.
+ *
+ * Media/snapshot decision is server-driven; signaling rides Socket.io.
  */
 
 export interface UseLiveSupervisionOptions {
@@ -33,12 +40,27 @@ export interface UseLiveSupervisionReturn {
   toggleCam: () => void;
   videoRef: React.RefObject<HTMLVideoElement>;
   streamingToTeacher: boolean;
+  /** True while the student is in snapshot mode (no WebRTC sender active). */
+  snapshotMode: boolean;
 }
 
 const STUN_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
 ];
+
+/** Live camera capture size — deliberately small so multi-tile decoding is cheap. */
+const CAPTURE_WIDTH = 320;
+const CAPTURE_HEIGHT = 240;
+
+/** Hard cap for the upstream video bitrate (very low for a proctoring feed). */
+const LIVE_VIDEO_MAX_BITRATE_BPS = 200_000;
+
+/** JPEG snapshot cadence while in snapshot mode. */
+const SNAPSHOT_INTERVAL_MS = 2000;
+/** Snapshot frame is never wider than this (data URL stays small). */
+const SNAPSHOT_MAX_WIDTH = 640;
+const SNAPSHOT_JPEG_QUALITY = 0.55;
 
 function loadSocket(): ReturnType<typeof getSocket> | null {
   if (typeof window === "undefined") return null;
@@ -67,12 +89,15 @@ export function useLiveSupervision({
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [streamingToTeacher, setStreamingToTeacher] = useState(false);
+  const [snapshotMode, setSnapshotMode] = useState(false);
 
   const streamRef = useRef<MediaStream | null>(null);
   const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const micOnRef = useRef(true);
   const camOnRef = useRef(true);
+  const snapshotPeersRef = useRef<Set<string>>(new Set());
+  const snapshotBusyRef = useRef(false);
 
   const applyTrackState = useCallback(() => {
     const media = streamRef.current;
@@ -91,7 +116,13 @@ export function useLiveSupervision({
     (async () => {
       try {
         const constraints: MediaStreamConstraints = {
-          video: requireCamera ? { width: 640, height: 480, facingMode: "user" } : false,
+          video: requireCamera
+            ? {
+                width: { ideal: CAPTURE_WIDTH },
+                height: { ideal: CAPTURE_HEIGHT },
+                facingMode: "user",
+              }
+            : false,
           audio: requireMic,
         };
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -142,6 +173,23 @@ export function useLiveSupervision({
         }
       }
 
+      // Cap the video bitrate so N simultaneous P2P senders stay tiny.
+      const videoSender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (videoSender) {
+        try {
+          videoSender
+            .setParameters({
+              ...videoSender.getParameters(),
+              encodings: [{ maxBitrate: LIVE_VIDEO_MAX_BITRATE_BPS }],
+            })
+            .catch(() => {
+              /* older browsers — signal default bitrate then */
+            });
+        } catch {
+          /* ignore unsupported */
+        }
+      }
+
       pc.onicecandidate = (event) => {
         if (!event.candidate) return;
         socketRef.current?.emit("webrtc_ice", {
@@ -170,6 +218,64 @@ export function useLiveSupervision({
     },
     [examId],
   );
+
+  /**
+   * Captures one JPEG frame from the camera track (no video element needed),
+   * with a rendered-element fallback. Returns a data URL or null when the
+   * camera is off or capture fails.
+   */
+  const captureSnapshotFrame = useCallback(async (): Promise<string | null> => {
+    const media = streamRef.current;
+    if (!media) return null;
+    const videoTrack = media.getVideoTracks()[0];
+    if (!videoTrack || !videoTrack.enabled) return null;
+
+    try {
+      // TS's DOM lib doesn't include MediaStreamTrack in ImageBitmapSource
+      // yet, though all modern engines accept it.
+      const bitmap = await createImageBitmap(
+        videoTrack as unknown as ImageBitmapSource,
+      );
+      const scale = Math.min(1, SNAPSHOT_MAX_WIDTH / bitmap.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bitmap.close();
+        return null;
+      }
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      return canvas.toDataURL("image/jpeg", SNAPSHOT_JPEG_QUALITY);
+    } catch {
+      // Fallback: draw the (possibly rendered) self-view element.
+      const video = videoRef.current;
+      if (!video || video.videoWidth <= 0 || !video.videoHeight) return null;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.min(SNAPSHOT_MAX_WIDTH, video.videoWidth);
+      canvas.height = Math.round(
+        (canvas.width / video.videoWidth) * video.videoHeight,
+      );
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", SNAPSHOT_JPEG_QUALITY);
+    }
+  }, [videoRef]);
+
+  const sendSnapshot = useCallback(async (): Promise<void> => {
+    if (snapshotBusyRef.current) return;
+    snapshotBusyRef.current = true;
+    try {
+      const data = await captureSnapshotFrame();
+      if (data) {
+        socketRef.current?.emit("webrtc_snapshot", { examId, data });
+      }
+    } finally {
+      snapshotBusyRef.current = false;
+    }
+  }, [captureSnapshotFrame, examId]);
 
   // Signaling: publish to teachers that request the stream.
   useEffect(() => {
@@ -223,9 +329,26 @@ export function useLiveSupervision({
       }
     };
 
+    // Enter snapshot mode for a teacher that's at the live cap.
+    const onSnapshotBegin = (payload: { from?: string }) => {
+      const teacherId = payload?.from;
+      if (!teacherId) return;
+      snapshotPeersRef.current.add(teacherId);
+      setSnapshotMode(true);
+      void sendSnapshot();
+    };
+
+    const onSnapshotEnd = (payload: { from?: string }) => {
+      const teacherId = payload?.from;
+      if (!teacherId) return;
+      snapshotPeersRef.current.delete(teacherId);
+      if (snapshotPeersRef.current.size === 0) setSnapshotMode(false);
+    };
+
     const onEnd = (payload: { from?: string }) => {
       const teacherId = payload?.from;
       if (!teacherId) return;
+      snapshotPeersRef.current.delete(teacherId);
       const pc = pcsRef.current.get(teacherId);
       if (pc) {
         pcsRef.current.delete(teacherId);
@@ -235,7 +358,10 @@ export function useLiveSupervision({
           /* ignore */
         }
       }
-      if (pcsRef.current.size === 0) setStreamingToTeacher(false);
+      if (pcsRef.current.size === 0 && snapshotPeersRef.current.size === 0) {
+        setStreamingToTeacher(false);
+        setSnapshotMode(false);
+      }
     };
 
     const attach = () => {
@@ -243,12 +369,16 @@ export function useLiveSupervision({
       socket.on("webrtc_answer", onAnswer);
       socket.on("webrtc_ice", onIce);
       socket.on("webrtc_end", onEnd);
+      socket.on("webrtc_snapshot_begin", onSnapshotBegin);
+      socket.on("webrtc_snapshot_end", onSnapshotEnd);
     };
     const detach = () => {
       socket.off("webrtc_begin", onBegin);
       socket.off("webrtc_answer", onAnswer);
       socket.off("webrtc_ice", onIce);
       socket.off("webrtc_end", onEnd);
+      socket.off("webrtc_snapshot_begin", onSnapshotBegin);
+      socket.off("webrtc_snapshot_end", onSnapshotEnd);
     };
 
     if (socket.connected) {
@@ -258,6 +388,7 @@ export function useLiveSupervision({
     }
 
     const livePcs = pcsRef.current;
+    const snapshotPeers = snapshotPeersRef.current;
     return () => {
       detach();
       socket.off("connect", attach);
@@ -269,10 +400,21 @@ export function useLiveSupervision({
         }
       }
       livePcs.clear();
+      snapshotPeers.clear();
       setStreamingToTeacher(false);
+      setSnapshotMode(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, sessionToken, examId, createPeerConnection]);
+  }, [enabled, sessionToken, examId, createPeerConnection, sendSnapshot]);
+
+  // Snapshot cadence: while in snapshot mode, ship a frame every few seconds.
+  useEffect(() => {
+    if (!enabled || !snapshotMode) return;
+    const interval = setInterval(() => {
+      void sendSnapshot();
+    }, SNAPSHOT_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [enabled, snapshotMode, sendSnapshot]);
 
   const toggleMic = useCallback(() => {
     micOnRef.current = !micOnRef.current;
@@ -313,6 +455,7 @@ export function useLiveSupervision({
     toggleCam,
     videoRef,
     streamingToTeacher,
+    snapshotMode,
   };
 }
 

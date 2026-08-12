@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, SubmissionStatus, ExamStatus } from '@prisma/client';
+import { SubmissionStatus, ExamStatus } from '@prisma/client';
 import { ZodType, ZodTypeDef } from 'zod';
 
 import { AuthenticatedRequest } from '../middleware/auth.js';
@@ -22,8 +22,7 @@ import {
   newShuffleSeed,
 } from '../../packages/database/src/shuffle.service.js';
 import { gradeAllSubmissionsForExam, GRADED_STATUSES } from '../../packages/database/src/grading.service.js';
-
-const prisma = new PrismaClient();
+import prisma from '../../prisma/client.js';
 
 // ── Shared validation helper ──────────────────────────────────────────────────
 
@@ -87,7 +86,7 @@ export const getExamDetails = async (
     const { id: examId } = req.params;
 
     const exam = await prisma.exam.findFirst({
-      where: { id: examId, created_by: teacher.userId },
+      where: { id: examId, created_by: teacher.userId, deleted_at: null },
       include: {
         questions: {
           orderBy: { order_index: 'asc' },
@@ -520,7 +519,7 @@ export const listExams = async (
     const requestedSize = Number(req.query.pageSize) || 20;
     const pageSize = Math.min(100, Math.max(1, requestedSize));
 
-    const where = { created_by: teacher.userId };
+    const where = { created_by: teacher.userId, deleted_at: null };
 
     const [exams, total] = await Promise.all([
       prisma.exam.findMany({
@@ -565,7 +564,7 @@ export const getExamStatus = async (
     const { id: examId } = req.params;
 
     const exam = await prisma.exam.findUnique({
-      where: { id: examId },
+      where: { id: examId, deleted_at: null },
       select: { id: true, title: true, status: true },
     });
 
@@ -702,7 +701,12 @@ export const deleteExam = async (
       return;
     }
 
-    await prisma.exam.delete({ where: { id: examId } });
+    // Soft delete: sessions, questions and grades are retained for audit and
+    // recovery (deleted_at column) instead of being cascaded away.
+    await prisma.exam.update({
+      where: { id: examId },
+      data: { deleted_at: new Date(), status: ExamStatus.ARCHIVED },
+    });
 
     res.json({
       status: 'success',

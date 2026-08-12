@@ -324,6 +324,18 @@ export const isAIOverlayElement = (el: Element): boolean => {
  *  3. Violation API sync to /api/v1/exam-session/${token}/violation.
  *  4. Termination flow with onTerminate execution and redirection.
  *  5. Input blocking (cut, copy, paste, contextmenu, Ctrl+C/V/A/P, F12, Alt+Tab).
+ *
+ * ⚠️ SCOPE: everything here is CLIENT-SIDE and is a deterrent, not a
+ * guarantee — a VM, a second device, or disabling JS listeners in the console
+ * can bypass it. The security model therefore also enforces server-side,
+ * unbypassable signals:
+ *  - the lockdown heartbeat (persisted to last_heartbeat_at) — the
+ *    auto-submit sweep flags and terminates sessions whose heartbeat goes
+ *    silent, which no console trick can fake after JS dies;
+ *  - server-authoritative duplicate-session termination (same token on two
+ *    devices/tabs) recorded as a server-inserted violation;
+ *  - server-side warning counting on the /violation endpoint (the client
+ *    cannot zero its own counter).
  */
 export function useExamLockdown(
   optionsOrMaxWarnings: number | ExamLockdownOptions = DEFAULT_MAX_WARNINGS,

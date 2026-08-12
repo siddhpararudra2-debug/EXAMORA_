@@ -181,6 +181,7 @@ function TakeExamContent() {
   );
 
   const socketRef = useRef<Socket | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // -------- Data load + session verification --------
   useEffect(() => {
@@ -317,10 +318,26 @@ function TakeExamContent() {
       });
 
       socket.connect();
+
+      // Server-side proctoring liveness heartbeat (15-20s with jitter). The
+      // auto-submit sweep flags + terminates sessions whose heartbeat goes
+      // silent — evidence that survives disabled client-side JS listeners.
+      const heartbeatInterval = setInterval(() => {
+        try {
+          socket?.emit("heartbeat");
+        } catch {
+          /* ignore */
+        }
+      }, 15000 + Math.random() * 5000);
+      heartbeatIntervalRef.current = heartbeatInterval;
     } catch {
       // ignore; offline mode still works
     }
     return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
       if (socket) {
         try {
           socket.emit("leave_exam_room", {

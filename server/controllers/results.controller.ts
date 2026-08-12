@@ -1,10 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, ExamStatus } from '@prisma/client';
+import { ExamStatus } from '@prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { gradeAllSubmissionsForExam, GRADED_STATUSES } from '../../packages/database/src/grading.service.js';
 import { dispatchResults, buildMarksheetPdf } from '../../apps/backend/src/services/emailDispatcher.js';
-
-const prisma = new PrismaClient();
+import prisma from '../../prisma/client.js';
 
 /**
  * GET /api/v1/exams/:examId/sessions/:sessionId/marksheet
