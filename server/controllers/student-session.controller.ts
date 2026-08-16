@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 
 import { AuthenticatedStudentRequest } from '../middleware/validateStudentSession.js';
 import { gradeSubmission } from '../../packages/database/src/grading.service.js';
+import { normalizeExamSettings } from '../../packages/database/src/shuffle.service.js';
 import {
   MAX_WARNINGS,
   roomName,
@@ -107,14 +108,20 @@ export const reportViolation = async (
       select: { id: true, type: true, occurred_at: true },
     });
 
-    // 2. Count total warnings for session
+    // 2. Resolve the exam policy and count total warnings for the session.
+    const exam = await prisma.exam.findUnique({
+      where: { id: studentSession.examId, deleted_at: null },
+      select: { settings: true },
+    });
+    const warningsLimit =
+      normalizeExamSettings(exam?.settings).warningThreshold ?? MAX_WARNINGS;
     const warningsCount = await prisma.violation.count({
       where: { session_id: studentSession.id },
     });
 
-    const terminated = warningsCount >= MAX_WARNINGS;
+    const terminated = warningsCount >= warningsLimit;
 
-    // 3. Enforce 3-warning termination rule
+    // 3. Enforce the configured warning termination rule
     if (terminated) {
       await prisma.examSession.updateMany({
         where: {
@@ -152,7 +159,8 @@ export const reportViolation = async (
         enrollmentNo: sessionDetails?.enrollment_number ?? '',
         status: terminated ? SubmissionStatus.TERMINATED : SubmissionStatus.IN_PROGRESS,
         warnings: warningsCount,
-        warningsLimit: MAX_WARNINGS,
+        warningsLimit,
+
         terminated,
         submitted: false,
         timestamp: new Date().toISOString(),
@@ -167,7 +175,8 @@ export const reportViolation = async (
           sessionId: studentSession.id,
           reason: description ?? 'warnings_limit',
           warnings: warningsCount,
-          warningsLimit: MAX_WARNINGS,
+          warningsLimit,
+
         });
       }
     }
@@ -178,7 +187,7 @@ export const reportViolation = async (
         violation,
         warningsCount,
         terminated,
-        maxWarnings: MAX_WARNINGS,
+        maxWarnings: warningsLimit,
       },
     });
   } catch (err) {
@@ -243,9 +252,15 @@ export const submitSession = async (
         },
       });
 
-      const warningsCount = await prisma.violation.count({
-        where: { session_id: studentSession.id },
-      });
+      const [warningsCount, exam] = await Promise.all([
+        prisma.violation.count({ where: { session_id: studentSession.id } }),
+        prisma.exam.findUnique({
+          where: { id: studentSession.examId, deleted_at: null },
+          select: { settings: true },
+        }),
+      ]);
+      const warningsLimit =
+        normalizeExamSettings(exam?.settings).warningThreshold ?? MAX_WARNINGS;
 
       io.to(roomName(studentSession.examId)).emit('student_status_update', {
         examId: studentSession.examId,
@@ -255,7 +270,8 @@ export const submitSession = async (
         enrollmentNo: sessionDetails?.enrollment_number ?? '',
         status: SubmissionStatus.SUBMITTED,
         warnings: warningsCount,
-        warningsLimit: MAX_WARNINGS,
+        warningsLimit,
+
         terminated: false,
         submitted: true,
         timestamp: new Date().toISOString(),

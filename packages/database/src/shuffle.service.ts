@@ -14,6 +14,8 @@ import { QuestionType } from '@prisma/client';
 export interface ExamSettingsShape {
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
+  /** Number of integrity warnings allowed before the session is terminated. */
+  warningThreshold?: number;
   supervision?: {
     camera?: boolean;
     mic?: boolean;
@@ -24,6 +26,7 @@ export interface ExamSettingsShape {
 export const DEFAULT_EXAM_SETTINGS: ExamSettingsShape = {
   shuffleQuestions: false,
   shuffleOptions: false,
+  warningThreshold: 3,
   supervision: { camera: false, mic: false },
 };
 
@@ -39,6 +42,13 @@ export function normalizeExamSettings(settings: unknown): ExamSettingsShape {
       typeof raw.shuffleOptions === 'boolean'
         ? raw.shuffleOptions
         : DEFAULT_EXAM_SETTINGS.shuffleOptions,
+    warningThreshold:
+      typeof raw.warningThreshold === 'number' &&
+      Number.isInteger(raw.warningThreshold) &&
+      raw.warningThreshold >= 1 &&
+      raw.warningThreshold <= 10
+        ? raw.warningThreshold
+        : DEFAULT_EXAM_SETTINGS.warningThreshold,
     supervision: {
       camera:
         typeof supervisionRaw.camera === 'boolean'

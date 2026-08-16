@@ -122,6 +122,11 @@ const examSchema = z.object({
     .min(1, { message: "Minimum 1 mark." }),
   shuffleQuestions: z.boolean().optional(),
   shuffleOptions: z.boolean().optional(),
+  warningThreshold: z.coerce
+    .number({ invalid_type_error: "Warning threshold must be a number." })
+    .int("Warning threshold must be a whole number.")
+    .min(1, { message: "Use at least 1 warning." })
+    .max(10, { message: "Use no more than 10 warnings." }),
   supervisionCamera: z.boolean().optional(),
   supervisionMic: z.boolean().optional(),
   questions: z
@@ -148,6 +153,7 @@ const DEFAULT_VALUES: ExamFormValues = {
   totalMarks: 20,
   shuffleQuestions: true,
   shuffleOptions: true,
+  warningThreshold: 3,
   supervisionCamera: false,
   supervisionMic: false,
   questions: [DEFAULT_QUESTION(0)],
@@ -366,6 +372,7 @@ function CreateExamContent() {
               totalMarks: Number(exam.totalMarks || exam.total_marks || 20),
               shuffleQuestions: exam.settings?.shuffleQuestions ?? true,
               shuffleOptions: exam.settings?.shuffleOptions ?? true,
+              warningThreshold: exam.settings?.warningThreshold ?? 3,
               supervisionCamera: exam.settings?.supervision?.camera ?? false,
               supervisionMic: exam.settings?.supervision?.mic ?? false,
               questions: parsedQuestions.length > 0 ? parsedQuestions : [DEFAULT_QUESTION(0)],
@@ -510,6 +517,7 @@ function CreateExamContent() {
         settings: {
           shuffleQuestions: data.shuffleQuestions ?? false,
           shuffleOptions: data.shuffleOptions ?? false,
+          warningThreshold: Number(data.warningThreshold),
           supervision: {
             camera: data.supervisionCamera ?? false,
             mic: data.supervisionMic ?? false,
@@ -807,6 +815,35 @@ function CreateExamContent() {
                       label="Shuffle MCQ options"
                       description="Randomize the order of answer options for each multiple-choice question."
                     />
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="warningThreshold"
+                  render={({ field }) => (
+                    <FormItem className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+                      <FormLabel className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Warning limit
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          step={1}
+                          inputMode="numeric"
+                          aria-describedby="warning-threshold-help"
+                          className="mt-2 h-10 max-w-[120px] bg-white dark:bg-slate-950"
+                          {...field}
+                          value={field.value ?? 3}
+                          onChange={(event) => field.onChange(event.target.value)}
+                        />
+                      </FormControl>
+                      <FormDescription id="warning-threshold-help" className="text-xs leading-5">
+                        The session closes when this many integrity signals are recorded. Signals are review evidence, not an automatic finding of misconduct.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
                   )}
                 />
                 <FormField

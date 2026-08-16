@@ -132,6 +132,12 @@ export const questionSchema = questionBaseSchema.superRefine(questionRefinements
 export const examSettingsSchema = z.object({
   shuffleQuestions: z.boolean().optional(),
   shuffleOptions: z.boolean().optional(),
+  warningThreshold: z
+    .number()
+    .int('Warning threshold must be a whole number')
+    .min(1, 'Warning threshold must be at least 1')
+    .max(10, 'Warning threshold cannot exceed 10')
+    .optional(),
   supervision: z
     .object({
       camera: z.boolean().optional(),

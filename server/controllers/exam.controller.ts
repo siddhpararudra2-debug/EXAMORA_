@@ -339,7 +339,8 @@ export const getStudentView = async (
         exam: {
           ...exam,
           questions,
-          // Only supervision flags are exposed to students — never internal settings.
+          warningsLimit: settings.warningThreshold ?? 3,
+          // Only the fields needed by the student runtime are exposed — never answer keys or raw settings.
           settings: { supervision: settings.supervision },
         },
         session: {
@@ -565,7 +566,16 @@ export const getExamStatus = async (
 
     const exam = await prisma.exam.findUnique({
       where: { id: examId, deleted_at: null },
-      select: { id: true, title: true, status: true },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        duration_minutes: true,
+        end_time: true,
+        settings: true,
+        _count: { select: { questions: true } },
+      },
     });
 
     if (!exam) {
@@ -576,9 +586,26 @@ export const getExamStatus = async (
       return;
     }
 
+    const settings = normalizeExamSettings(exam.settings);
+    const isJoinable =
+      exam.status === ExamStatus.ACTIVE &&
+      (!exam.end_time || new Date() <= exam.end_time);
+
     res.json({
       status: 'success',
-      data: { exam },
+      data: {
+        exam: {
+          id: exam.id,
+          title: exam.title,
+          description: exam.description,
+          status: exam.status,
+          isJoinable,
+          durationMinutes: exam.duration_minutes,
+          endTime: exam.end_time,
+          questionCount: exam._count.questions,
+          warningsLimit: settings.warningThreshold ?? 3,
+        },
+      },
     });
   } catch (err) {
     next(err);
@@ -739,6 +766,7 @@ export const getSessionEvents = async (
             title: true,
             duration_minutes: true,
             total_marks: true,
+            settings: true,
           },
         },
       },
@@ -779,7 +807,7 @@ export const getSessionEvents = async (
       studentEmail: session.student_email ?? '',
       enrollmentNo: session.enrollment_number ?? '',
       totalWarnings: warningsCount,
-      warningsLimit: 3,
+      warningsLimit: normalizeExamSettings(session.exam.settings).warningThreshold ?? 3,
       finalScore: session.total_score !== null && session.total_score !== undefined ? Number(session.total_score) : undefined,
       maxScore: session.exam.total_marks,
       sessionStatus: session.status,
