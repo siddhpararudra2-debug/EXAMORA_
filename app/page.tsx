@@ -145,9 +145,15 @@ export default function HomePage() {
             </div>
 
             {/* Interactive Preview Tabs */}
-            <div className="flex items-center gap-1 bg-secondary/70 p-1 rounded-xl">
+            <div
+              role="tablist"
+              aria-label="Platform capability preview"
+              className="flex items-center gap-1 bg-secondary/70 p-1 rounded-xl"
+            >
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeTab === "ai"}
                 onClick={() => setActiveTab("ai")}
                 className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                   activeTab === "ai"
@@ -160,6 +166,8 @@ export default function HomePage() {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeTab === "proctoring"}
                 onClick={() => setActiveTab("proctoring")}
                 className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                   activeTab === "proctoring"
@@ -172,6 +180,8 @@ export default function HomePage() {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeTab === "grading"}
                 onClick={() => setActiveTab("grading")}
                 className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                   activeTab === "grading"
@@ -241,9 +251,27 @@ export default function HomePage() {
             {activeTab === "proctoring" && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[
-                  { name: "Alex Rivera", status: "Secure", violation: "0 flags", score: "Q12/20", color: "emerald" },
-                  { name: "Jordan Smith", status: "Tab Switched", violation: "1 warning logged", score: "Q8/20", color: "amber" },
-                  { name: "Taylor Reed", status: "Face Verified", violation: "Active stream", score: "Q15/20", color: "emerald" },
+                  {
+                    name: "Alex Rivera",
+                    status: "Secure",
+                    violation: "0 flags",
+                    score: "Q12/20",
+                    tone: "text-emerald-600 dark:text-emerald-400",
+                  },
+                  {
+                    name: "Jordan Smith",
+                    status: "Tab Switched",
+                    violation: "1 warning logged",
+                    score: "Q8/20",
+                    tone: "text-amber-600 dark:text-amber-400",
+                  },
+                  {
+                    name: "Taylor Reed",
+                    status: "Face Verified",
+                    violation: "Active stream",
+                    score: "Q15/20",
+                    tone: "text-emerald-600 dark:text-emerald-400",
+                  },
                 ].map((candidate, idx) => (
                   <div key={idx} className="rounded-xl border border-border/60 bg-secondary/30 p-3 flex flex-col justify-between">
                     <div className="aspect-video rounded-lg bg-slate-950 flex items-center justify-center relative overflow-hidden">
@@ -258,7 +286,7 @@ export default function HomePage() {
                       </span>
                     </div>
                     <div className="mt-3 flex items-center justify-between text-xs">
-                      <span className={`font-semibold text-${candidate.color}-600 dark:text-${candidate.color}-400`}>
+                      <span className={`font-semibold ${candidate.tone}`}>
                         {candidate.status}
                       </span>
                       <span className="text-muted-foreground font-mono">{candidate.score}</span>
@@ -327,6 +355,7 @@ export default function HomePage() {
       </section>
 
       {/* Feature Grid */}
+      <span id="results" className="block scroll-mt-24" aria-hidden="true" />
       <section id="features" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-24">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mb-2">
@@ -386,6 +415,62 @@ export default function HomePage() {
               </Card>
             );
           })}
+        </div>
+      </section>
+
+      {/* Integrity & privacy promise */}
+      <section id="proctoring" className="border-y border-border/50 bg-slate-950 py-24 text-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-300/20 bg-indigo-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-200">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Integrity by design
+              </div>
+              <h2 className="mt-5 text-3xl font-extrabold tracking-tight sm:text-4xl">
+                Strong signals. Clear context. Human review.
+              </h2>
+              <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">
+                Examora makes integrity events visible without turning the student experience into a black box. Educators see what happened, when it happened, and which session needs attention before making a decision.
+              </p>
+              <div className="mt-7 flex flex-wrap gap-3 text-xs font-semibold text-slate-200">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">Signals, not verdicts</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">Device-first detection</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">Auditable timelines</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {[
+                {
+                  icon: Eye,
+                  title: "Visible to students",
+                  body: "Warnings are explained in plain language so candidates always know what the system recorded.",
+                },
+                {
+                  icon: Activity,
+                  title: "Live to educators",
+                  body: "Realtime status updates help supervisors focus on the candidates who need context.",
+                },
+                {
+                  icon: Lock,
+                  title: "Private by default",
+                  body: "Browser-side signals stay focused on assessment integrity and are tied to an owned session.",
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 shadow-2xl shadow-indigo-950/30">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-400/15 text-indigo-200">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="mt-5 text-sm font-bold">{item.title}</h3>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-300">{item.body}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </section>
 

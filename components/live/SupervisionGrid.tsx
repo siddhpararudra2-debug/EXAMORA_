@@ -543,6 +543,8 @@ export function SupervisionGrid({
                 key={session.id}
                 className="group relative overflow-hidden rounded-2xl border border-border/50 bg-black shadow-sm"
               >
+                {/* Snapshot frames are runtime-generated data URLs; Next Image optimization is not applicable here. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={snapshots[session.id]}
                   alt={`${session.studentName} camera snapshot`}
