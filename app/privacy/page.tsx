@@ -30,7 +30,7 @@ export default function PrivacyPage() {
 
           <h2 className="text-xl font-semibold text-foreground mt-6">1. Client-Side AI & Data Processing</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Webcam feeds during proctored exams are analyzed directly within the candidate&apos;s browser using client-side AI algorithms (BlazeFace). Video streams are never continuously recorded to remote cloud servers without explicit user setup.
+            When enabled for an exam, webcam input is analyzed directly within the candidate&apos;s browser using client-side AI algorithms (BlazeFace). In the MVP launch configuration, no live camera feed, audio, snapshot, or recording is sent to educators or stored remotely. Examora stores approved integrity event metadata such as event type, timestamp, warning count, and session status for review.
           </p>
 
           <h2 className="text-xl font-semibold text-foreground mt-6">2. Information We Store</h2>

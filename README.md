@@ -42,7 +42,7 @@ Examora is a 100% free and open-source AI-proctored online exam platform. Teache
 | 📄 **PDF scorecards** | Per-student results export as clean, printable PDF scorecards. |
 | 📱 **QR access & join links** | Students join any exam anonymously with a shareable link or QR code — no account required. |
 | 📄 **AI paper parser** | Upload a PDF/DOCX/TXT exam paper — the FastAPI + Groq service extracts every question into an editable question bank (scanned PDFs are OCR'd). |
-| 🛡️ **Live proctoring monitor** | Teachers watch active sessions in real time over Socket.io: warnings, terminations, and per-student status. This is an event/status feed — video never leaves the student's device. |
+| 🛡️ **Live proctoring monitor** | Teachers watch active sessions in real time over Socket.io: warnings, terminations, and per-student status. The MVP is event/status-only — video, audio, snapshots, and recordings are not shared with teachers by default. |
 | 🎯 **Draft → publish workflow** | Exams stay `DRAFT` until the teacher publishes them; only `ACTIVE` exams can be joined. |
 | 📊 **Class-level analytics** | Results and stats across sessions, right in the teacher dashboard. |
 | 🧑‍🏫 **Teacher accounts** | JWT-based sign-up / sign-in with per-teacher exam isolation. |
@@ -147,6 +147,7 @@ cp .env.example .env
 | `REDIS_URL` | Redis connection string (optional) | `redis://localhost:6379` |
 | `JWT_SECRET` | Secret used to sign teacher JWTs | change in production |
 | `SESSION_SECRET` | Server-side session secret | change in production |
+| `ENABLE_REMOTE_MEDIA_SUPERVISION` | Future opt-in flag for governed remote media supervision; keep `false` for MVP | `false` |
 
 ### 3. Install dependencies & prepare the database
 

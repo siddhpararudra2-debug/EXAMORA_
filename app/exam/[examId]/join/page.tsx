@@ -300,6 +300,17 @@ export default function JoinExamPage() {
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <span>Integrity signals are review evidence. They do not automatically determine misconduct.</span>
             </div>
+            <div className="mt-3 rounded-xl border border-border/50 bg-secondary/20 p-4 text-left">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-foreground">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Before you start
+              </div>
+              <div className="mt-3 grid gap-3 text-xs leading-5 text-muted-foreground sm:grid-cols-3">
+                <p><strong className="text-foreground">One attempt.</strong> This session is tied to your identity and cannot be reopened after submission or termination.</p>
+                <p><strong className="text-foreground">Server-controlled time.</strong> When time expires, the server closes the session and submits eligible answers.</p>
+                <p><strong className="text-foreground">Privacy by default.</strong> Device checks stay local; no live camera feed or recording is shared with the educator in this MVP.</p>
+              </div>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="pb-10 pt-4">

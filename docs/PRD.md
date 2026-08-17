@@ -185,7 +185,7 @@ These are product targets for validation rather than claims about current produc
 
 ## 11. MVP Release Scope
 
-The MVP release includes educator authentication, exam CRUD, draft-to-active publishing, manual question authoring, topic-based question generation with fallback behavior, public student join, anonymous sessions, timed assessment, transactional submission, browser integrity events, three-warning termination, live candidate status, objective grading, results review, and responsive dashboard navigation.
+The MVP release includes educator authentication, exam CRUD, draft-to-active publishing, manual question authoring, topic-based question generation with fallback behavior, public student join, anonymous sessions, one server-authoritative attempt, timed assessment with expiry auto-submit, transactional submission, browser integrity events, three-warning termination, event/status-only live supervision, objective grading, results review, and responsive dashboard navigation. Remote camera, audio, snapshot, and recording supervision is disabled by default and remains an explicit future opt-in.
 
 Document parsing, bulk invites, question banks, PDF scorecards, email delivery, and AI-assisted subjective grading are valuable extensions already represented in the repository and should be treated as high-priority post-MVP capabilities unless they are required for a target deployment.
 
@@ -209,9 +209,21 @@ Complete document import review, bulk invitations, PDF scorecards, richer questi
 
 Add organization workspaces, role-based administration, exam templates, analytics across cohorts, accommodations and accessibility settings, auditable rubric-based subjective grading, and institution-level retention policies.
 
-## 14. Open Decisions
+## 14. Resolved MVP Decisions
 
-The product team should decide whether live supervision means only event/status telemetry or also educator-visible media streams; the current product framing should default to telemetry and explicit consent. The team should also define the retention period for student identity, answers, and violation records, choose whether educators can customize the warning threshold, and establish which AI-generated question fields require mandatory human review before publishing.
+### 14.1 Privacy boundary
+
+The MVP uses device-local face/gaze checks and browser integrity events, while the educator receives only approved event metadata, timestamps, warning counts, and session status. Remote camera, audio, snapshots, and recordings are disabled by default through `ENABLE_REMOTE_MEDIA_SUPERVISION=false`. Any future media feature requires explicit consent, retention rules, access controls, and institutional review.
+
+### 14.2 Assessment lifecycle
+
+Each exam identity receives one server-authoritative attempt. Active exams accept eligible sessions; a still-open session may be resumed, but submitted, expired, or terminated sessions cannot be reopened or resubmitted. Server-side expiry is authoritative and the auto-submit sweep closes eligible sessions. The default warning threshold remains three, with termination enforced server-side.
+
+### 14.3 Optional dependency policy
+
+Manual authoring, exam delivery, objective grading, results, and event/status supervision are the core launch path. Groq, the FastAPI parser, SMTP, and Redis are optional or deployment-dependent; their failure must not corrupt drafts, strand active students, or block the essential assessment lifecycle. Document parsing and bulk email must show explicit degraded states when their services are unavailable.
+
+The remaining governance decisions are retention periods, accommodations for students whose devices cannot support local detection, and the review requirements for future AI-assisted subjective grading.
 
 ## References
 

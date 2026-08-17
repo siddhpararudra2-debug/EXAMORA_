@@ -8,11 +8,19 @@ import { normalizeExamSettings } from '../../../../packages/database/src/shuffle
 export const MAX_WARNINGS = 3;
 
 /**
- * Maximum number of students whose camera/mic streams a teacher can receive
- * live over the P2P mesh at once. WebRTC mesh topology does not scale beyond
- * a handful of peers on the teacher's browser (CPU + bandwidth exhaustion),
- * so the remaining students fall back to periodic JPEG snapshots relayed by
- * the server (webrtc_snapshot). Tune with MAX_LIVE_STREAMS_PER_TEACHER.
+ * MVP privacy boundary: remote media is opt-in for a future governed release.
+ * The default launch path is event/status telemetry only.
+ */
+export const ENABLE_REMOTE_MEDIA_SUPERVISION =
+  process.env.ENABLE_REMOTE_MEDIA_SUPERVISION === 'true';
+
+export const MEDIA_SUPERVISION_DISABLED_MESSAGE =
+  'Remote media supervision is disabled for the MVP; use event/status monitoring.';
+
+/**
+ * Maximum number of students whose camera/mic streams a teacher could receive
+ * if remote media is explicitly enabled for a future governed release. The MVP
+ * leaves this path disabled and uses event/status telemetry only.
  */
 export const MAX_LIVE_STREAMS_PER_TEACHER = Number(
   process.env.MAX_LIVE_STREAMS_PER_TEACHER ?? 6,
@@ -37,20 +45,11 @@ export const PROCTORING_EVENTS = {
 } as const;
 
 /**
- * S02/S03 — live camera/mic supervision.
- *
- * Scalable hybrid topology (no SFU required):
- * - A capped number of students publish full WebRTC media P2P to the teacher
- *   (live mesh, MAX_LIVE_STREAMS_PER_TEACHER at a time).
- * - Every other student sends low-frequency JPEG snapshots (`webrtc_snapshot`)
- *   that the server relays to the teacher room — bounded server fan-out
- *   instead of an unbounded P2P mesh that would crash the teacher's browser.
- * - The teacher can focus any snapshot tile (`webrtc_focus`) to swap it into
- *   the live pool (evicting the oldest live tile, FIFO).
- *
- * Signaling rides Socket.io; the server also enforces server-side proctoring
- * evidence (heartbeat + duplicate-session termination) that client-side JS
- * cannot disable.
+ * Remote media supervision is retained as an explicitly gated compatibility
+ * path for a future release. In the MVP, all `webrtc_*` transport handlers
+ * reject media requests by default. Socket.io still carries the teacher-owned
+ * event/status room, and the server continues to enforce heartbeat and
+ * duplicate-session evidence that client-side JS cannot disable.
  */
 export const WEBRTC_EVENTS = {
   REQUEST_STREAMS: 'webrtc_request_streams',
@@ -379,9 +378,14 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
         status: string;
         live?: number;
         snapshot?: number;
+        message?: string;
       }) => void,
     ) => {
       const { examId } = payload ?? {};
+      if (!ENABLE_REMOTE_MEDIA_SUPERVISION) {
+        ack?.({ status: 'error', message: MEDIA_SUPERVISION_DISABLED_MESSAGE });
+        return;
+      }
       if (!examId || !isTeacherForExam(socket, examId)) {
         ack?.({ status: 'error' });
         return;
@@ -430,6 +434,10 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
       ack?: (response: { status: string; live?: number; message?: string }) => void,
     ) => {
       const { examId, sessionId } = payload ?? {};
+      if (!ENABLE_REMOTE_MEDIA_SUPERVISION) {
+        ack?.({ status: 'error', message: MEDIA_SUPERVISION_DISABLED_MESSAGE });
+        return;
+      }
       if (!examId || !sessionId || !isTeacherForExam(socket, examId)) {
         ack?.({ status: 'error', message: 'Invalid focus request' });
         return;
@@ -475,7 +483,7 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
     WEBRTC_EVENTS.OFFER,
     (payload: WebRtcSignalPayload) => {
       const { to, sdp } = payload ?? {};
-      if (!isStudentSocket(socket)) return;
+      if (!ENABLE_REMOTE_MEDIA_SUPERVISION || !isStudentSocket(socket)) return;
       relayWithinRoom(io, socket, socket.data.examId, to, WEBRTC_EVENTS.OFFER, {
         sdp,
         sessionId: socket.data.sessionId,
@@ -488,6 +496,7 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
     WEBRTC_EVENTS.ANSWER,
     (payload: WebRtcSignalPayload) => {
       const { to, sdp, examId } = payload ?? {};
+      if (!ENABLE_REMOTE_MEDIA_SUPERVISION) return;
       const teacherExamId = examId ?? socket.data.examId;
       if (!to || !sdp || !isTeacherForExam(socket, teacherExamId)) return;
       relayWithinRoom(io, socket, teacherExamId, to, WEBRTC_EVENTS.ANSWER, {
@@ -501,7 +510,7 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
     WEBRTC_EVENTS.ICE,
     (payload: WebRtcSignalPayload) => {
       const { to, candidate, examId } = payload ?? {};
-      if (!candidate) return;
+      if (!ENABLE_REMOTE_MEDIA_SUPERVISION || !candidate) return;
       const resolvedExamId = examId ?? socket.data.examId;
       relayWithinRoom(io, socket, resolvedExamId, to, WEBRTC_EVENTS.ICE, {
         candidate,
@@ -514,7 +523,7 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
     WEBRTC_EVENTS.END,
     (payload: WebRtcSignalPayload) => {
       const { to, examId } = payload ?? {};
-      if (!to) return;
+      if (!ENABLE_REMOTE_MEDIA_SUPERVISION || !to) return;
       const resolvedExamId = examId ?? socket.data.examId;
       relayWithinRoom(io, socket, resolvedExamId, to, WEBRTC_EVENTS.END, {});
     },
@@ -526,6 +535,7 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
     (payload: { data?: string }) => {
       if (!isStudentSocket(socket)) return;
       const { data } = payload ?? {};
+      if (!ENABLE_REMOTE_MEDIA_SUPERVISION) return;
       if (
         typeof data !== 'string' ||
         data.length === 0 ||
@@ -546,7 +556,7 @@ const registerWebRtcHandlers = (io: Server, socket: Socket): void => {
     WEBRTC_EVENTS.STATE,
     (payload: { micOn?: boolean; camOn?: boolean }) => {
       const { micOn, camOn } = payload ?? {};
-      if (!isStudentSocket(socket)) return;
+      if (!ENABLE_REMOTE_MEDIA_SUPERVISION || !isStudentSocket(socket)) return;
       io.to(roomName(socket.data.examId)).emit(WEBRTC_EVENTS.STATE, {
         from: socket.id,
         sessionId: socket.data.sessionId,
