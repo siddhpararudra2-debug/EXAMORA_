@@ -37,27 +37,6 @@ interface ExamListItem {
   _count: { questions: number; sessions: number };
 }
 
-const DEMO_EXAMS: ExamListItem[] = [
-  {
-    id: "demo-1",
-    title: "Midterm — Computer Networks & Security",
-    status: "COMPLETED",
-    _count: { questions: 20, sessions: 28 },
-  },
-  {
-    id: "demo-2",
-    title: "Final Exam — Data Structures & Algorithms",
-    status: "COMPLETED",
-    _count: { questions: 30, sessions: 45 },
-  },
-  {
-    id: "demo-3",
-    title: "Operating Systems — Concurrency & Deadlocks",
-    status: "ACTIVE",
-    _count: { questions: 12, sessions: 16 },
-  },
-];
-
 function StatusBadge({ status }: { status: ExamListItem["status"] }) {
   if (status === "ACTIVE") {
     return (
@@ -88,7 +67,7 @@ function ResultsContent() {
 
   const [exams, setExams] = useState<ExamListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Auto-redirect if examId is present in query string
   useEffect(() => {
@@ -102,30 +81,31 @@ function ResultsContent() {
 
   const loadExams = useCallback(async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const res = await fetch("/api/exams?page=1&pageSize=100", {
         credentials: "include",
         headers: { ...authHeaders() },
       });
-      if (res.ok) {
-        const payload = (await res.json()) as {
-          data: { exams: ExamListItem[] };
-        };
-        if (payload.data?.exams) {
-          setExams(payload.data.exams);
-          setIsDemoMode(false);
-          return;
-        }
+      const payload = (await res.json().catch(() => ({}))) as {
+        data?: { exams?: ExamListItem[] };
+        message?: string;
+      };
+      if (res.ok && payload.data?.exams) {
+        setExams(payload.data.exams);
+        setErrorMessage(null);
+        return;
       }
       if (res.status === 401) {
         handleAuthFailure();
         return;
       }
-      setIsDemoMode(true);
-      setExams(DEMO_EXAMS);
-    } catch {
-      setIsDemoMode(true);
-      setExams(DEMO_EXAMS);
+      setExams([]);
+      setErrorMessage(payload.message ?? "Could not load your results. Retry to continue.");
+    } catch (error) {
+      console.error("Failed to load results overview:", error);
+      setExams([]);
+      setErrorMessage("The results service is unavailable. Check your connection and retry.");
     } finally {
       setLoading(false);
     }
@@ -173,21 +153,11 @@ function ResultsContent() {
 
   return (
     <div className="flex flex-col gap-8 animate-in fade-in duration-500">
-      {/* Demo Mode Banner */}
-      {isDemoMode && (
-        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div className="flex-1 text-xs sm:text-sm">
-            <span className="font-semibold">Demo Gradebook:</span> Showing simulated assessment results and scorecards.
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void loadExams()}
-            className="h-8 border-amber-500/40 text-xs rounded-xl hover:bg-amber-500/20"
-          >
-            Refresh
-          </Button>
+      {errorMessage && (
+        <div role="alert" className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <span className="flex-1">{errorMessage}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadExams()} className="h-8 border-destructive/30">Retry</Button>
         </div>
       )}
 

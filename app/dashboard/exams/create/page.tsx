@@ -127,8 +127,6 @@ const examSchema = z.object({
     .int("Warning threshold must be a whole number.")
     .min(1, { message: "Use at least 1 warning." })
     .max(10, { message: "Use no more than 10 warnings." }),
-  supervisionCamera: z.boolean().optional(),
-  supervisionMic: z.boolean().optional(),
   questions: z
     .array(questionSchema)
     .min(1, { message: "Add at least one question to your exam." }),
@@ -154,8 +152,6 @@ const DEFAULT_VALUES: ExamFormValues = {
   shuffleQuestions: true,
   shuffleOptions: true,
   warningThreshold: 3,
-  supervisionCamera: false,
-  supervisionMic: false,
   questions: [DEFAULT_QUESTION(0)],
 };
 
@@ -373,8 +369,6 @@ function CreateExamContent() {
               shuffleQuestions: exam.settings?.shuffleQuestions ?? true,
               shuffleOptions: exam.settings?.shuffleOptions ?? true,
               warningThreshold: exam.settings?.warningThreshold ?? 3,
-              supervisionCamera: exam.settings?.supervision?.camera ?? false,
-              supervisionMic: exam.settings?.supervision?.mic ?? false,
               questions: parsedQuestions.length > 0 ? parsedQuestions : [DEFAULT_QUESTION(0)],
             });
 
@@ -518,10 +512,6 @@ function CreateExamContent() {
           shuffleQuestions: data.shuffleQuestions ?? false,
           shuffleOptions: data.shuffleOptions ?? false,
           warningThreshold: Number(data.warningThreshold),
-          supervision: {
-            camera: data.supervisionCamera ?? false,
-            mic: data.supervisionMic ?? false,
-          },
         },
         questions: data.questions.map((q) => ({
           type: q.type,
@@ -573,14 +563,12 @@ function CreateExamContent() {
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      console.warn("Save exam offline fallback:", err);
-      // Demo-friendly fallback: show toast + redirect even without backend
+      console.error("Save exam failed:", err);
       toast({
-        title: "Exam saved (demo mode)",
-        description: `Redirecting to your dashboard.`,
+        title: isEditMode ? "Couldn't update exam" : "Couldn't create exam",
+        description: "The server could not be reached. Your changes were not saved.",
+        variant: "destructive",
       });
-      router.push("/dashboard");
-      router.refresh();
     } finally {
       setSubmitting(false);
     }
@@ -788,8 +776,7 @@ function CreateExamContent() {
                   Anti-cheat &amp; supervision
                 </CardTitle>
                 <CardDescription className="text-sm text-slate-500">
-                  Shuffle the paper per student and require live camera/mic
-                  supervision during the exam.
+                  Configure question order and the reviewable integrity policy for this assessment.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-1 gap-3 px-6 pb-6 md:grid-cols-2">
@@ -846,32 +833,12 @@ function CreateExamContent() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={control}
-                  name="supervisionCamera"
-                  render={({ field }) => (
-                    <Toggle
-                      checked={field.value ?? false}
-                      onChange={field.onChange}
-                      accent="rose"
-                      label="Require live camera"
-                      description="Stream the student's webcam to your live dashboard while they take the exam."
-                    />
-                  )}
-                />
-                <FormField
-                  control={control}
-                  name="supervisionMic"
-                  render={({ field }) => (
-                    <Toggle
-                      checked={field.value ?? false}
-                      onChange={field.onChange}
-                      accent="rose"
-                      label="Require live microphone"
-                      description="Stream the student's microphone too; you can listen in by enlarging a student tile."
-                    />
-                  )}
-                />
+                <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-4 text-sm text-emerald-900 md:col-span-2 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100">
+                  <p className="font-semibold">Privacy-first supervision</p>
+                  <p className="mt-1 text-xs leading-5 text-emerald-800/90 dark:text-emerald-100/80">
+                    Examora records reviewable browser and integrity events. Device-local checks stay on the student&apos;s device; the MVP does not share camera, microphone, snapshots, or recordings with educators.
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}

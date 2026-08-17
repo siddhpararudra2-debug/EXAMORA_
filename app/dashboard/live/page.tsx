@@ -7,15 +7,12 @@ import {
   ArrowRight,
   CircleDot,
   Clock,
-  Eye,
   FileText,
   Loader2,
-  MonitorPlay,
   Users,
-  ShieldAlert,
   Video,
-  Sparkles,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,25 +33,14 @@ interface LiveExamItem {
   };
 }
 
-const DEMO_LIVE_EXAMS: LiveExamItem[] = [
-  {
-    id: "live_demo_1",
-    title: "Midterm Examination — Computer Networks & Security",
-    description: "Covers OSI model, TCP/IP handshake, transport protocols, and active encryption.",
-    duration_minutes: 60,
-    total_marks: 50,
-    status: "ACTIVE",
-    created_at: new Date().toISOString(),
-    _count: { questions: 20, sessions: 28 },
-  },
-];
-
 export default function LiveExamsOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [liveExams, setLiveExams] = useState<LiveExamItem[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchLiveExams = async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const res = await fetch("/api/exams?page=1&pageSize=100", {
         credentials: "include",
@@ -65,7 +51,7 @@ export default function LiveExamsOverviewPage() {
         const activeOnly = (payload.data?.exams || []).filter(
           (e: LiveExamItem) => e.status === "ACTIVE" || e.status === "PUBLISHED"
         );
-        setLiveExams(activeOnly.length > 0 ? activeOnly : DEMO_LIVE_EXAMS);
+        setLiveExams(activeOnly);
         setLoading(false);
         return;
       }
@@ -73,10 +59,14 @@ export default function LiveExamsOverviewPage() {
         handleAuthFailure();
         return;
       }
-    } catch {
-      // Fallback to demo
+      const payload = (await res.json().catch(() => ({}))) as { message?: string };
+      setLiveExams([]);
+      setErrorMessage(payload.message ?? "The exam service returned an error. Retry to check active assessments.");
+    } catch (error) {
+      console.error("Failed to load active exams:", error);
+      setLiveExams([]);
+      setErrorMessage("The exam service is unavailable. Retry to check active assessments.");
     }
-    setLiveExams(DEMO_LIVE_EXAMS);
     setLoading(false);
   };
 
@@ -102,13 +92,13 @@ export default function LiveExamsOverviewPage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Live WebRTC Supervision Grid
+            Live integrity monitor
           </div>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-            Active Proctoring Streams
+            Active assessments
           </h1>
           <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">
-            Select an in-progress assessment to view candidate camera feeds, real-time audio telemetry, and automated tab-switch violations.
+            Select an active assessment to review candidate status, warning counts, and timestamped integrity events. The MVP does not share camera or microphone feeds.
           </p>
         </div>
 
@@ -122,6 +112,14 @@ export default function LiveExamsOverviewPage() {
         </Button>
       </div>
 
+      {errorMessage && (
+        <div role="alert" className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <span className="flex-1">{errorMessage}</span>
+          <Button size="sm" variant="outline" onClick={fetchLiveExams} className="h-8 border-destructive/30">Retry</Button>
+        </div>
+      )}
+
       {/* Grid of active exams */}
       <div className="grid grid-cols-1 gap-5">
         {liveExams.map((exam) => (
@@ -131,7 +129,7 @@ export default function LiveExamsOverviewPage() {
                 <div className="flex items-center gap-2 mb-1.5">
                   <Badge className="gap-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-none font-bold text-[11px]">
                     <CircleDot className="h-3.5 w-3.5 animate-pulse text-emerald-500" />
-                    LIVE CHANNEL ACTIVE
+                    ACTIVE ASSESSMENT
                   </Badge>
                   <span className="text-[11px] text-muted-foreground font-mono bg-secondary/80 px-2 py-0.5 rounded-md">
                     ID: {exam.id}
@@ -145,8 +143,8 @@ export default function LiveExamsOverviewPage() {
 
               <Button asChild className="gap-2 shrink-0 gradient-brand rounded-xl shadow-md shadow-indigo-500/20 font-semibold h-11 px-5">
                 <Link href={`/dashboard/live/${exam.id}`}>
-                  <Video className="h-4 w-4" />
-                  Open Live Monitoring Room
+                  <Activity className="h-4 w-4" />
+                  Open Integrity Monitor
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -174,7 +172,7 @@ export default function LiveExamsOverviewPage() {
             <Video className="mx-auto h-8 w-8 text-muted-foreground/40 mb-3" />
             <h3 className="text-base font-bold text-foreground">No active live exams right now</h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              Publish and start an assessment from your workspace to broadcast live proctoring feeds.
+              Publish an assessment from your workspace to start receiving candidate status and integrity events.
             </p>
             <Button asChild className="mt-4 gradient-brand rounded-xl h-9 text-xs font-semibold">
               <Link href="/dashboard/exams/create">Launch an Exam</Link>

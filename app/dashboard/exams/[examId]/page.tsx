@@ -14,12 +14,12 @@ import {
   Share2,
   CheckCircle2,
   AlertCircle,
-  AlertTriangle,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BulkInviteModal } from "@/components/exams/BulkInviteModal";
 import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
+import { cn } from "@/lib/utils";
 
 interface ExamDetail {
   id: string;
@@ -30,6 +30,7 @@ interface ExamDetail {
   questionsCount: number;
   activeSessionsCount: number;
   completedSessionsCount: number;
+  status?: string;
 }
 
 export default function TeacherExamDetailsPage() {
@@ -38,7 +39,7 @@ export default function TeacherExamDetailsPage() {
 
   const [exam, setExam] = useState<ExamDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
@@ -47,6 +48,7 @@ export default function TeacherExamDetailsPage() {
 
     async function fetchExamDetails() {
       setLoading(true);
+      setErrorMessage(null);
       try {
         const res = await fetch(`/api/exams/${params.examId}`, {
           credentials: "include",
@@ -57,40 +59,22 @@ export default function TeacherExamDetailsPage() {
           const data = payload.data?.exam ?? payload.exam ?? payload;
           if (isMounted) {
             setExam(data);
-            setIsDemoMode(false);
+            setErrorMessage(null);
           }
         } else if (res.status === 401) {
           if (isMounted) handleAuthFailure();
         } else {
-          // Fallback mock exam detail
+          const payload = (await res.json().catch(() => ({}))) as { message?: string };
           if (isMounted) {
-            setIsDemoMode(true);
-            setExam({
-              id: params.examId,
-              title: "Midterm Examination — Computer Networks & Security",
-              description: "Covers chapters 1–5 including OSI model, TCP/IP, and proctoring guidelines.",
-              durationMinutes: 60,
-              totalMarks: 50,
-              questionsCount: 15,
-              activeSessionsCount: 4,
-              completedSessionsCount: 22,
-            });
+            setExam(null);
+            setErrorMessage(payload.message ?? "Could not load this exam.");
           }
         }
       } catch (err) {
-        console.warn("Error loading exam details from server:", err);
+        console.error("Error loading exam details from server:", err);
         if (isMounted) {
-          setIsDemoMode(true);
-          setExam({
-            id: params.examId,
-            title: "Midterm Examination — Computer Networks & Security",
-            description: "Covers chapters 1–5 including OSI model, TCP/IP, and proctoring guidelines.",
-            durationMinutes: 60,
-            totalMarks: 50,
-            questionsCount: 15,
-            activeSessionsCount: 4,
-            completedSessionsCount: 22,
-          });
+          setExam(null);
+          setErrorMessage("The exam service is unavailable. Check your connection and retry.");
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -128,30 +112,25 @@ export default function TeacherExamDetailsPage() {
   if (!exam) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-md text-center bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
           <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
-          <h2 className="mt-4 text-xl font-bold text-slate-900">Exam Not Found</h2>
-          <Button className="mt-6" onClick={() => router.push("/dashboard")}>
-            Return to Dashboard
-          </Button>
+          <h2 className="mt-4 text-xl font-bold text-slate-900">Unable to load exam</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{errorMessage ?? "This exam could not be found."}</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>
+            <Button onClick={() => router.push("/dashboard")}>Return to Dashboard</Button>
+          </div>
         </div>
       </div>
     );
   }
 
+  const isActive = exam.status === "ACTIVE" || exam.status === "PUBLISHED";
+  const statusLabel = exam.status === "COMPLETED" ? "Completed" : exam.status === "DRAFT" ? "Draft" : isActive ? "Published & active" : exam.status ?? "Unavailable";
+
   return (
     <div className="min-h-screen bg-slate-50 p-6 sm:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
-        {/* Demo Mode Banner */}
-        {isDemoMode && (
-          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-            <div className="flex-1 text-sm leading-tight">
-              <span className="font-semibold">Demo / Preview Mode:</span> Could not retrieve live exam details from server. Showing sample exam information.
-            </div>
-          </div>
-        )}
-
         {/* Navigation Top Bar */}
         <div className="flex items-center justify-between">
           <Link
@@ -169,8 +148,13 @@ export default function TeacherExamDetailsPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700">
-                <Radio className="h-3.5 w-3.5 animate-pulse text-emerald-600" /> Published & Active
+              <div className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold",
+                isActive
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-slate-200 bg-slate-100 text-slate-600"
+              )}>
+                <Radio className={cn("h-3.5 w-3.5", isActive && "animate-pulse text-emerald-600")} /> {statusLabel}
               </div>
               <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{exam.title}</h1>
               <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
@@ -194,6 +178,8 @@ export default function TeacherExamDetailsPage() {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
               <Button
                 onClick={() => setIsInviteModalOpen(true)}
+                disabled={!isActive}
+                title={!isActive ? "Publish this exam before inviting students" : undefined}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-md"
               >
                 <UserPlus className="h-4 w-4" /> Bulk Invite Students
@@ -202,17 +188,21 @@ export default function TeacherExamDetailsPage() {
               <Button
                 variant="outline"
                 onClick={handleCopyLink}
+                disabled={!isActive}
+                title={!isActive ? "Publish this exam before sharing its join link" : undefined}
                 className="gap-2 border-slate-200 text-slate-700 hover:bg-slate-50"
               >
                 <Share2 className="h-4 w-4" />
                 {copiedLink ? "Copied Link!" : "Share Link"}
               </Button>
 
-              <Link href={`/dashboard/live/${exam.id}`}>
-                <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white gap-2">
-                  <Radio className="h-4 w-4 text-emerald-400" /> Live Monitor
-                </Button>
-              </Link>
+              {isActive && (
+                <Link href={`/dashboard/live/${exam.id}`}>
+                  <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white gap-2">
+                    <Radio className="h-4 w-4 text-emerald-400" /> Integrity Monitor
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>

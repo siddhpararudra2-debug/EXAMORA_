@@ -64,29 +64,6 @@ interface ResultsPayload {
   results: SessionResult[];
 }
 
-const DEMO_EXAM: ResultsPayload = {
-  exam: { id: "demo-1", title: "Midterm — Computer Networks & Security" },
-  questions: Array.from({ length: 15 }, (_, i) => ({
-    id: `q${i + 1}`,
-    question_text: `Sample question ${i + 1}`,
-    type: "MCQ",
-    marks: 5,
-    correct_answer: "A",
-    order_index: i + 1,
-  })),
-  results: Array.from({ length: 4 }, (_, i) => ({
-    id: `s${i + 1}`,
-    studentName: `Demo Student ${i + 1}`,
-    enrollmentNumber: `ENR-${i + 1}000${i}`,
-    email: `student${i + 1}@example.com`,
-    status: "SUBMITTED",
-    submittedAt: new Date(Date.now() - (i + 1) * 3600_000).toISOString(),
-    totalScore: 60 - i * 5,
-    percentage: 80 - i * 6.67,
-    answers: [],
-  })),
-};
-
 function StatusBadge({ status }: { status: string }) {
   if (status === "TERMINATED") {
     return (
@@ -131,7 +108,7 @@ function ExamResultsContent() {
 
   const [data, setData] = useState<ResultsPayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [grading, setGrading] = useState(false);
   const [emailing, setEmailing] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
@@ -139,33 +116,32 @@ function ExamResultsContent() {
 
   const loadResults = useCallback(async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const res = await fetch(`/api/exams/${examId}/results`, {
         credentials: "include",
         headers: { ...authHeaders() },
       });
-      if (res.ok) {
-        const payload = (await res.json()) as {
-          status: string;
-          data: ResultsPayload;
-        };
-        if (payload.data) {
-          setData(payload.data);
-          setIsDemoMode(false);
-          setLoading(false);
-          return;
-        }
+      const payload = (await res.json().catch(() => ({}))) as {
+        status?: string;
+        message?: string;
+        data?: ResultsPayload;
+      };
+      if (res.ok && payload.data) {
+        setData(payload.data);
+        setErrorMessage(null);
+        return;
       }
       if (res.status === 401) {
         handleAuthFailure();
         return;
       }
-      setIsDemoMode(true);
-      setData(DEMO_EXAM);
+      setData(null);
+      setErrorMessage(payload.message ?? "Could not load results for this exam.");
     } catch (err) {
-      console.warn("Could not fetch exam results from backend:", err);
-      setIsDemoMode(true);
-      setData(DEMO_EXAM);
+      console.error("Could not fetch exam results from backend:", err);
+      setData(null);
+      setErrorMessage("The results service is unavailable. Check your connection and retry.");
     } finally {
       setLoading(false);
     }
@@ -214,8 +190,9 @@ function ExamResultsContent() {
     } catch (err) {
       console.warn("Grade all error:", err);
       toast({
-        title: "Grading simulated (demo mode)",
-        description: "Grade completed for all mock submissions.",
+        title: "Grading failed",
+        description: "The grading service is unavailable. No results were changed.",
+        variant: "destructive",
       });
     } finally {
       setGrading(false);
@@ -253,8 +230,9 @@ function ExamResultsContent() {
     } catch (err) {
       console.warn("Export CSV error:", err);
       toast({
-        title: "Export simulated",
-        description: "Downloaded sample results CSV.",
+        title: "Export failed",
+        description: "The results service is unavailable. No file was downloaded.",
+        variant: "destructive",
       });
     } finally {
       setExportingCsv(false);
@@ -264,7 +242,7 @@ function ExamResultsContent() {
   const emailScorecards = useCallback(async () => {
     setEmailing(true);
     try {
-      const res = await fetch(`/api/v1/exams/${examId}/results/email`, {
+      const res = await fetch(`/api/v1/exams/${examId}/declare-results`, {
         method: "POST",
         credentials: "include",
         headers: { ...authHeaders() },
@@ -274,8 +252,8 @@ function ExamResultsContent() {
       };
       if (res.ok) {
         toast({
-          title: "Scorecards sent",
-          description: payload.message ?? "Email batch queued for delivery.",
+          title: "Results declared",
+          description: payload.message ?? "Results were graded and scorecards queued for delivery.",
         });
       } else {
         toast({
@@ -287,8 +265,9 @@ function ExamResultsContent() {
     } catch (err) {
       console.warn("Email scorecards error:", err);
       toast({
-        title: "Emails queued (demo mode)",
-        description: "Simulated sending scorecards to enrolled students.",
+        title: "Email delivery failed",
+        description: "The results service is unavailable. No scorecards were sent.",
+        variant: "destructive",
       });
     } finally {
       setEmailing(false);
@@ -329,10 +308,11 @@ function ExamResultsContent() {
         }
       } catch (err) {
         console.warn("Download marksheet error:", err);
-        toast({
-          title: "Scorecard downloaded (demo mode)",
-          description: "Sample PDF generated.",
-        });
+      toast({
+        title: "Download failed",
+        description: "The scorecard service is unavailable. No file was downloaded.",
+        variant: "destructive",
+      });
       } finally {
         setDownloads((prev) => ({ ...prev, [sessionId]: false }));
       }
@@ -368,19 +348,11 @@ function ExamResultsContent() {
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Demo / Offline Mode Banner */}
-      {isDemoMode && (
-        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div className="flex-1 text-sm leading-tight">
-            <span className="font-semibold">Demo / Preview Mode:</span> Server data could not be fetched. Showing sample scorecard results.
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void loadResults()}
-            className="h-8 border-amber-500/40 text-xs text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
-          >
+      {errorMessage && (
+        <div role="alert" className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <div className="flex-1 text-sm leading-5">{errorMessage}</div>
+          <Button size="sm" variant="outline" onClick={() => void loadResults()} className="h-8 border-destructive/30">
             Retry
           </Button>
         </div>
@@ -406,8 +378,7 @@ function ExamResultsContent() {
             {data?.exam.title ?? "Loading…"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">
-            Review graded sessions, view violation timelines, download scorecards, or email
-            marksheets to the whole class.
+            Review graded sessions, view violation timelines, download scorecards, or declare results and email marksheets to the class.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -424,7 +395,7 @@ function ExamResultsContent() {
             variant="outline"
             className="h-10 gap-2 border-border/40"
             onClick={() => void gradeAll()}
-            disabled={grading || loading}
+            disabled={grading || loading || !data}
           >
             {grading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -437,7 +408,7 @@ function ExamResultsContent() {
             variant="outline"
             className="h-10 gap-2 border-border/40"
             onClick={() => void exportCsv()}
-            disabled={exportingCsv || loading}
+            disabled={exportingCsv || loading || !data}
           >
             {exportingCsv ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -449,14 +420,14 @@ function ExamResultsContent() {
           <Button
             className="h-10 gap-2"
             onClick={() => void emailScorecards()}
-            disabled={emailing || loading}
+            disabled={emailing || loading || !data}
           >
             {emailing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Mail className="h-4 w-4" />
             )}
-            {emailing ? "Emailing…" : "Email scorecards"}
+            {emailing ? "Declaring…" : "Declare & email results"}
           </Button>
         </div>
       </section>

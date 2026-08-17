@@ -59,39 +59,6 @@ interface ExamListItem {
   };
 }
 
-const DEMO_EXAMS: ExamListItem[] = [
-  {
-    id: "demo_active_1",
-    title: "Midterm — Computer Networks & Security",
-    description: "Chapters 1–5: OSI model, TCP/IP, Transport Layer, Cryptography",
-    duration_minutes: 60,
-    total_marks: 50,
-    status: "ACTIVE",
-    created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    _count: { questions: 20, sessions: 28 },
-  },
-  {
-    id: "demo_completed_1",
-    title: "Final Exam — Data Structures & Algorithms",
-    description: "Trees, Graphs, Dynamic Programming, and Complexity Analysis",
-    duration_minutes: 120,
-    total_marks: 100,
-    status: "COMPLETED",
-    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    _count: { questions: 30, sessions: 45 },
-  },
-  {
-    id: "demo_draft_1",
-    title: "Database Systems — Normalization & SQL",
-    description: "3NF, BCNF, Relational Algebra, and Query Optimization",
-    duration_minutes: 45,
-    total_marks: 30,
-    status: "DRAFT",
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    _count: { questions: 15, sessions: 0 },
-  },
-];
-
 function StatusBadge({ status }: { status: ExamStatus }) {
   if (status === "ACTIVE" || status === "PUBLISHED") {
     return (
@@ -133,6 +100,7 @@ function DashboardHomeContent() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [exams, setExams] = useState<ExamListItem[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pagination, setPagination] = useState<{
     total: number;
     totalPages: number;
@@ -147,6 +115,7 @@ function DashboardHomeContent() {
   const loadExams = useCallback(async (targetPage = 1, append = false) => {
     if (append) setLoadingMore(true);
     else setLoading(true);
+    if (!append) setErrorMessage(null);
     try {
       const res = await fetch(
         `/api/exams?page=${targetPage}&pageSize=${PAGE_SIZE}`,
@@ -177,9 +146,16 @@ function DashboardHomeContent() {
         handleAuthFailure();
         return;
       }
-      if (!append) setExams(DEMO_EXAMS);
-    } catch {
-      if (!append) setExams(DEMO_EXAMS);
+      if (!append) {
+        setExams([]);
+        setErrorMessage("The dashboard service returned an error. Retry to load your assessments.");
+      }
+    } catch (error) {
+      console.error("Failed to load exams:", error);
+      if (!append) {
+        setExams([]);
+        setErrorMessage("The dashboard service is unavailable. Check your connection and retry.");
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -317,6 +293,16 @@ function DashboardHomeContent() {
           </Button>
         </div>
       </section>
+
+      {errorMessage && (
+        <div role="alert" className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          <ShieldCheck className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="flex-1">{errorMessage}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadExams()} className="h-8 border-destructive/30">
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Metrics Row */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

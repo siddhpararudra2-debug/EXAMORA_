@@ -195,6 +195,16 @@ describe('POST /api/exams/:id/publish', () => {
   });
 });
 
+describe('PUT /api/exams/:id', () => {
+  it('rejects edits after an exam has been published', async () => {
+    await api
+      .put(`/api/exams/${examId}`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ ...EXAM_PAYLOAD, title: 'Attempted Published Edit' })
+      .expect(409);
+  });
+});
+
 describe('POST /api/exams/:id/join', () => {
   it('creates an anonymous student session with a UUID token', async () => {
     const res = await api

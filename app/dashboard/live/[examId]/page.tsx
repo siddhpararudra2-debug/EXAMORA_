@@ -47,41 +47,6 @@ const DEFAULT_WARNINGS_LIMIT = 3;
 
 type SessionCard = StudentSessionView & { _new?: boolean };
 
-function mockSessions(examId: string): StudentSessionView[] {
-  const students = [
-    { name: "Aarav Sharma", email: "aarav.s@school.edu" },
-    { name: "Priya Desai", email: "priya.d@school.edu" },
-    { name: "Noah Williams", email: "noah.w@school.edu" },
-    { name: "Sofia Martinez", email: "sofia.m@school.edu" },
-    { name: "Rohan Mehta", email: "rohan.m@school.edu" },
-    { name: "Emma Johnson", email: "emma.j@school.edu" },
-    { name: "Kenji Tanaka", email: "kenji.t@school.edu" },
-    { name: "Amelia Clark", email: "amelia.c@school.edu" },
-  ];
-  const statuses: SessionStatus[] = [
-    "IN_PROGRESS",
-    "IN_PROGRESS",
-    "IN_PROGRESS",
-    "IN_PROGRESS",
-    "IN_PROGRESS",
-    "IN_PROGRESS",
-    "TERMINATED",
-    "SUBMITTED",
-  ];
-  const warningCounts = [0, 1, 0, 2, 0, 0, 3, 0];
-  return students.map((s, i) => ({
-    id: `sess_${examId}_${i + 1}`,
-    examId,
-    studentName: s.name,
-    studentEmail: s.email,
-    status: statuses[i],
-    warnings: warningCounts[i],
-    warningsLimit: DEFAULT_WARNINGS_LIMIT,
-    joinedAt: new Date(Date.now() - (i + 3) * 60_000).toISOString(),
-    lastActivityAt: new Date(Date.now() - (i + 1) * 30_000).toISOString(),
-  }));
-}
-
 function StatusBadge({ status }: { status: SessionStatus }) {
   if (status === "IN_PROGRESS") {
     return (
@@ -171,7 +136,7 @@ export default function LiveProctoringDashboard() {
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [examMeta, setExamMeta] = useState<{
     title: string;
     startedAt?: string;
@@ -228,6 +193,7 @@ export default function LiveProctoringDashboard() {
 
   const loadInitial = useCallback(async () => {
     setRefreshing(true);
+    setErrorMessage(null);
     try {
       const res = await fetch(`/api/exams/${examId}/sessions`, {
         credentials: "include",
@@ -242,26 +208,19 @@ export default function LiveProctoringDashboard() {
         setSessions(
           (data.sessions ?? []).map((s) => ({ ...s, _new: false }))
         );
-        setIsDemoMode(false);
+        setErrorMessage(null);
       } else if (res.status === 401) {
         handleAuthFailure();
         return;
       } else {
-        setIsDemoMode(true);
-        setExamMeta({
-          title: "Midterm Examination — Introduction to Computer Science",
-          startedAt: new Date(Date.now() - 22 * 60_000).toISOString(),
-        });
-        setSessions(mockSessions(examId).map((s) => ({ ...s, _new: false })));
+        const payload = (await res.json().catch(() => ({}))) as { message?: string };
+        setSessions([]);
+        setErrorMessage(payload.message ?? "Could not load candidate sessions.");
       }
     } catch (err) {
-      console.warn("Failed to load live sessions from server:", err);
-      setIsDemoMode(true);
-      setExamMeta({
-        title: "Midterm Examination — Introduction to Computer Science",
-        startedAt: new Date(Date.now() - 22 * 60_000).toISOString(),
-      });
-      setSessions(mockSessions(examId).map((s) => ({ ...s, _new: false })));
+      console.error("Failed to load live sessions from server:", err);
+      setSessions([]);
+      setErrorMessage("The live monitor service is unavailable. Check your connection and retry.");
     } finally {
       setRefreshing(false);
       setLoading(false);
@@ -370,21 +329,11 @@ export default function LiveProctoringDashboard() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
-      {/* Demo Mode Banner */}
-      {isDemoMode && (
-        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div className="flex-1 text-sm leading-tight">
-            <span className="font-semibold">Demo / Offline Monitor Mode:</span> Live session backend is unreachable. Displaying simulated student telemetry.
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void loadInitial()}
-            className="h-8 border-amber-500/40 text-xs text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
-          >
-            Retry
-          </Button>
+      {errorMessage && (
+        <div role="alert" className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <span className="flex-1">{errorMessage}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadInitial()} className="h-8 border-destructive/30">Retry</Button>
         </div>
       )}
 

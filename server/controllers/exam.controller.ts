@@ -180,11 +180,20 @@ export const updateExam = async (
     }
 
     const existing = await prisma.exam.findFirst({
-      where: { id: examId, created_by: teacher.userId },
+      where: { id: examId, created_by: teacher.userId, deleted_at: null },
+      select: { id: true, status: true },
     });
 
     if (!existing) {
       res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    if (existing.status !== ExamStatus.DRAFT) {
+      res.status(409).json({
+        status: 'error',
+        message: 'Only draft exams can be edited. Unpublish or duplicate this exam to make changes.',
+      });
       return;
     }
 

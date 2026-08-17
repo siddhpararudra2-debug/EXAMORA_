@@ -9,7 +9,6 @@ import {
   User,
   Clock,
   CheckCircle2,
-  AlertTriangle,
   Loader2,
   Calendar,
   Award,
@@ -45,7 +44,7 @@ export default function ProctoringTimelinePage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState<boolean>(true);
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [session, setSession] = useState<StudentSessionDetail | null>(null);
 
   useEffect(() => {
@@ -53,6 +52,7 @@ export default function ProctoringTimelinePage() {
 
     async function fetchSessionEvents() {
       setLoading(true);
+      setErrorMessage(null);
       try {
         const res = await fetch(
           `/api/exams/${params.examId}/sessions/${params.sessionId}/events`,
@@ -65,88 +65,22 @@ export default function ProctoringTimelinePage() {
           const eventsList = payload.data?.events ?? payload.events ?? sessionData.events ?? [];
           if (isMounted) {
             setSession({ ...sessionData, events: eventsList });
-            setIsDemoMode(false);
+            setErrorMessage(null);
           }
         } else if (res.status === 401) {
           if (isMounted) handleAuthFailure();
         } else {
-          // Fallback mock data for testing/demo
+          const payload = (await res.json().catch(() => ({}))) as { message?: string };
           if (isMounted) {
-            setIsDemoMode(true);
-            const now = new Date();
-            const start = new Date(now.getTime() - 25 * 60 * 1000).toISOString();
-            setSession({
-              id: params.sessionId,
-              examId: params.examId,
-              examTitle: "Midterm Examination — Computer Networks & Security",
-              studentName: "Rudra Siddhpara",
-              studentEmail: "rudra@examora.edu",
-              enrollmentNo: "ENR20268892",
-              totalWarnings: 2,
-              warningsLimit: 3,
-              finalScore: 85,
-              maxScore: 100,
-              status: "SUBMITTED",
-              examStartTime: start,
-              examDurationMinutes: 60,
-              events: [
-                {
-                  id: "e1",
-                  type: "TAB_SWITCH",
-                  occurred_at: new Date(new Date(start).getTime() + 4 * 60 * 1000).toISOString(),
-                  description: "Tab switch detected: switched to browser window.",
-                },
-                {
-                  id: "e2",
-                  type: "AI_OVERLAY",
-                  occurred_at: new Date(new Date(start).getTime() + 12 * 60 * 1000).toISOString(),
-                  description: "AI overlay detected over the exam window.",
-                },
-                {
-                  id: "e3",
-                  type: "DEVTOOLS",
-                  occurred_at: new Date(new Date(start).getTime() + 18 * 60 * 1000).toISOString(),
-                  description: "Developer tools opened while answering.",
-                },
-              ],
-            });
+            setSession(null);
+            setErrorMessage(payload.message ?? "Could not load this audit timeline.");
           }
         }
       } catch (err) {
-        console.warn("API timeline load error, falling back to demo view:", err);
+        console.error("API timeline load error:", err);
         if (isMounted) {
-          setIsDemoMode(true);
-          const now = new Date();
-          const start = new Date(now.getTime() - 25 * 60 * 1000).toISOString();
-          setSession({
-            id: params.sessionId,
-            examId: params.examId,
-            examTitle: "Midterm Examination — Computer Networks & Security",
-            studentName: "Rudra Siddhpara",
-            studentEmail: "rudra@examora.edu",
-            enrollmentNo: "ENR20268892",
-            totalWarnings: 2,
-            warningsLimit: 3,
-            finalScore: 85,
-            maxScore: 100,
-            status: "SUBMITTED",
-            examStartTime: start,
-            examDurationMinutes: 60,
-            events: [
-              {
-                id: "e1",
-                type: "TAB_SWITCH",
-                occurred_at: new Date(new Date(start).getTime() + 4 * 60 * 1000).toISOString(),
-                description: "Tab switch detected: switched to browser window.",
-              },
-              {
-                id: "e2",
-                type: "AI_OVERLAY",
-                occurred_at: new Date(new Date(start).getTime() + 12 * 60 * 1000).toISOString(),
-                description: "AI overlay detected over the exam window.",
-              },
-            ],
-          });
+          setSession(null);
+          setErrorMessage("The telemetry service is unavailable. Check your connection and retry.");
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -178,13 +112,12 @@ export default function ProctoringTimelinePage() {
       <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
         <div className="max-w-md text-center bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
           <ShieldAlert className="mx-auto h-12 w-12 text-red-500" />
-          <h2 className="mt-4 text-xl font-bold text-slate-900">Proctoring Data Not Found</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            The requested session timeline could not be loaded.
-          </p>
-          <Button className="mt-6" onClick={() => router.back()}>
-            Go Back
-          </Button>
+          <h2 className="mt-4 text-xl font-bold text-slate-900">Unable to load audit timeline</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{errorMessage ?? "The requested session timeline could not be loaded."}</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>
+            <Button onClick={() => router.back()}>Go Back</Button>
+          </div>
         </div>
       </div>
     );
@@ -195,16 +128,6 @@ export default function ProctoringTimelinePage() {
   return (
     <div className="min-h-screen bg-slate-50 p-6 sm:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
-        {/* Demo Mode Banner */}
-        {isDemoMode && (
-          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-            <div className="flex-1 text-sm leading-tight">
-              <span className="font-semibold">Demo / Preview Mode:</span> Proctoring telemetry server unreachable. Showing sample violation timeline events.
-            </div>
-          </div>
-        )}
-
         {/* Navigation Top Bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
