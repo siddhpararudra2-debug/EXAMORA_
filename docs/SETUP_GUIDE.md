@@ -8,21 +8,32 @@ This guide provides step-by-step instructions for configuring free tier services
 
 ---
 
-## 1. Setting Up Free Groq AI Question Generation (`GROQ_API_KEY`)
+## 1. Setting Up AI Question Generation (`GROQ_API_KEY` or Local Ollama)
 
-Examora uses **Groq** (`llama-3.3-70b-versatile`) to generate exam questions in real time with ultra-fast inference speed.
+Examora supports both cloud-based AI via **Groq** (`llama-3.3-70b-versatile`) and 100% offline, local open-source models via **Ollama** or any OpenAI-compatible server.
 
-### Step-by-Step API Key Setup:
-1. Go to [https://console.groq.com](https://console.groq.com) and create a free account (no credit card required).
-2. Navigate to **API Keys** in the left sidebar menu.
-3. Click **Create API Key**. Give it a label like `Examora-Production`.
-4. Copy the generated key (it starts with `gsk_...`).
-5. Add it to your backend `.env` file:
+### Option A: Cloud Groq Setup (Fastest)
+1. Go to [https://console.groq.com](https://console.groq.com) and create a free account.
+2. Navigate to **API Keys** and click **Create API Key**.
+3. Copy the key and set it in your `.env`:
    ```env
    GROQ_API_KEY="gsk_your_actual_groq_api_key_here"
    ```
 
-> 💡 **Rate Limit Note**: Groq's free tier provides a generous rate limit. If you encounter `429 Too Many Requests`, Examora automatically activates its built-in fallback question generator so the teacher's workflow is never interrupted.
+### Option B: 100% Local & Open-Source Setup (Ollama / LocalAI)
+1. Install [Ollama](https://ollama.com) on your machine or server.
+2. Pull your preferred open-source model:
+   ```bash
+   ollama pull llama3
+   ```
+3. Set the local endpoint variables in your `.env`:
+   ```env
+   OLLAMA_HOST="http://localhost:11434"
+   LOCAL_LLM_URL="http://localhost:11434/v1"
+   LOCAL_LLM_MODEL="llama3"
+   ```
+
+> 💡 **Fallback Note**: If neither Groq nor local LLM endpoints are reachable, Examora automatically activates its built-in fallback question generator so the teacher's workflow is never interrupted.
 
 ---
 

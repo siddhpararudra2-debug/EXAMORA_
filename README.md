@@ -33,20 +33,22 @@ Examora is a 100% free and open-source AI-proctored online exam platform. Teache
 
 | Feature | Description |
 | --- | --- |
-| 🤖 **AI proctoring in the browser** | Blazeface (TensorFlow.js) head & gaze detection runs entirely client-side — no video leaves the student's device. |
-| ⚠️ **3-warning beep escalation** | The student hears a beep on every violation (looking away, no face, tab switch). After 3 warnings the session is **automatically terminated** and the teacher is alerted in real time. |
-| 🪟 **Tab-switch & visibility tracking** | `visibilitychange` detection flags every attempt to leave the exam window. |
-| 📵 **Mobile back-button guard** | On Android/iOS, hardware back presses and back-swipe gestures are intercepted (history sentinel + `popstate`) and logged as violations instead of leaving the exam. |
-| 🚫 **Screen-recording detection** | Detects virtual camera / screen-capture devices (OBS, ManyCam, …) and blocks screen-record hotkeys (Win+Alt+R, Cmd+Shift+3/4/5). |
-| ⚡ **Instant auto-grading** | MCQs and true/false are graded automatically on submit; short answers are graded with per-question scorecards. |
+| 🤖 **On-device AI proctoring** | Blazeface (TensorFlow.js) head posture & gaze detection runs client-side for privacy — no video stream is sent to servers unless optional remote supervision (`ENABLE_REMOTE_MEDIA_SUPERVISION`) is explicitly enabled. |
+| ⚠️ **3-warning beep escalation** | The student hears an audio beep on every warning. Upon reaching max warnings, the system awaits a 3-beep warning sequence before automatically submitting the exam and terminating the session. |
+| 🪟 **Tab-switch & visibility tracking** | `visibilitychange` and window blur detection track every attempt to leave the exam window. |
+| 🛡️ **AI assistant & overlay detection** | MutationObserver DOM scanning detects browser extension AI overlays/sidebars, while head/gaze posture tracking mitigates secondary device (phone/tablet) usage. |
+| 📵 **Mobile back-button guard** | On mobile devices, hardware back presses and back-swipe gestures are intercepted via History API (`popstate`) sentinels. Physical volume/screenshot buttons are mitigated via focus-blur telemetry and anti-screenshot UI obfuscation. |
+| 🚫 **Screen-recording detection** | Detects virtual camera / screen-capture devices (OBS, ManyCam, …) and blocks screen-record keyboard shortcuts. |
+| ⚡ **Instant auto-grading** | MCQs and true/false are graded automatically on submit; short/long answers are evaluated with rubrics and AI scorecard feedback. |
 | 📄 **PDF scorecards** | Per-student results export as clean, printable PDF scorecards. |
-| 📱 **QR access & join links** | Students join any exam anonymously with a shareable link or QR code — no account required. |
-| 📄 **AI paper parser** | Upload a PDF/DOCX/TXT exam paper — the FastAPI + Groq service extracts every question into an editable question bank (scanned PDFs are OCR'd). |
-| 🛡️ **Live proctoring monitor** | Teachers watch active sessions in real time over Socket.io: warnings, terminations, and per-student status. The MVP is event/status-only — video, audio, snapshots, and recordings are not shared with teachers by default. |
-| 🎯 **Draft → publish workflow** | Exams stay `DRAFT` until the teacher publishes them; only `ACTIVE` exams can be joined. |
-| 📊 **Class-level analytics** | Results and stats across sessions, right in the teacher dashboard. |
+| 📱 **QR access & join links** | Students join any exam via a shareable link or secure QR code containing a unique access UUID token. |
+| 📄 **AI paper parser & generator** | Upload exam papers or generate question banks using Groq API or fully offline, open-source local LLMs (Ollama / LocalAI via `LOCAL_LLM_URL`). |
+| 🛡️ **Live proctoring monitor** | Teachers view real-time proctoring telemetry and events over Socket.io without privacy-invasive video streaming. |
+| 🎯 **Draft → publish workflow** | Exams stay `DRAFT` until the teacher publishes them; only `ACTIVE` exams generate access UUIDs and QR codes. |
+| 📊 **Class-level analytics** | Results and score distributions across sessions, right in the teacher dashboard. |
 | 🧑‍🏫 **Teacher accounts** | JWT-based sign-up / sign-in with per-teacher exam isolation. |
-| 🔓 **100% free & open-source** | MIT license. Self-host anywhere — your data stays yours. |
+| 🔒 **Reverse-proxy rate limiting** | Built-in IP rate limiting with automatic proxy header trust (`TRUST_PROXY` / production defaults) for secure deployment behind Nginx, Render, or Vercel. |
+| 🔓 **100% free & open-source** | MIT license. Supports cloud free-tiers and self-hosted offline LLMs — your data stays yours. |
 
 ---
 
@@ -147,7 +149,6 @@ cp .env.example .env
 | `REDIS_URL` | Redis connection string (optional) | `redis://localhost:6379` |
 | `JWT_SECRET` | Secret used to sign teacher JWTs | change in production |
 | `SESSION_SECRET` | Server-side session secret | change in production |
-| `ENABLE_REMOTE_MEDIA_SUPERVISION` | Future opt-in flag for governed remote media supervision; keep `false` for MVP | `false` |
 
 ### 3. Install dependencies & prepare the database
 

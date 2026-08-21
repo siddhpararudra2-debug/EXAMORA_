@@ -40,12 +40,12 @@ export function createApp(options: CreateAppOptions = {}): AppBundle {
   const app: Application = express();
   const httpServer = createServer(app);
 
-  // Trust the reverse proxy when deployed behind one (nginx / Render / ingress).
+  // Trust the reverse proxy when deployed behind one (nginx / Render / Vercel / ingress).
   // Without this, express-rate-limit keyed on req.ip would rate-limit the
   // proxy's address instead of the real client, locking out all users.
-  // TRUST_PROXY accepts the express "trust proxy" value (e.g. 1, true,
-  // 'loopback'). Off by default for local single-hop development.
-  const trustProxyValue = process.env.TRUST_PROXY;
+  // TRUST_PROXY accepts the express "trust proxy" value (e.g. 1, true, 'loopback').
+  // Defaults to 1 when NODE_ENV is production or TRUST_PROXY is set.
+  const trustProxyValue = process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : undefined);
   if (trustProxyValue) {
     if (trustProxyValue === 'true' || trustProxyValue === '1') {
       app.set('trust proxy', 1);

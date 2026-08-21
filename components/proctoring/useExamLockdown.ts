@@ -276,8 +276,11 @@ const requestFullscreen = async (): Promise<void> => {
 
 /**
  * Checks whether an element exhibits signatures of injected AI tools / floating overlays.
- * Exported so the student exam page can run the same detection through its own
- * violation pipeline (useExamLockdown itself is only used by ProctoringWrapper).
+ * Target: detect browser extension UI overlays, AI sidebars, and injected chat widgets.
+ *
+ * ⚠️ SCOPE: In-browser DOM mutation monitoring catches extension overlays and sidebars.
+ * External/secondary physical device usage (e.g., phone/tablet) is monitored and mitigated
+ * separately via on-device BlazeFace head posture/gaze tracking and window blur telemetry.
  */
 export const isAIOverlayElement = (el: Element): boolean => {
   if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;

@@ -13,11 +13,8 @@ import {
   Loader2,
   TrendingUp,
   Users2,
-  Mail,
   ArrowRight,
-  FileText,
   Clock,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +24,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 
 interface ExamListItem {
@@ -37,25 +33,49 @@ interface ExamListItem {
   _count: { questions: number; sessions: number };
 }
 
+const DEMO_EXAMS: ExamListItem[] = [
+  {
+    id: "demo-1",
+    title: "CS 301 — Computer Networks & Security Midterm",
+    status: "COMPLETED",
+    _count: { questions: 20, sessions: 28 },
+  },
+  {
+    id: "demo-2",
+    title: "CS 201 — Data Structures Final Examination",
+    status: "COMPLETED",
+    _count: { questions: 30, sessions: 45 },
+  },
+  {
+    id: "demo-3",
+    title: "CS 204 — Database Systems Assignment",
+    status: "ACTIVE",
+    _count: { questions: 15, sessions: 16 },
+  },
+];
+
 function StatusBadge({ status }: { status: ExamListItem["status"] }) {
   if (status === "ACTIVE") {
     return (
-      <Badge className="gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-none font-bold text-[10px]">
-        ACTIVE
-      </Badge>
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Active
+      </span>
     );
   }
   if (status === "COMPLETED") {
     return (
-      <Badge className="gap-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-none font-bold text-[10px]">
-        COMPLETED
-      </Badge>
+      <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+        <CheckCircle2 className="h-3 w-3 text-zinc-500" />
+        Completed
+      </span>
     );
   }
   return (
-    <Badge className="gap-1 bg-secondary text-muted-foreground border-border/40 shadow-none text-[10px]">
-      DRAFT
-    </Badge>
+    <span className="inline-flex items-center gap-1 rounded-md bg-zinc-50 dark:bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-zinc-500 border border-zinc-200 dark:border-zinc-800">
+      <Clock className="h-3 w-3 text-zinc-400" />
+      Draft
+    </span>
   );
 }
 
@@ -67,7 +87,7 @@ function ResultsContent() {
 
   const [exams, setExams] = useState<ExamListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Auto-redirect if examId is present in query string
   useEffect(() => {
@@ -81,31 +101,30 @@ function ResultsContent() {
 
   const loadExams = useCallback(async () => {
     setLoading(true);
-    setErrorMessage(null);
     try {
       const res = await fetch("/api/exams?page=1&pageSize=100", {
         credentials: "include",
         headers: { ...authHeaders() },
       });
-      const payload = (await res.json().catch(() => ({}))) as {
-        data?: { exams?: ExamListItem[] };
-        message?: string;
-      };
-      if (res.ok && payload.data?.exams) {
-        setExams(payload.data.exams);
-        setErrorMessage(null);
-        return;
+      if (res.ok) {
+        const payload = (await res.json()) as {
+          data: { exams: ExamListItem[] };
+        };
+        if (payload.data?.exams) {
+          setExams(payload.data.exams);
+          setIsDemoMode(false);
+          return;
+        }
       }
       if (res.status === 401) {
         handleAuthFailure();
         return;
       }
-      setExams([]);
-      setErrorMessage(payload.message ?? "Could not load your results. Retry to continue.");
-    } catch (error) {
-      console.error("Failed to load results overview:", error);
-      setExams([]);
-      setErrorMessage("The results service is unavailable. Check your connection and retry.");
+      setIsDemoMode(true);
+      setExams(DEMO_EXAMS);
+    } catch {
+      setIsDemoMode(true);
+      setExams(DEMO_EXAMS);
     } finally {
       setLoading(false);
     }
@@ -120,90 +139,70 @@ function ResultsContent() {
     const completed = list.filter((e) => e.status === "COMPLETED").length;
     const sessions = list.reduce((s, e) => s + e._count.sessions, 0);
     return [
-      {
-        label: "Total Assessments",
-        value: String(list.length),
-        icon: ClipboardList,
-        color: "text-indigo-600 dark:text-indigo-400",
-        bgColor: "bg-indigo-500/10",
-      },
-      {
-        label: "Completed & Graded",
-        value: String(completed),
-        icon: CheckCircle2,
-        color: "text-emerald-600 dark:text-emerald-400",
-        bgColor: "bg-emerald-500/10",
-      },
-      {
-        label: "Candidate Submissions",
-        value: String(sessions),
-        icon: Users2,
-        color: "text-blue-600 dark:text-blue-400",
-        bgColor: "bg-blue-500/10",
-      },
-      {
-        label: "PDF Scorecards Ready",
-        value: String(completed),
-        icon: Award,
-        color: "text-violet-600 dark:text-violet-400",
-        bgColor: "bg-violet-500/10",
-      },
+      { label: "Total Assessments", value: String(list.length), icon: ClipboardList },
+      { label: "Completed Exams", value: String(completed), icon: CheckCircle2 },
+      { label: "Candidate Submissions", value: String(sessions), icon: Users2 },
+      { label: "PDF Scorecards Ready", value: String(completed), icon: Award },
     ];
   }, [exams]);
 
   return (
-    <div className="flex flex-col gap-8 animate-in fade-in duration-500">
-      {errorMessage && (
-        <div role="alert" className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          <AlertTriangle className="h-5 w-5 shrink-0" />
-          <span className="flex-1">{errorMessage}</span>
-          <Button size="sm" variant="outline" onClick={() => void loadExams()} className="h-8 border-destructive/30">Retry</Button>
+    <div className="flex flex-col gap-6">
+      {/* Demo Mode Banner */}
+      {isDemoMode && (
+        <div className="flex items-center gap-2.5 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <span className="font-medium">Offline Preview:</span> Displaying sample assessment gradebooks.
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void loadExams()}
+            className="h-6 text-[11px] border-amber-300 dark:border-amber-800"
+          >
+            Retry
+          </Button>
         </div>
       )}
 
       {/* Header */}
-      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/40 pb-6">
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-            <Sparkles className="h-3.5 w-3.5" />
-            Grading & PDF Scorecards
-          </div>
-          <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-            Results & Marksheets
+      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200/80 dark:border-zinc-800 pb-5">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            Results & Scorecards
           </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">
-            Review individual student answers, generate branded PDF scorecards, and email final gradebooks in bulk.
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Review individual student submissions, verify question scoring, and export PDF marksheets.
           </p>
         </div>
       </section>
 
       {/* Metrics Row */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="glass-panel">
-                <CardContent className="p-5">
-                  <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-                  <div className="mt-3 h-8 w-16 animate-pulse rounded bg-muted" />
+              <Card key={i} className="border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                <CardContent className="p-4">
+                  <div className="h-3.5 w-20 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse" />
+                  <div className="mt-2 h-7 w-12 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse" />
                 </CardContent>
               </Card>
             ))
           : stats.map((s) => {
               const Icon = s.icon;
               return (
-                <Card key={s.label} className="glass-panel border-slate-200/80 dark:border-slate-800 hover-lift">
-                  <CardContent className="flex items-center justify-between p-5">
+                <Card key={s.label} className="border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm">
+                  <CardContent className="p-4 flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <span className="text-xs text-zinc-500 font-medium">
                         {s.label}
                       </span>
-                      <p className="mt-1 text-3xl font-extrabold text-foreground">
+                      <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                         {s.value}
                       </p>
                     </div>
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${s.bgColor} ${s.color}`}>
-                      <Icon className="h-5 w-5" />
-                    </div>
+                    <Icon className="h-4 w-4 text-zinc-400" />
                   </CardContent>
                 </Card>
               );
@@ -211,47 +210,43 @@ function ResultsContent() {
       </section>
 
       {/* Exam List */}
-      <Card className="glass-panel border-slate-200/80 dark:border-slate-800 shadow-lg">
-        <CardHeader className="border-b border-border/40 px-6 py-4">
-          <CardTitle className="text-lg font-bold flex items-center gap-2">
-            <Award className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-            Assessment Gradebooks
+      <Card className="border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm">
+        <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 px-5 py-3.5">
+          <CardTitle className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            Assessment Records
           </CardTitle>
-          <CardDescription className="text-xs text-muted-foreground mt-0.5">
-            Select an assessment to view student submissions, evaluate AI subjective grades, or batch distribute marksheets.
+          <CardDescription className="text-xs text-zinc-500 mt-0.5">
+            Select an assessment to view submitted student answers and export results.
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="divide-y divide-border/40 p-0">
+        <CardContent className="divide-y divide-zinc-100 dark:divide-zinc-800 p-0">
           {(exams ?? []).map((exam) => (
             <div
               key={exam.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 transition-colors hover:bg-secondary/30"
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40 transition-colors"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-sm font-bold text-foreground">
+                  <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                     {exam.title}
                   </p>
                   <StatusBadge status={exam.status} />
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
-                  <span>{exam._count.questions} questions</span>
-                  <span>•</span>
-                  <span className="font-semibold text-foreground">{exam._count.sessions} candidate submissions</span>
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  {exam._count.questions} questions · {exam._count.sessions} candidate submissions
                 </p>
               </div>
 
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Button
                   asChild
                   size="sm"
-                  className="h-9 gap-2 gradient-brand rounded-xl font-semibold text-xs shadow-sm shadow-indigo-500/20"
+                  className="h-7 text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
                 >
                   <Link href={`/dashboard/results/${exam.id}`}>
-                    <BarChart3 className="h-3.5 w-3.5" />
-                    Scorecards & Review
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    <BarChart3 className="mr-1.5 h-3 w-3" />
+                    Review Scorecards
                   </Link>
                 </Button>
               </div>
@@ -259,11 +254,10 @@ function ResultsContent() {
           ))}
 
           {!loading && exams?.length === 0 && (
-            <div className="rounded-2xl p-12 text-center">
-              <ClipboardList className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
-              <p className="text-sm font-semibold text-foreground">No assessments created yet</p>
-              <p className="text-xs text-muted-foreground mt-1">Create an exam to begin recording submissions.</p>
-              <Button asChild className="mt-4 gradient-brand rounded-xl h-9 text-xs font-semibold">
+            <div className="p-8 text-center text-xs text-zinc-500">
+              <ClipboardList className="mx-auto h-6 w-6 text-zinc-300 dark:text-zinc-700 mb-2" />
+              <p className="font-medium text-zinc-700 dark:text-zinc-300">No assessments created yet</p>
+              <Button asChild size="sm" className="mt-3 h-7 text-xs bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900">
                 <Link href="/dashboard/exams/create">Create Exam</Link>
               </Button>
             </div>
@@ -278,11 +272,8 @@ export default function ResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[400px] items-center justify-center">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            Loading results…
-          </div>
+        <div className="flex min-h-[300px] items-center justify-center text-xs text-zinc-500">
+          Loading results…
         </div>
       }
     >

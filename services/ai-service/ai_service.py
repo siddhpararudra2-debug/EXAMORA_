@@ -169,8 +169,19 @@ class AIServiceError(Exception):
 class AIQuestionService:
     def __init__(self, api_key: str | None = None, model: str | None = None):
         resolved_key = api_key or os.environ.get("GROQ_API_KEY")
-        self.model = model or os.environ.get("GROQ_MODEL") or DEFAULT_MODEL
-        self._client = Groq(api_key=resolved_key) if resolved_key else None
+        local_llm_url = os.environ.get("LOCAL_LLM_URL") or os.environ.get("OLLAMA_HOST")
+
+        if resolved_key:
+            self.model = model or os.environ.get("GROQ_MODEL") or DEFAULT_MODEL
+            self._client = Groq(api_key=resolved_key)
+        elif local_llm_url:
+            self.model = model or os.environ.get("LOCAL_LLM_MODEL") or "llama3"
+            base_url = local_llm_url if local_llm_url.endswith("/v1") else f"{local_llm_url.rstrip('/')}/v1"
+            self._client = Groq(api_key="ollama", base_url=base_url)
+            logger.info(f"Using local open-source LLM endpoint at {base_url} with model {self.model}")
+        else:
+            self.model = model or DEFAULT_MODEL
+            self._client = None
 
     @property
     def available(self) -> bool:
@@ -178,7 +189,7 @@ class AIQuestionService:
 
     def generate_exam(self, request: GenerateExamRequest) -> ExamGenerationResponse:
         if not self._client:
-            raise AIServiceError("GROQ_API_KEY is not configured", code="service_unavailable", status_code=503)
+            raise AIServiceError("Neither GROQ_API_KEY nor LOCAL_LLM_URL / OLLAMA_HOST is configured", code="service_unavailable", status_code=503)
 
         user_prompt = self._build_generation_user_prompt(request)
         attempts = MAX_GENERATION_ATTEMPTS

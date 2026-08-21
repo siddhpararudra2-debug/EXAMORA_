@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, Video, VideoOff, AlertTriangle, X, Eye } from "lucide-react";
-import { useExamLockdown } from "./useExamLockdown";
+import { useExamLockdown, playThreeBeepWarningSequence } from "./useExamLockdown";
 import { useAIFaceDetection } from "./useAIFaceDetection";
 import { getSocket } from "@/lib/socket";
 
@@ -125,10 +125,10 @@ export function ProctoringWrapper({
         if (nextCount >= limit) {
           isTerminatedRef.current = true;
 
-          // Urgent termination beep sequence
-          playBeepSound(1100, 0.5);
-
           (async () => {
+            // Urgent 3-beep warning sequence before auto-submission & termination redirect
+            await playThreeBeepWarningSequence();
+
             try {
               if (onAutoSubmitRef.current) {
                 await onAutoSubmitRef.current();

@@ -14,15 +14,15 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Sparkles,
-  ArrowRight,
-  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardFooter,
+  CardHeader,
+  CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -105,65 +105,60 @@ export default function TeacherLoginPage() {
           setAuthUser(user);
         }
         toast({
-          title: "Welcome back!",
+          title: "Signed in",
           description: user?.name
-            ? `Signed in as ${user.name}.`
-            : "Redirecting to your educator dashboard.",
+            ? `Welcome back, ${user.name}.`
+            : "Opening your educator dashboard.",
         });
       } else {
         toast({
           title: "Signed in",
-          description: "Redirecting to dashboard.",
+          description: "Opening your educator dashboard.",
         });
       }
 
       router.push("/dashboard");
       router.refresh();
     } catch {
-      setServerError("Network error. Please ensure the server is running.");
+      setServerError("Network error. Please make sure the server is reachable.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen w-full bg-background relative flex items-center justify-center overflow-hidden px-4 py-12 selection:bg-primary/20 selection:text-primary">
-      {/* Radiant ambient mesh glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] mesh-glow pointer-events-none opacity-90" />
-
-      <div className="relative z-10 w-full max-w-md">
-        <div className="mb-8 text-center animate-in slide-in-from-bottom-4 fade-in duration-700">
+    <main className="min-h-screen w-full bg-background flex items-center justify-center p-4 selection:bg-zinc-900 selection:text-white dark:selection:bg-white dark:selection:text-zinc-900">
+      <div className="w-full max-w-sm">
+        {/* Brand */}
+        <div className="mb-6 text-center">
           <Link
             href="/"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white mb-4 shadow-lg shadow-indigo-500/25 hover:scale-105 transition-transform"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 mb-3"
           >
-            <GraduationCap className="h-6 w-6" />
+            <GraduationCap className="h-5 w-5" />
           </Link>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Educator Workspace
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            Sign in to Examora
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Sign in to create assessments, supervise candidates, and export gradebooks.
+          <p className="text-xs text-zinc-500 mt-1">
+            Access your educator dashboard and exams.
           </p>
         </div>
 
-        <Card className="glass-panel border-slate-200/80 dark:border-slate-800 shadow-2xl animate-in slide-in-from-bottom-6 fade-in duration-700">
-          <CardContent className="pt-8">
+        <Card className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm rounded-lg">
+          <CardContent className="pt-6">
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-5"
+                className="space-y-4"
                 noValidate
               >
                 {serverError && (
                   <div
                     role="alert"
-                    className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300 animate-in fade-in"
+                    className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20 p-3 text-xs text-red-700 dark:text-red-400"
                   >
-                    <AlertCircle
-                      className="mt-0.5 h-4 w-4 shrink-0 text-rose-500"
-                      aria-hidden
-                    />
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>{serverError}</span>
                   </div>
                 )}
@@ -173,24 +168,18 @@ export default function TeacherLoginPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <FormLabel className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                         Email Address
                       </FormLabel>
                       <FormControl>
-                        <div className="relative">
-                          <Mail
-                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                            aria-hidden
-                          />
-                          <Input
-                            placeholder="professor@university.edu"
-                            type="email"
-                            autoComplete="email"
-                            className="h-11 pl-10 pr-3 bg-secondary/30 focus:bg-background border-border/60 transition-colors rounded-xl"
-                            {...field}
-                            disabled={isLoading}
-                          />
-                        </div>
+                        <Input
+                          placeholder="name@school.edu"
+                          type="email"
+                          autoComplete="email"
+                          className="h-9 text-xs border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900"
+                          {...field}
+                          disabled={isLoading}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -203,40 +192,36 @@ export default function TeacherLoginPage() {
                   render={({ field }) => (
                     <FormItem>
                       <div className="flex items-center justify-between">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        <FormLabel className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                           Password
                         </FormLabel>
                         <Link
                           href="/forgot-password"
-                          className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                          className="text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
                         >
                           Forgot password?
                         </Link>
                       </div>
                       <FormControl>
                         <div className="relative">
-                          <LockKeyhole
-                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                            aria-hidden
-                          />
                           <Input
                             placeholder="••••••••"
                             type={showPassword ? "text" : "password"}
                             autoComplete="current-password"
-                            className="h-11 pl-10 pr-10 bg-secondary/30 focus:bg-background border-border/60 transition-colors rounded-xl"
+                            className="h-9 text-xs pr-8 border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900"
                             {...field}
                             disabled={isLoading}
                           />
                           <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
                             tabIndex={-1}
                           >
                             {showPassword ? (
-                              <EyeOff className="h-4 w-4" />
+                              <EyeOff className="h-3.5 w-3.5" />
                             ) : (
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-3.5 w-3.5" />
                             )}
                           </button>
                         </div>
@@ -248,44 +233,38 @@ export default function TeacherLoginPage() {
 
                 <Button
                   type="submit"
-                  className="h-11 w-full gradient-brand text-sm font-semibold rounded-xl shadow-md shadow-indigo-500/20"
+                  className="h-9 w-full text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 mt-2"
                   disabled={isLoading}
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                       Signing in…
                     </>
                   ) : (
-                    <>
-                      Sign In to Workspace
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </>
+                    "Sign In"
                   )}
                 </Button>
               </form>
             </Form>
           </CardContent>
 
-          <CardFooter className="flex flex-col gap-3 border-t border-border/40 py-5 text-center bg-secondary/10 rounded-b-[14px]">
-            <p className="text-sm text-muted-foreground">
+          <CardFooter className="flex flex-col gap-2.5 border-t border-zinc-100 dark:border-zinc-800 py-4 text-center text-xs">
+            <p className="text-zinc-500">
               New educator?{" "}
               <Link
                 href="/register"
-                className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                className="font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
               >
                 Create an account
               </Link>
             </p>
-            <div className="flex items-center justify-center gap-2 pt-1 border-t border-border/30 w-full text-xs text-muted-foreground">
-              <span>Are you a student taking an exam?</span>
-              <Link
-                href="/join"
-                className="font-semibold text-foreground hover:text-indigo-600 transition-colors"
-              >
-                Enter Exam PIN →
+            <p className="text-[11px] text-zinc-400">
+              Taking an exam?{" "}
+              <Link href="/join" className="text-zinc-600 dark:text-zinc-300 underline">
+                Enter student PIN
               </Link>
-            </div>
+            </p>
           </CardFooter>
         </Card>
       </div>
