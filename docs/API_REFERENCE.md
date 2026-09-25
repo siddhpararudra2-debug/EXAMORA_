@@ -16,6 +16,10 @@ Rate limits (per IP):
 | `/api/auth/*` | 15 requests / 15 minutes |
 | `/api/exams/:id/join` | 10 requests / minute |
 
+> **Note on Specification Deviations**: To maintain backward compatibility with existing deployed versions, the following routes deviate from the original `Examora_AI_Agent_Build_Spec.md`:
+> - Scorecard generation uses `/marksheet` and `/declare-results` (instead of `/scorecard.pdf` and `/scorecard/email`).
+> - The question bank uses `/api/v1/question-bank` (instead of `/api/questions/bank`).
+
 ---
 
 ## Auth
@@ -154,6 +158,14 @@ Response `200`:
 Auth: Teacher JWT (owner only). Returns all `ProctoringEvent` rows for a session, oldest first.
 
 Response `200`: `{ "status":"success", "data": { "events": [{ "id","sessionId","eventType","timestamp","metadata" }] } }`
+
+### GET `/api/exams/:id/sessions` — Live session list with warning counts
+
+Auth: Teacher JWT (owner only). Backs the live supervision grid. Warning counts are aggregated server-side from `Violation` rows (single `groupBy`, no N+1).
+
+Response `200`: `{ "status":"success", "data": { "exam": { "id","title","status" }, "sessions": [{ "id","examId","studentName","studentEmail?","status","warnings","warningsLimit","joinedAt","lastActivityAt" }] } }`
+
+Errors: `404` exam not found (or not owned), `401` missing/invalid teacher token.
 
 ### DELETE `/api/exams/:id` — Delete exam
 

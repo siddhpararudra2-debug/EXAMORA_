@@ -83,9 +83,9 @@ function WarningsBadge({
 }) {
   if (terminated || warnings >= limit) {
     return (
-      <div className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-bold text-destructive">
+      <div className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
         <ShieldAlert className="h-3.5 w-3.5" />
-        🚫 {warnings}/{limit} TERMINATED
+        Terminated ({warnings}/{limit})
       </div>
     );
   }
@@ -95,16 +95,16 @@ function WarningsBadge({
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
         warn
-          ? "bg-amber-100 text-amber-800"
+          ? "bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-500"
           : "bg-secondary/50 text-muted-foreground"
       )}
     >
       {warn ? (
-        <ShieldAlert className="h-3.5 w-3.5" />
+        <AlertTriangle className="h-3 w-3" />
       ) : (
-        <ShieldCheck className="h-3.5 w-3.5" />
+        <ShieldCheck className="h-3 w-3" />
       )}
-      ⚠️ {warnings}/{limit}
+      {warn ? `${warnings} / ${limit} warnings` : "0 warnings"}
     </div>
   );
 }
@@ -200,10 +200,14 @@ export default function LiveProctoringDashboard() {
         headers: { ...authHeaders() },
       });
       if (res.ok) {
-        const data = (await res.json()) as {
-          exam?: { title: string; startedAt?: string };
-          sessions?: StudentSessionView[];
+        const payload = (await res.json()) as {
+          status?: string;
+          data?: {
+            exam?: { title: string; startedAt?: string };
+            sessions?: StudentSessionView[];
+          };
         };
+        const data = payload.data ?? {};
         setExamMeta(data.exam ?? { title: "Live exam" });
         setSessions(
           (data.sessions ?? []).map((s) => ({ ...s, _new: false }))
@@ -474,7 +478,7 @@ export default function LiveProctoringDashboard() {
         </Card>
       </section>
 
-      {/* Live camera & mic supervision (WebRTC mesh) — S02/S03/S07 */}
+      {/* Remote media supervision (opt-in via ENABLE_REMOTE_MEDIA_SUPERVISION) */}
       <SupervisionGrid
         examId={examId}
         socket={socketRef.current}

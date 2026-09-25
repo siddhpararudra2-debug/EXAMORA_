@@ -162,6 +162,82 @@ export const getExamDetails = async (
   }
 };
 
+// ── GET /api/exams/:id/sessions ──────────────────────────────────────────────
+// Protected: requires valid teacher JWT (owner only). Returns every student
+// session on the exam with its server-side warning count, for the live
+// supervision grid. Previously this endpoint did not exist, so the live
+// monitor fetched a 404 and permanently showed "No students yet".
+export const getExamSessions = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const exam = await prisma.exam.findFirst({
+      where: { id: examId, created_by: teacher.userId, deleted_at: null },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        settings: true,
+        sessions: {
+          where: { deleted_at: null },
+          orderBy: { started_at: 'desc' },
+          select: {
+            id: true,
+            student_name: true,
+            student_email: true,
+            status: true,
+            started_at: true,
+            updated_at: true,
+          },
+        },
+      },
+    });
+
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    const settings = normalizeExamSettings(exam.settings);
+    const warningsLimit = settings.warningThreshold ?? 3;
+
+    // One grouped query for all warning counts — no N+1 per session.
+    const warningCounts = await prisma.violation.groupBy({
+      by: ['session_id'],
+      where: { session: { exam_id: examId, deleted_at: null } },
+      _count: { session_id: true },
+    });
+    const warningsBySession = new Map(
+      warningCounts.map((row) => [row.session_id, row._count.session_id]),
+    );
+
+    res.json({
+      status: 'success',
+      data: {
+        exam: { id: exam.id, title: exam.title, status: exam.status },
+        sessions: exam.sessions.map((s) => ({
+          id: s.id,
+          examId,
+          studentName: s.student_name,
+          studentEmail: s.student_email ?? undefined,
+          status: s.status,
+          warnings: warningsBySession.get(s.id) ?? 0,
+          warningsLimit,
+          joinedAt: s.started_at.toISOString(),
+          lastActivityAt: s.updated_at.toISOString(),
+        })),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ── PUT /api/exams/:id ────────────────────────────────────────────────────────
 // Protected: requires valid teacher JWT. Updates an existing draft exam.
 export const updateExam = async (

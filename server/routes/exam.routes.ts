@@ -17,6 +17,7 @@ import {
   unpublishExam,
   getSessionEvents,
   getExamResults,
+  getExamSessions,
 } from '../controllers/exam.controller.js';
 import { generateAIQuestions } from '../../apps/backend/src/controllers/ai.controller.js';
 import { parseDocument } from '../../apps/backend/src/controllers/document.controller.js';
@@ -150,6 +151,14 @@ router.post('/:id/grade-all', requireTeacher, gradeAllSessions);
  * Protected — valid teacher JWT required (owner only).
  */
 router.get('/:examId/results', requireTeacher, getExamResults);
+
+/**
+ * GET /api/exams/:id/sessions
+ * Fetch every student session on the exam with warning counts, for the
+ * live supervision grid.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.get('/:id/sessions', requireTeacher, getExamSessions);
 
 /**
  * GET /api/exams/:examId/sessions/:sessionId/events

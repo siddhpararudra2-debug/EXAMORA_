@@ -485,3 +485,55 @@ describe('POST /api/exams/generate-questions (AI)', () => {
       .expect(400);
   });
 });
+
+describe('GET /api/exams/:id/sessions', () => {
+  it('returns every session with server-side warning counts (owner only)', async () => {
+    const joinRes = await api
+      .post(`/api/exams/${examId}/join`)
+      .send({
+        studentName: 'Live Grid Student',
+        studentEmail: 'live.grid@example.com',
+        enrollmentNo: 'CS2023-7777',
+      })
+      .expect(201);
+
+    const liveToken = joinRes.body.data.sessionToken;
+
+    await api
+      .post(`/api/v1/exam-session/${liveToken}/violation`)
+      .set('Authorization', `Bearer ${liveToken}`)
+      .send({ type: 'TAB_SWITCH', description: 'Switch 1' })
+      .expect(201);
+    await api
+      .post(`/api/v1/exam-session/${liveToken}/violation`)
+      .set('Authorization', `Bearer ${liveToken}`)
+      .send({ type: 'TAB_SWITCH', description: 'Switch 2' })
+      .expect(201);
+
+    const res = await api
+      .get(`/api/exams/${examId}/sessions`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.exam.id).toBe(examId);
+    const row = res.body.data.sessions.find(
+      (s: { studentName: string }) => s.studentName === 'Live Grid Student',
+    );
+    expect(row).toBeTruthy();
+    expect(row.warnings).toBe(2);
+    expect(row.warningsLimit).toBe(3);
+    expect(row.status).toBe('IN_PROGRESS');
+  });
+
+  it('returns 404 for an unknown exam', async () => {
+    await api
+      .get('/api/exams/00000000-0000-0000-0000-000000000000/sessions')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(404);
+  });
+
+  it('requires a valid teacher token (401)', async () => {
+    await api.get(`/api/exams/${examId}/sessions`).expect(401);
+  });
+});
