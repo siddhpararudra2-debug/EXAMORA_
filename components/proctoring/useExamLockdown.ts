@@ -25,9 +25,22 @@ export interface ExamLockdownOptions {
   maxWarnings?: number;
   /** Async or sync callback fired AFTER the 3-beep warning sequence completes */
   onTerminate?: () => Promise<void> | void;
-  /** Callback fired on every violation warning */
+  /**
+   * Callback fired when the server confirms a violation, with the
+   * server-authoritative warning count. This is the ONLY source of truth
+   * for counts and termination — the client never increments its own
+   * counter (a client-side counter can be reset by refreshing the page).
+   */
   onWarning?: (
     warningCount: number,
+    violationType: ViolationType | string,
+    details?: string
+  ) => void;
+  /**
+   * Callback fired immediately on detection, before the server round-trip.
+   * Use for instant UX feedback only (banner, beep) — never for counting.
+   */
+  onDetect?: (
     violationType: ViolationType | string,
     details?: string
   ) => void;
@@ -37,6 +50,12 @@ export interface ExamLockdownOptions {
   violationEndpoint?: string;
   /** Screen URL to redirect after exam termination. Default: /exam/terminated */
   terminatedRedirectUrl?: string;
+  /**
+   * Whether the hook performs the termination redirect itself. Set to false
+   * when the host page shows its own termination UI first (e.g. an overlay
+   * with a countdown) and redirects on its own. Default: true.
+   */
+  redirectOnTerminate?: boolean;
   /** Request and enforce fullscreen mode. Default: true */
   enableFullscreen?: boolean;
 }
@@ -372,24 +391,30 @@ export function useExamLockdown(
   const maxWarningsRef = useRef(maxWarnings);
   const enabledRef = useRef(enabled);
   const onWarningRef = useRef(options.onWarning);
+  const onDetectRef = useRef(options.onDetect);
   const onTerminateRef = useRef(options.onTerminate);
   const violationEndpointRef = useRef(violationEndpoint);
   const terminatedRedirectUrlRef = useRef(terminatedRedirectUrl);
+  const redirectOnTerminateRef = useRef(options.redirectOnTerminate ?? true);
 
   useEffect(() => {
     tokenRef.current = token;
     maxWarningsRef.current = maxWarnings;
     enabledRef.current = enabled;
     onWarningRef.current = options.onWarning;
+    onDetectRef.current = options.onDetect;
     onTerminateRef.current = options.onTerminate;
     violationEndpointRef.current = violationEndpoint;
     terminatedRedirectUrlRef.current = terminatedRedirectUrl;
+    redirectOnTerminateRef.current = options.redirectOnTerminate ?? true;
   }, [
     token,
     maxWarnings,
     enabled,
     options.onWarning,
+    options.onDetect,
     options.onTerminate,
+    options.redirectOnTerminate,
     violationEndpoint,
     terminatedRedirectUrl,
   ]);
@@ -421,8 +446,9 @@ export function useExamLockdown(
       }
     }
 
-    // Redirect student to Exam Terminated screen
-    if (typeof window !== "undefined") {
+    // Redirect student to Exam Terminated screen, unless the host page
+    // shows its own termination UI first (redirectOnTerminate: false).
+    if (redirectOnTerminateRef.current && typeof window !== "undefined") {
       window.location.href = terminatedRedirectUrlRef.current || "/exam/terminated";
     }
   }, []);
@@ -433,9 +459,13 @@ export function useExamLockdown(
 
   /**
    * Triggers a POST request to backend API with violation details.
+   * The server-authoritative warningsCount from the response is the ONLY
+   * value written to local state; the client never increments its own
+   * counter. onWarning fires with the server count so hosts can update
+   * their UI (toasts, counters) from a single source of truth.
    */
   const sendViolationSync = useCallback(
-    async (violationType: string, details: string, currentWarnings: number) => {
+    async (violationType: string, details: string) => {
       try {
         const sessionToken = tokenRef.current || "active-session";
         const endpoint =
@@ -445,7 +475,7 @@ export function useExamLockdown(
           type: mapViolationType(violationType),
           description: details,
           metadata: {
-            warningsCount: currentWarnings,
+            warningsCount: warningsRef.current,
             maxWarnings: maxWarningsRef.current,
             url: typeof window !== "undefined" ? window.location.href : "",
             userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
@@ -469,6 +499,13 @@ export function useExamLockdown(
             const count = resData.data.warningsCount;
             warningsRef.current = count;
             setWarnings(count);
+            if (onWarningRef.current) {
+              try {
+                onWarningRef.current(count, violationType, details);
+              } catch (err) {
+                console.error("[ExamLockdown] Error in onWarning callback:", err);
+              }
+            }
             if (resData.data.terminated || count >= maxWarningsRef.current) {
               executeTerminationFlow();
             }
@@ -482,7 +519,9 @@ export function useExamLockdown(
   );
 
   /**
-   * Central violation handler with cooldown, sync, and termination check.
+   * Central violation handler: cooldown, immediate detect feedback, then
+   * server sync. Counts and termination are driven exclusively by the
+   * server response (see sendViolationSync).
    */
   const triggerViolation = useCallback(
     (violationType: ViolationType | string, details?: string) => {
@@ -495,26 +534,21 @@ export function useExamLockdown(
       }
       lastViolationTimeRef.current = now;
 
-      const nextWarnings = warningsRef.current + 1;
-      warningsRef.current = nextWarnings;
-      setWarnings(nextWarnings);
-
       const logDetails = details || `Proctoring violation: ${violationType}`;
 
+      // Immediate UX feedback only (banner/beep) — never counting.
+      if (onDetectRef.current) {
+        try {
+          onDetectRef.current(violationType, logDetails);
+        } catch (err) {
+          console.error("[ExamLockdown] Error in onDetect callback:", err);
+        }
+      }
+
       // Requirement 3: Immediately sync violation to server via POST request
-      sendViolationSync(violationType, logDetails, nextWarnings);
-
-      // Fire warning callback
-      if (onWarningRef.current) {
-        onWarningRef.current(nextWarnings, violationType, logDetails);
-      }
-
-      // Check for max warnings threshold
-      if (nextWarnings >= maxWarningsRef.current) {
-        executeTerminationFlow();
-      }
+      void sendViolationSync(violationType, logDetails);
     },
-    [sendViolationSync, executeTerminationFlow]
+    [sendViolationSync]
   );
 
   const resetWarnings = useCallback(() => {

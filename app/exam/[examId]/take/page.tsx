@@ -20,8 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useAIFaceDetection } from "@/components/proctoring/useAIFaceDetection";
-import { isAIOverlayElement } from "@/components/proctoring/useExamLockdown";
+import { ProctoringWrapper } from "@/components/proctoring/ProctoringWrapper";
 import {
   ExamTerminatedEvent,
   getSocketForAuth,
@@ -192,6 +191,9 @@ function TakeExamContent() {
               sessionToken: initialSessionToken,
               studentName: serverSession.studentName,
             });
+            // Seed the displayed warning count from the server so a
+            // rejoining student sees their real standing, not 0/N.
+            setWarnings(serverSession.warningsCount ?? 0);
             setTimeLeft(serverExam.duration_minutes * 60);
             return;
           }
@@ -290,6 +292,32 @@ function TakeExamContent() {
   }, [timeLeft === null, submitted, terminated]);
 
   // -------- Handlers --------
+  // Best-effort answer flush, shared by termination and the proctoring
+  // wrapper's onAutoSubmit. The /answer route accepts TERMINATED sessions,
+  // so the last answers are persisted before the student is redirected. A
+  // terminated session can no longer be submitted via /submit.
+  const flushAnswers = useCallback(() => {
+    if (!session?.sessionToken) return;
+    (async () => {
+      try {
+        for (const [questionId, answerData] of Object.entries(answers)) {
+          if (answerData && answerData.trim()) {
+            await fetch(`/api/v1/exam-session/${session.sessionToken}/answer`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.sessionToken}`,
+              },
+              body: JSON.stringify({ questionId, answerData }),
+            }).catch(() => {});
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [answers, session]);
+
   const doTerminate = useCallback(
     (reason: ExamTerminatedEvent["reason"]) => {
       setTerminated(true);
@@ -297,302 +325,42 @@ function TakeExamContent() {
       setTerminatedCountdown(
         Math.round(TERMINATED_REDIRECT_DELAY_MS / 1000)
       );
-
-      if (!session?.sessionToken) return;
-
-      // Flush the in-memory answers via canonical REST API (best-effort).
-      // The /answer route accepts TERMINATED sessions, so the last answers
-      // are persisted before the student is redirected. A terminated session
-      // can no longer be submitted via /submit.
-      (async () => {
-        try {
-          for (const [questionId, answerData] of Object.entries(answers)) {
-            if (answerData && answerData.trim()) {
-              await fetch(`/api/v1/exam-session/${session.sessionToken}/answer`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${session.sessionToken}`,
-                },
-                body: JSON.stringify({ questionId, answerData }),
-              }).catch(() => {});
-            }
-          }
-        } catch {
-          /* ignore */
-        }
-      })();
+      flushAnswers();
     },
-    [answers, session]
+    [flushAnswers]
   );
 
-  // -------- Tab-switch + AI face proctoring --------
-  const emitViolation = useCallback(
-    async (
-      reason: string,
-      type:
-        | "TAB_SWITCH"
-        | "APP_SWITCH"
-        | "MINIMIZE"
-        | "MOBILE_BUTTON"
-        | "AI_OVERLAY"
-        | "DEVTOOLS"
-        | "SCREEN_CAPTURE"
-        | "KEYBOARD_SHORTCUT" = "TAB_SWITCH"
-    ) => {
-      if (!session?.sessionToken || !exam) return;
-
-      try {
-        const res = await fetch(
-          `/api/v1/exam-session/${session.sessionToken}/violation`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.sessionToken}`,
-            },
-            body: JSON.stringify({
-              type,
-              description: reason,
-            }),
-          }
-        );
-
-        if (res.ok) {
-          const payload = (await res.json()) as {
-            data?: { terminated?: boolean; warningsCount?: number };
-          };
-          const count = payload.data?.warningsCount ?? 0;
-          const limit = exam.warningsLimit ?? DEFAULT_WARNINGS_LIMIT;
-          const isTerminated = payload.data?.terminated || count >= limit;
-
-          setWarnings(count);
-
-          toast({
-            title: "Proctoring alert",
-            description: `${reason}. Warning ${count}/${limit}.`,
-            variant: isTerminated ? "destructive" : "default",
-          });
-
-          if (isTerminated) {
-            doTerminate("warnings_limit");
-          }
-        }
-      } catch {
-        /* network failure handled gracefully */
-      }
+  // Server-confirmed violation via ProctoringWrapper: update the header
+  // counter and toast with the authoritative count.
+  const handleProctorWarning = useCallback(
+    (count: number, reason: string) => {
+      setWarnings(count);
+      const limit = exam?.warningsLimit ?? DEFAULT_WARNINGS_LIMIT;
+      toast({
+        title: "Proctoring alert",
+        description: `${reason}. Warning ${count}/${limit}.`,
+        variant: count >= limit ? "destructive" : "default",
+      });
     },
-    [session, exam, toast, doTerminate]
+    [exam, toast]
   );
 
-  useEffect(() => {
-    if (submitted || loading || !exam) return;
-    const onVisibility = () => {
-      if (document.hidden) {
-        const reason = "Tab or window switch detected";
-        void emitViolation(reason);
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", onVisibility);
-  }, [submitted, loading, exam, emitViolation]);
+  // -------- Proctoring detection --------
+  // All lockdown event detection (tab switch, blur, fullscreen, shortcuts,
+  // input blocking, devtools, screen capture, AI overlays, face presence)
+  // lives in <ProctoringWrapper> (useExamLockdown + useAIFaceDetection).
+  // Violations are POSTed to the server; the server-authoritative count
+  // flows back via handleProctorWarning and termination via doTerminate.
+  // Keeping detection in exactly one place means disabling it (e.g. for a
+  // future practice mode) is a single `enabled` flag, not six listeners.
 
-  // -------- Mobile hardware back button + screen-recording detection --------
-  useEffect(() => {
-    if (submitted || terminated || loading || !exam) return;
-
-    const HISTORY_SENTINEL_KEY = "__examoraLockdownSentinel";
-    const pushHistorySentinel = () => {
-      try {
-        window.history.pushState(
-          { ...(window.history.state || {}), [HISTORY_SENTINEL_KEY]: true },
-          "",
-          window.location.href
-        );
-      } catch {
-        /* history locked by the browser — ignore */
-      }
-    };
-
-    const onPopState = () => {
-      void emitViolation(
-        "Hardware back button or back swipe detected",
-        "MOBILE_BUTTON"
-      );
-      pushHistorySentinel();
-    };
-
-    const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) {
-        void emitViolation(
-          "Page restored from back-forward cache",
-          "MOBILE_BUTTON"
-        );
-        pushHistorySentinel();
-      }
-    };
-
-    // Screen-recording / virtual-capture device detection (best-effort heuristic).
-    const SCREEN_CAPTURE_KEYWORDS = [
-      "obs",
-      "virtual cam",
-      "screen capture",
-      "display capture",
-      "mirroring",
-      "manycam",
-      "elgato",
-      "splitcam",
-      "recorder",
-    ];
-    let lastScreenCaptureViolation = 0;
-    const scanCaptureDevices = async () => {
-      if (!navigator.mediaDevices?.enumerateDevices) return;
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const captureDevice = devices.find(
-          (d) =>
-            d.kind === "videoinput" &&
-            SCREEN_CAPTURE_KEYWORDS.some((kw) =>
-              d.label.toLowerCase().includes(kw)
-            )
-        );
-        if (captureDevice) {
-          const now = Date.now();
-          if (now - lastScreenCaptureViolation > 60_000) {
-            lastScreenCaptureViolation = now;
-            void emitViolation(
-              `Screen-capture device detected: ${captureDevice.label}`,
-              "SCREEN_CAPTURE"
-            );
-          }
-        }
-      } catch {
-        /* device labels unavailable — ignore */
-      }
-    };
-
-    const onDeviceChange = () => void scanCaptureDevices();
-    const onKeyDown = (e: KeyboardEvent) => {
-      const key = e.key ? e.key.toLowerCase() : "";
-      const isScreenRecordHotkey =
-        (e.metaKey && e.altKey && key === "r") ||
-        (e.metaKey && e.shiftKey && (key === "3" || key === "4" || key === "5"));
-      if (isScreenRecordHotkey) {
-        e.preventDefault();
-        e.stopPropagation();
-        void emitViolation("Screen-record hotkey blocked", "SCREEN_CAPTURE");
-      }
-    };
-
-    pushHistorySentinel();
-    window.addEventListener("popstate", onPopState);
-    window.addEventListener("pageshow", onPageShow);
-    navigator.mediaDevices?.addEventListener?.("devicechange", onDeviceChange);
-    window.addEventListener("keydown", onKeyDown, true);
-    const captureScan = setInterval(() => void scanCaptureDevices(), 5000);
-
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-      window.removeEventListener("pageshow", onPageShow);
-      navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
-      window.removeEventListener("keydown", onKeyDown, true);
-      clearInterval(captureScan);
-    };
-  }, [submitted, terminated, loading, exam, emitViolation]);
-
-  // -------- AI overlay detection (MutationObserver) + DevTools + input blocking --------
-  useEffect(() => {
-    if (submitted || terminated || loading || !exam) return;
-
-    const scanExistingDOMForOverlays = () => {
-      const candidates = document.querySelectorAll<HTMLElement>(
-        "div, section, aside, iframe, span"
-      );
-      for (let i = 0; i < candidates.length; i += 1) {
-        if (isAIOverlayElement(candidates[i])) {
-          void emitViolation(
-            `AI overlay / floating element detected on page: <${candidates[i].tagName.toLowerCase()}>`,
-            "AI_OVERLAY"
-          );
-          break;
-        }
-      }
-    };
-
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (let i = 0; i < mutation.addedNodes.length; i += 1) {
-          const node = mutation.addedNodes[i];
-          if (node.nodeType === Node.ELEMENT_NODE && isAIOverlayElement(node as Element)) {
-            void emitViolation("Injected AI overlay detected", "AI_OVERLAY");
-            return;
-          }
-        }
-        if (
-          mutation.type === "attributes" &&
-          mutation.target.nodeType === Node.ELEMENT_NODE &&
-          isAIOverlayElement(mutation.target as Element)
-        ) {
-          void emitViolation("Modified AI overlay attributes detected", "AI_OVERLAY");
-          return;
-        }
-      }
-    });
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["class", "id", "style"],
-    });
-    scanExistingDOMForOverlays();
-
-    // DevTools detection (viewport delta heuristic)
-    const devToolsInterval = setInterval(() => {
-      if (window.outerWidth - window.innerWidth > 200) {
-        void emitViolation("Developer tools detected", "DEVTOOLS");
-      }
-    }, 1000);
-
-    // Input blocking: cut / copy / paste / right-click
-    const onBlockedInput = (e: Event) => {
-      e.preventDefault();
-      e.stopPropagation();
-      void emitViolation(
-        e.type === "contextmenu"
-          ? "Right-click context menu disabled"
-          : `${e.type.toUpperCase()} operation blocked`,
-        "KEYBOARD_SHORTCUT"
-      );
-    };
-    window.addEventListener("cut", onBlockedInput, true);
-    window.addEventListener("copy", onBlockedInput, true);
-    window.addEventListener("paste", onBlockedInput, true);
-    window.addEventListener("contextmenu", onBlockedInput, true);
-
-    return () => {
-      observer.disconnect();
-      clearInterval(devToolsInterval);
-      window.removeEventListener("cut", onBlockedInput, true);
-      window.removeEventListener("copy", onBlockedInput, true);
-      window.removeEventListener("paste", onBlockedInput, true);
-      window.removeEventListener("contextmenu", onBlockedInput, true);
-    };
-  }, [submitted, terminated, loading, exam, emitViolation]);
-
-  // -------- AI face detection (BlazeFace, client-side) --------
-  // Runs only while the exam is live and keeps the camera stream on the
-  // student's device. Only approved violation metadata is sent to the API;
-  // no remote media stream or snapshot is published in the MVP.
-  // The educator can disable camera checks per exam via the
-  // settings.supervision.camera flag (defaults to enabled).
+  // -------- Proctoring mount flags --------
+  // Detection itself lives in <ProctoringWrapper> (mounted around the exam
+  // tree below). These flags are the single switch: false here means no
+  // listeners attach and no camera is requested — the same switch a future
+  // practice mode will reuse.
+  const proctoringEnabled = !!session && !!exam && !submitted && !terminated;
   const cameraAllowed = exam?.settings?.supervision?.camera !== false;
-  const faceDetectionEnabled =
-    !!session && !submitted && !terminated && cameraAllowed;
-  const { videoRef: faceDetectionVideoRef } = useAIFaceDetection({
-    enabled: faceDetectionEnabled,
-    onViolation: (reason) => void emitViolation(reason, "AI_OVERLAY"),
-  });
 
   // -------- Derived --------
   const totalQuestions = exam?.questions.length ?? 0;
@@ -818,18 +586,19 @@ function TakeExamContent() {
     timeLeft !== null && timeLeft <= 5 * 60 && !timerAlmostOver;
 
   return (
+    <ProctoringWrapper
+      token={session?.sessionToken ?? ""}
+      enabled={proctoringEnabled}
+      cameraAllowed={cameraAllowed}
+      maxWarnings={exam.warningsLimit}
+      warnings={warnings}
+      examId={exam.id}
+      sessionId={session?.id}
+      onWarning={handleProctorWarning}
+      onTerminate={() => doTerminate("warnings_limit")}
+      onAutoSubmit={flushAnswers}
+    >
     <div className="flex min-h-screen flex-col bg-background text-foreground relative selection:bg-primary/20">
-      {/* Local-only BlazeFace input. The stream powers device-side checks and
-          is never published as a teacher-facing feed in the MVP. */}
-      <video
-        ref={faceDetectionVideoRef}
-        autoPlay
-        playsInline
-        muted
-        className="pointer-events-none fixed h-px w-px opacity-0"
-        aria-hidden="true"
-      />
-      
       {/* Strict termination overlay */}
       {terminated && (
         <div
@@ -1323,6 +1092,7 @@ function TakeExamContent() {
         </>
       )}
     </div>
+    </ProctoringWrapper>
   );
 }
 

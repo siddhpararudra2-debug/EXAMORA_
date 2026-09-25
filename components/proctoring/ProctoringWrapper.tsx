@@ -1,17 +1,30 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { ShieldAlert, Video, VideoOff, AlertTriangle, X, Eye } from "lucide-react";
-import { useExamLockdown, playThreeBeepWarningSequence } from "./useExamLockdown";
+import { AlertTriangle, X } from "lucide-react";
+import { useExamLockdown } from "./useExamLockdown";
 import { useAIFaceDetection } from "./useAIFaceDetection";
-import { getSocket } from "@/lib/socket";
 
 export interface ProctoringWrapperProps {
   children: React.ReactNode;
+  /** Real session token — violations are POSTed to /api/v1/exam-session/:token/violation. */
+  token: string;
+  /** Master switch. When false, no listeners attach and no camera is requested. */
+  enabled: boolean;
+  /** Educator setting (settings.supervision.camera). When false, face detection stays off. */
+  cameraAllowed?: boolean;
   maxWarnings?: number;
+  /**
+   * Controlled display count, owned by the host page and updated exclusively
+   * from server-confirmed values (onWarning). The wrapper never owns a
+   * counter — a single source of truth prevents the banner, header pill, and
+   * server from ever disagreeing.
+   */
+  warnings: number;
   examId?: string;
   sessionId?: string;
+  /** Fired with the SERVER count after each confirmed violation (toasts, counters). */
+  onWarning?: (count: number, reason: string) => void;
   onTerminate?: () => void;
   onAutoSubmit?: () => void | Promise<void>;
   terminatedRedirectUrl?: string;
@@ -57,112 +70,118 @@ function playBeepSound(frequency = 880, duration = 0.3): void {
 }
 
 /**
- * Task 2: Student Proctoring Layout Wrapper & 3-Warning Beep System.
- * Combines useExamLockdown and useAIFaceDetection into a unified warning system.
+ * Student proctoring shell: warning banner, beeps, fullscreen prompt, and a
+ * picture-in-picture camera preview. Detection comes from useExamLockdown +
+ * useAIFaceDetection; every violation is POSTed to the server and the
+ * server-authoritative count drives all UI and termination. The wrapper
+ * never counts locally and never terminates on its own.
  */
 export function ProctoringWrapper({
   children,
+  token,
+  enabled,
+  cameraAllowed = true,
   maxWarnings = 3,
+  warnings: displayWarnings,
   examId,
   sessionId,
+  onWarning,
   onTerminate: onTerminateProp,
   onAutoSubmit,
   terminatedRedirectUrl = "/exam/terminated",
   className = "",
 }: ProctoringWrapperProps) {
-  const router = useRouter();
-
-  // Unified warning state fed by both useExamLockdown and useAIFaceDetection
-  const [warningCount, setWarningCount] = useState<number>(0);
+  // The displayed count is the controlled `warnings` prop (owned by the host
+  // page, fed only by server confirmations). This component keeps no counter.
+  const warningCount = displayWarnings;
   const [latestWarningReason, setLatestWarningReason] = useState<string | null>(null);
   const [showWarningBanner, setShowWarningBanner] = useState<boolean>(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [minimizedWebcam, setMinimizedWebcam] = useState<boolean>(false);
-  const lastViolationTimeRef = useRef<number>(0);
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isTerminatedRef = useRef<boolean>(false);
 
   // References for current callback values
   const onAutoSubmitRef = useRef(onAutoSubmit);
   const onTerminatePropRef = useRef(onTerminateProp);
-  const maxWarningsRef = useRef(maxWarnings);
+  const onWarningPropRef = useRef(onWarning);
 
   useEffect(() => {
     onAutoSubmitRef.current = onAutoSubmit;
     onTerminatePropRef.current = onTerminateProp;
-    maxWarningsRef.current = maxWarnings;
-  }, [onAutoSubmit, onTerminateProp, maxWarnings]);
+    onWarningPropRef.current = onWarning;
+  }, [onAutoSubmit, onTerminateProp, onWarning]);
 
-  // Unified violation handler
-  const handleViolation = useCallback(
-    (reason: string) => {
-      if (isTerminatedRef.current) return;
+  // Immediate feedback on detection (banner + beep). Counting happens only
+  // when the server confirms the violation (see onWarning below).
+  const handleDetect = useCallback((_type: string, reason?: string) => {
+    playBeepSound(880, 0.3);
 
-      const now = Date.now();
-      // 800ms cooldown between consecutive violations to avoid duplicate counts
-      if (now - lastViolationTimeRef.current < 800) {
-        return;
+    setLatestWarningReason(reason ?? "Integrity signal detected");
+    setShowWarningBanner(true);
+
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    warningTimerRef.current = setTimeout(() => {
+      setShowWarningBanner(false);
+    }, 4000);
+  }, []);
+
+  // Server-confirmed violation: forward the authoritative count to the host
+  // page (which owns the counter) and refresh the banner reason.
+  const handleServerWarning = useCallback(
+    (count: number, _type: string, reason?: string) => {
+      if (reason) setLatestWarningReason(reason);
+      try {
+        onWarningPropRef.current?.(count, reason ?? "");
+      } catch (err) {
+        console.error("[ProctoringWrapper] Error in onWarning callback:", err);
       }
-      lastViolationTimeRef.current = now;
-
-      // Step 3: Play short audio beep on every warning
-      playBeepSound(880, 0.3);
-
-      setLatestWarningReason(reason);
-      setShowWarningBanner(true);
-
-      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
-      warningTimerRef.current = setTimeout(() => {
-        setShowWarningBanner(false);
-      }, 4000);
-
-      setWarningCount((prevCount) => {
-        const nextCount = prevCount + 1;
-        const limit = maxWarningsRef.current;
-
-        // Warning recorded; REST endpoint is called by lockdown hooks
-        if (nextCount >= limit) {
-          isTerminatedRef.current = true;
-
-          (async () => {
-            // Urgent 3-beep warning sequence before auto-submission & termination redirect
-            await playThreeBeepWarningSequence();
-
-            try {
-              if (onAutoSubmitRef.current) {
-                await onAutoSubmitRef.current();
-              }
-            } catch (err) {
-              console.error("[ProctoringWrapper] Auto-submit error during termination:", err);
-            }
-
-            if (onTerminatePropRef.current) {
-              onTerminatePropRef.current();
-            }
-
-            router.push(terminatedRedirectUrl);
-          })();
-        }
-
-        return nextCount;
-      });
     },
-    [router, terminatedRedirectUrl]
+    []
   );
 
-  // Hook 1: Core Lockdown Hook (Tab switch / Fullscreen exit / Keyboard shortcuts / Right click)
-  const { isFullscreen, requestFullscreen } = useExamLockdown({
+  // Termination is server-driven (hook's executeTerminationFlow): flush
+  // answers first via onAutoSubmit, then notify the host page, which shows
+  // its own termination UI (the hook does not redirect — see below).
+  const handleTerminate = useCallback(async () => {
+    try {
+      if (onAutoSubmitRef.current) {
+        await onAutoSubmitRef.current();
+      }
+    } catch (err) {
+      console.error("[ProctoringWrapper] Auto-submit error during termination:", err);
+    }
+    try {
+      onTerminatePropRef.current?.();
+    } catch (err) {
+      console.error("[ProctoringWrapper] Error in onTerminate callback:", err);
+    }
+  }, []);
+
+  // Hook 1: Core lockdown (tab switch / blur / fullscreen / shortcuts / input
+  // blocking / devtools / screen capture / AI overlays). redirectOnTerminate
+  // is false because the host page renders its own termination overlay and
+  // redirects after a countdown.
+  const { isFullscreen, requestFullscreen, triggerViolation } = useExamLockdown({
+    token,
     maxWarnings,
-    onWarning: (_cnt, reason) => handleViolation(reason),
-    onTerminate: () => {}, // Handled inside handleViolation
+    enabled,
+    redirectOnTerminate: false,
+    terminatedRedirectUrl,
+    onDetect: handleDetect,
+    onWarning: handleServerWarning,
+    onTerminate: () => void handleTerminate(),
   });
 
-  // Hook 2: Client-Side AI Face Detection Hook (BlazeFace / MediaPipe 2000ms detection)
-  const { faceCount, isModelLoading, modelError, stream } = useAIFaceDetection({
+  // Hook 2: Client-side AI face detection (BlazeFace). Gated on the master
+  // switch AND the educator's camera setting. Face violations are routed
+  // through the lockdown hook so they reach the server like any other
+  // violation (previously they were local-only and never persisted).
+  const { faceCount, isModelLoading } = useAIFaceDetection({
+    enabled: enabled && cameraAllowed,
     externalVideoRef: videoRef,
     intervalMs: 2000,
-    onViolation: (reason) => handleViolation(reason),
+    onViolation: (reason) => triggerViolation("ai_overlay", reason),
   });
 
   useEffect(() => {
