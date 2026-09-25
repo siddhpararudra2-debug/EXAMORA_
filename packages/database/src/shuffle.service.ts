@@ -22,12 +22,18 @@ export interface ExamSettingsShape {
   };
 }
 
-/** Defaults used when the exam has no settings row yet. */
+/**
+ * Defaults used when the exam has no settings row yet.
+ * supervision.camera defaults to true because the student client runs
+ * on-device BlazeFace checks whenever a session is live — the default
+ * documents the de facto behavior. Educators opt out per exam by setting
+ * settings.supervision.camera to false (no video ever leaves the device).
+ */
 export const DEFAULT_EXAM_SETTINGS: ExamSettingsShape = {
   shuffleQuestions: false,
   shuffleOptions: false,
   warningThreshold: 3,
-  supervision: { camera: false, mic: false },
+  supervision: { camera: true, mic: false },
 };
 
 export function normalizeExamSettings(settings: unknown): ExamSettingsShape {

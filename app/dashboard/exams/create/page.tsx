@@ -127,6 +127,7 @@ const examSchema = z.object({
     .int("Warning threshold must be a whole number.")
     .min(1, { message: "Use at least 1 warning." })
     .max(10, { message: "Use no more than 10 warnings." }),
+  supervisionCamera: z.boolean().optional(),
   questions: z
     .array(questionSchema)
     .min(1, { message: "Add at least one question to your exam." }),
@@ -152,6 +153,7 @@ const DEFAULT_VALUES: ExamFormValues = {
   shuffleQuestions: true,
   shuffleOptions: true,
   warningThreshold: 3,
+  supervisionCamera: true,
   questions: [DEFAULT_QUESTION(0)],
 };
 
@@ -369,6 +371,7 @@ function CreateExamContent() {
               shuffleQuestions: exam.settings?.shuffleQuestions ?? true,
               shuffleOptions: exam.settings?.shuffleOptions ?? true,
               warningThreshold: exam.settings?.warningThreshold ?? 3,
+              supervisionCamera: exam.settings?.supervision?.camera ?? true,
               questions: parsedQuestions.length > 0 ? parsedQuestions : [DEFAULT_QUESTION(0)],
             });
 
@@ -512,6 +515,7 @@ function CreateExamContent() {
           shuffleQuestions: data.shuffleQuestions ?? false,
           shuffleOptions: data.shuffleOptions ?? false,
           warningThreshold: Number(data.warningThreshold),
+          supervision: { camera: data.supervisionCamera ?? true },
         },
         questions: data.questions.map((q) => ({
           type: q.type,
@@ -801,6 +805,18 @@ function CreateExamContent() {
                       onChange={field.onChange}
                       label="Shuffle MCQ options"
                       description="Randomize the order of answer options for each multiple-choice question."
+                    />
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="supervisionCamera"
+                  render={({ field }) => (
+                    <Toggle
+                      checked={field.value ?? true}
+                      onChange={field.onChange}
+                      label="On-device camera checks"
+                      description="Run face-presence checks in the student's browser. No video ever leaves their device. Turn off for camera-free venues."
                     />
                   )}
                 />
