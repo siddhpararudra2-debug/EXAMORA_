@@ -70,75 +70,6 @@ function formatTime(seconds: number): string {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
 }
 
-function mockExamData(examId: string): ExamData {
-  return {
-    id: examId,
-    title: "Midterm Examination — Introduction to Computer Science",
-    description:
-      "Covers chapters 1–5. Read each question carefully. Switching tabs will be logged as a proctoring violation.",
-    duration_minutes: 60,
-    warningsLimit: DEFAULT_WARNINGS_LIMIT,
-    questions: [
-      {
-        id: "q1",
-        type: "MCQ_SINGLE",
-        question_text:
-          "Which of the following data structures uses LIFO (Last-In, First-Out) ordering?",
-        options: ["Queue", "Stack", "Linked List", "Binary Search Tree"],
-        marks: 2,
-      },
-      {
-        id: "q2",
-        type: "MCQ_SINGLE",
-        question_text:
-          "What is the time complexity of binary search on a sorted array of size N?",
-        options: ["O(N)", "O(N log N)", "O(log N)", "O(1)"],
-        marks: 2,
-      },
-      {
-        id: "q3",
-        type: "TRUE_FALSE",
-        question_text:
-          "True or False: HTTP is a stateless application-layer protocol.",
-        options: ["True", "False"],
-        marks: 1,
-      },
-      {
-        id: "q4",
-        type: "SHORT_ANSWER",
-        question_text:
-          "In 2–4 sentences, explain the difference between process and thread. Mention at least one context where threads are preferred.",
-        marks: 5,
-      },
-      {
-        id: "q5",
-        type: "MCQ_SINGLE",
-        question_text:
-          "Which sorting algorithm has the best average-case time complexity?",
-        options: ["Bubble Sort", "Selection Sort", "Merge Sort", "Insertion Sort"],
-        marks: 2,
-      },
-      {
-        id: "q6",
-        type: "SHORT_ANSWER",
-        question_text:
-          "Define Big-O notation. What is the Big-O of the following loop?\n\nfor (int i = 0; i < n; i *= 2) { print(i); }",
-        marks: 5,
-      },
-    ],
-  };
-}
-
-function mockSessionInit(examId: string): SessionInit {
-  const sessionId = `sess_${examId}_demo`;
-  return {
-    id: sessionId,
-    sessionId,
-    sessionToken: `demo-token-${examId}`,
-    studentName: "Aarav Sharma",
-  };
-}
-
 const TERMINATED_REDIRECT_DELAY_MS = 3_000;
 
 function TakeExamContent() {
@@ -151,7 +82,7 @@ function TakeExamContent() {
   const initialSessionToken = search.get("token") ?? undefined;
 
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [exam, setExam] = useState<ExamData | null>(null);
   const [session, setSession] = useState<SessionInit | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -180,96 +111,93 @@ function TakeExamContent() {
     let canceled = false;
     (async () => {
       setLoading(true);
+      setLoadError(null);
       try {
-        let examData: ExamData | null = null;
-        let sessionData: SessionInit | null = null;
+        // A take page URL without a session token is never valid — a student
+        // must join through the join page to receive a token.
+        if (!initialSessionToken) {
+          if (!canceled) router.replace(`/exam/${examId}/join`);
+          return;
+        }
 
         // Verify the session token against the backend. The server returns
         // 403 when the session is already SUBMITTED/TERMINATED, so a student
         // refreshing the page can never retake the exam.
-        if (initialSessionToken) {
-          try {
-            const res = await fetch(
-              `/api/exams/${examId}/student-view?sessionToken=${encodeURIComponent(
-                initialSessionToken
-              )}`,
-              { credentials: "include" }
+        let res: Response;
+        try {
+          res = await fetch(
+            `/api/exams/${examId}/student-view?sessionToken=${encodeURIComponent(
+              initialSessionToken
+            )}`,
+            { credentials: "include" }
+          );
+        } catch (err) {
+          console.error("Student view fetch failed:", err);
+          if (!canceled)
+            setLoadError(
+              "Could not reach the exam server. Check your connection and try again."
             );
+          return;
+        }
 
-            if (res.status === 403) {
-              // Already submitted or terminated — do not allow a retake.
-              if (!canceled) router.replace("/exam/already-completed");
-              return;
-            }
-            if (res.status === 401) {
-              // Invalid or expired session token — start over at join.
-              if (!canceled) router.replace(`/exam/${examId}/join`);
-              return;
-            }
-            if (res.status === 404) {
-              if (!canceled) router.replace("/exam/not-found");
-              return;
-            }
-            if (res.status === 400) {
-              if (!canceled)
-                router.replace("/exam/not-found?reason=inactive");
-              return;
-            }
-            if (res.ok) {
-              const payload = (await res.json()) as {
-                data?: {
-                  exam?: ExamData;
-                  session?: {
-                    id: string;
-                    studentName: string;
-                    startedAt?: string;
-                    warningsCount?: number;
-                  };
-                };
-                exam?: ExamData;
-                session?: {
-                  id: string;
-                  studentName: string;
-                  startedAt?: string;
-                  warningsCount?: number;
-                };
+        if (res.status === 403) {
+          // Already submitted or terminated — do not allow a retake.
+          if (!canceled) router.replace("/exam/already-completed");
+          return;
+        }
+        if (res.status === 401) {
+          // Invalid or expired session token — start over at join.
+          if (!canceled) router.replace(`/exam/${examId}/join`);
+          return;
+        }
+        if (res.status === 404) {
+          if (!canceled) router.replace("/exam/not-found");
+          return;
+        }
+        if (res.status === 400) {
+          if (!canceled)
+            router.replace("/exam/not-found?reason=inactive");
+          return;
+        }
+        if (res.ok) {
+          const payload = (await res.json()) as {
+            data?: {
+              exam?: ExamData;
+              session?: {
+                id: string;
+                studentName: string;
+                startedAt?: string;
+                warningsCount?: number;
               };
-              const serverExam = payload.data?.exam ?? payload.exam;
-              const serverSession = payload.data?.session ?? payload.session;
-              if (!canceled && serverExam && serverSession) {
-                examData = {
-                  ...serverExam,
-                  warningsLimit:
-                    serverExam.warningsLimit ?? DEFAULT_WARNINGS_LIMIT,
-                };
-                sessionData = {
-                  id: serverSession.id,
-                  sessionId: serverSession.id,
-                  sessionToken: initialSessionToken,
-                  studentName: serverSession.studentName,
-                };
-                setIsDemoMode(false);
-              }
-            }
-          } catch (err) {
-            console.warn("Student view network fetch failed, using offline demo mode:", err);
+            };
+            exam?: ExamData;
+            session?: {
+              id: string;
+              studentName: string;
+              startedAt?: string;
+              warningsCount?: number;
+            };
+          };
+          const serverExam = payload.data?.exam ?? payload.exam;
+          const serverSession = payload.data?.session ?? payload.session;
+          if (!canceled && serverExam && serverSession) {
+            setExam({
+              ...serverExam,
+              warningsLimit:
+                serverExam.warningsLimit ?? DEFAULT_WARNINGS_LIMIT,
+            });
+            setSession({
+              id: serverSession.id,
+              sessionId: serverSession.id,
+              sessionToken: initialSessionToken,
+              studentName: serverSession.studentName,
+            });
+            setTimeLeft(serverExam.duration_minutes * 60);
+            return;
           }
         }
-
-        if (!examData) {
-          examData = mockExamData(examId);
-          setIsDemoMode(true);
-        }
-        if (!sessionData) {
-          sessionData = mockSessionInit(examId);
-          setIsDemoMode(true);
-        }
-
-        if (!canceled) {
-          setExam(examData);
-          setSession(sessionData);
-          setTimeLeft(examData.duration_minutes * 60);
-        }
+        // Reachable server but no usable exam/session payload.
+        if (!canceled) router.replace("/exam/not-found");
       } finally {
         if (!canceled) setLoading(false);
       }
@@ -656,7 +584,11 @@ function TakeExamContent() {
   // Runs only while the exam is live and keeps the camera stream on the
   // student's device. Only approved violation metadata is sent to the API;
   // no remote media stream or snapshot is published in the MVP.
-  const faceDetectionEnabled = !!session && !submitted && !terminated;
+  // The educator can disable camera checks per exam via the
+  // settings.supervision.camera flag (defaults to enabled).
+  const cameraAllowed = exam?.settings?.supervision?.camera !== false;
+  const faceDetectionEnabled =
+    !!session && !submitted && !terminated && cameraAllowed;
   const { videoRef: faceDetectionVideoRef } = useAIFaceDetection({
     enabled: faceDetectionEnabled,
     onViolation: (reason) => void emitViolation(reason, "AI_OVERLAY"),
@@ -831,6 +763,31 @@ function TakeExamContent() {
         <div className="flex items-center gap-3 text-muted-foreground animate-in fade-in duration-500 relative z-10">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
           <span className="text-lg font-medium">Preparing exam environment…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="max-w-md text-center">
+          <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+          <h1 className="mt-5 text-2xl font-bold tracking-tight text-foreground">
+            Connection problem
+          </h1>
+          <p className="mt-2 text-muted-foreground">{loadError}</p>
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <Button onClick={() => window.location.reload()}>
+              Try again
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/exam/${examId}/join`)}
+            >
+              Back to join
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -1011,14 +968,6 @@ function TakeExamContent() {
 
       {!submitted && (
         <>
-          {/* Demo Mode Banner */}
-          {isDemoMode && (
-            <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 text-center text-xs sm:text-sm font-medium text-amber-900 dark:text-amber-200 flex items-center justify-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <span>Preview / Demo Mode: Live backend connection unavailable. Your answers will not be persisted to the server.</span>
-            </div>
-          )}
-
           {/* Top Bar */}
           <header className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-xl">
             <div className="mx-auto flex h-20 w-full max-w-5xl flex-wrap items-center gap-4 px-4 sm:px-6 lg:px-8">
@@ -1059,17 +1008,21 @@ function TakeExamContent() {
                     "flex items-center gap-2.5 rounded-lg border px-4 py-2.5 transition-colors",
                     warningsCritical || terminated
                       ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : warnings === warningLimit - 1
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-500"
                       : "border-border/40 bg-secondary/30 text-foreground"
                   )}
                   title="Proctoring warnings"
                 >
                   {warningsCritical || terminated ? (
-                    <ShieldAlert className="h-5 w-5" aria-hidden />
+                    <ShieldAlert className="h-4 w-4" aria-hidden />
+                  ) : warnings === warningLimit - 1 ? (
+                    <AlertTriangle className="h-4 w-4" aria-hidden />
                   ) : (
-                    <ShieldCheck className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden />
                   )}
-                  <span className="text-sm font-semibold sm:text-base">
-                    Warnings: {warnings}/{warningLimit}
+                  <span className="text-sm font-semibold">
+                    Warnings: {warnings} / {warningLimit}
                   </span>
                 </div>
               </div>
