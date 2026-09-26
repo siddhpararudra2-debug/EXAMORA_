@@ -162,6 +162,18 @@ Auth: Teacher JWT (owner only). Returns all `ProctoringEvent` rows for a session
 
 Response `200`: `{ "status":"success", "data": { "events": [{ "id","sessionId","eventType","timestamp","metadata" }] } }`
 
+### GET `/api/v1/exam-session/:token/scorecard.pdf` — Student's own scorecard
+
+Public, Bearer session token (must match `:token`). `SUBMITTED`/`AUTO_SUBMITTED` only — `TERMINATED` is rejected with `403`. Skips the exam-ACTIVE check so scorecards stay downloadable after results are declared. Binary PDF response (the envelope exception); `404` when ungraded.
+
+### POST `/api/v1/exams/:examId/sessions/:sessionId/scorecard/email` — Email one scorecard
+
+Auth: Teacher JWT (owner only). Sends the student's marksheet PDF to their own address via the bulk Nodemailer setup, with an `EmailLog` row.
+
+Response `200`: `{ "status":"success", "data": { "sentTo": "student@example.com" } }`
+
+Errors: `400` student has no email, `404` exam/session missing or ungraded, `502` delivery failed.
+
 ### POST `/api/exams/:id/questions/from-bank` — Attach bank questions to a draft
 
 Auth: Teacher JWT (owner only). Copies bank questions into a `DRAFT` exam as new `Question` rows (`aiGenerated:false, educatorReviewed:true`); bank rows are never mutated. Order follows `questionIds`.

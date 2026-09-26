@@ -43,6 +43,7 @@ export interface AuthenticatedStudentRequest extends Request {
  */
 export const validateStudentSession = (
   allowedStatuses: SubmissionStatus[] = [SubmissionStatus.IN_PROGRESS],
+  options?: { skipExamActiveCheck?: boolean },
 ) => {
   return async (
     req: Request,
@@ -125,20 +126,24 @@ export const validateStudentSession = (
         return;
       }
 
-      if (session.exam.status !== ExamStatus.ACTIVE) {
-        res.status(403).json({
-          status: 'error',
-          message: 'This exam is not currently active',
-        });
-        return;
-      }
+      // Post-completion reads (e.g. a student's own scorecard) must work
+      // after the exam leaves ACTIVE — declare-results marks it COMPLETED.
+      if (!options?.skipExamActiveCheck) {
+        if (session.exam.status !== ExamStatus.ACTIVE) {
+          res.status(403).json({
+            status: 'error',
+            message: 'This exam is not currently active',
+          });
+          return;
+        }
 
-      if (session.exam.end_time && new Date() > session.exam.end_time) {
-        res.status(403).json({
-          status: 'error',
-          message: 'The exam window has ended — the session was auto-submitted',
-        });
-        return;
+        if (session.exam.end_time && new Date() > session.exam.end_time) {
+          res.status(403).json({
+            status: 'error',
+            message: 'The exam window has ended — the session was auto-submitted',
+          });
+          return;
+        }
       }
 
       (req as AuthenticatedStudentRequest).studentSession = {

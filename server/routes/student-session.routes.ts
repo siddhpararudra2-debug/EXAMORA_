@@ -7,6 +7,7 @@ import {
   saveAnswer,
   reportViolation,
   submitSession,
+  downloadOwnScorecard,
 } from '../controllers/student-session.controller.js';
 import {
   sessionTokenParamSchema,
@@ -59,6 +60,24 @@ router.post(
   validateParams(sessionTokenParamSchema),
   validateStudentSession(),
   submitSession,
+);
+
+/**
+ * GET /api/v1/exam-session/:token/scorecard.pdf
+ * Download the student's own marksheet PDF with the session token they
+ * already hold — no account needed (spec §6.7).
+ * Public — authenticated by the anonymous Bearer session token.
+ * SUBMITTED / AUTO_SUBMITTED sessions only; TERMINATED is rejected.
+ * Binary PDF response (the documented envelope exception).
+ */
+router.get(
+  '/:token/scorecard.pdf',
+  validateParams(sessionTokenParamSchema),
+  validateStudentSession(
+    [SubmissionStatus.SUBMITTED, SubmissionStatus.AUTO_SUBMITTED],
+    { skipExamActiveCheck: true },
+  ),
+  downloadOwnScorecard,
 );
 
 export default router;

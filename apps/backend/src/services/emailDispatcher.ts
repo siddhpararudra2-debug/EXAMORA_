@@ -261,6 +261,63 @@ export async function buildMarksheetPdf(
   };
 }
 
+/**
+ * Sends one student's marksheet (P2-5 single-student endpoint). Mirrors the
+ * bulk path: PDF to tmpdir, PENDING log, send, then SENT/FAILED log.
+ * Throws SCORECARD_UNAVAILABLE (no graded session), SCORECARD_NO_EMAIL
+ * (student has no email on record), or SCORECARD_SEND_FAILED.
+ */
+export async function sendSingleMarksheet(
+  examId: string,
+  sessionId: string,
+): Promise<{ sentTo: string; filename: string }> {
+  const marksheet = await buildMarksheetPdf(examId, sessionId);
+  if (!marksheet) {
+    throw new Error('SCORECARD_UNAVAILABLE');
+  }
+  if (!marksheet.studentEmail) {
+    throw new Error('SCORECARD_NO_EMAIL');
+  }
+
+  const marksheetDir = path.join(os.tmpdir(), 'examora-marksheets', sanitizeForFilename(examId));
+  await fs.mkdir(marksheetDir, { recursive: true });
+  const pdfPath = path.join(marksheetDir, marksheet.filename);
+  await fs.writeFile(pdfPath, marksheet.pdfBuffer);
+
+  await ensureEmailLog({
+    examId,
+    sessionId,
+    recipientEmail: marksheet.studentEmail,
+    pdfUrl: pdfPath,
+    status: EmailLogStatus.PENDING,
+  });
+
+  const { exam } = await loadMarksheetData(examId);
+  const session = exam.sessions.find((s) => s.id === sessionId);
+  const delivered = await sendMarksheetEmail({
+    to: marksheet.studentEmail,
+    studentName: marksheet.studentName,
+    examTitle: exam.title,
+    percentage: session?.percentage ?? null,
+    pdfBuffer: marksheet.pdfBuffer,
+    filename: marksheet.filename,
+  });
+
+  await ensureEmailLog({
+    examId,
+    sessionId,
+    recipientEmail: marksheet.studentEmail,
+    pdfUrl: pdfPath,
+    status: delivered ? EmailLogStatus.SENT : EmailLogStatus.FAILED,
+    sentAt: delivered ? new Date() : undefined,
+  });
+
+  if (!delivered) {
+    throw new Error('SCORECARD_SEND_FAILED');
+  }
+  return { sentTo: marksheet.studentEmail, filename: marksheet.filename };
+}
+
 export async function dispatchResults(examId: string): Promise<DispatchSummary> {
   const summary: DispatchSummary = { total: 0, sent: 0, failed: 0, skipped: 0, errors: [] };
 

@@ -638,6 +638,116 @@ describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
       .expect(200);
   });
 
+  it('serves a submitted student their own scorecard, rejects terminated', async () => {
+    const joinRes = await api
+      .post(`/api/exams/${examId}/join`)
+      .send({
+        studentName: 'Scorecard Student',
+        studentEmail: 'scorecard@example.com',
+        enrollmentNo: 'CS2023-6666',
+      })
+      .expect(201);
+    const token = joinRes.body.data.sessionToken as string;
+
+    const qs = await prisma.question.findMany({
+      where: { exam_id: examId },
+      select: { id: true },
+      orderBy: { order_index: 'asc' },
+    });
+    for (const q of qs) {
+      await api
+        .post(`/api/v1/exam-session/${token}/answer`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ questionId: q.id, answerData: 'Test answer' })
+        .expect(200);
+    }
+    await api
+      .post(`/api/v1/exam-session/${token}/submit`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(200);
+
+    const pdf = await api
+      .get(`/api/v1/exam-session/${token}/scorecard.pdf`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(pdf.headers['content-type']).toContain('application/pdf');
+
+    // Terminated sessions get no scorecard.
+    const termJoin = await api
+      .post(`/api/exams/${examId}/join`)
+      .send({
+        studentName: 'Terminated Scorecard Student',
+        studentEmail: 'term.scorecard@example.com',
+        enrollmentNo: 'CS2023-6161',
+      })
+      .expect(201);
+    const termToken = termJoin.body.data.sessionToken as string;
+    for (let i = 1; i <= 3; i++) {
+      await api
+        .post(`/api/v1/exam-session/${termToken}/violation`)
+        .set('Authorization', `Bearer ${termToken}`)
+        .send({ type: 'TAB_SWITCH' })
+        .expect(201);
+    }
+    await api
+      .get(`/api/v1/exam-session/${termToken}/scorecard.pdf`)
+      .set('Authorization', `Bearer ${termToken}`)
+      .expect(403);
+
+    await api
+      .get('/api/v1/exam-session/00000000-0000-0000-0000-000000000000/scorecard.pdf')
+      .set('Authorization', 'Bearer 00000000-0000-0000-0000-000000000000')
+      .expect(401);
+  });
+
+  it('emails a single scorecard to the student', async () => {
+    const joinRes = await api
+      .post(`/api/exams/${examId}/join`)
+      .send({
+        studentName: 'Email Scorecard Student',
+        studentEmail: 'email.scorecard@example.com',
+        enrollmentNo: 'CS2023-6767',
+      })
+      .expect(201);
+    const token = joinRes.body.data.sessionToken as string;
+
+    const qs = await prisma.question.findMany({
+      where: { exam_id: examId },
+      select: { id: true },
+      orderBy: { order_index: 'asc' },
+    });
+    for (const q of qs) {
+      await api
+        .post(`/api/v1/exam-session/${token}/answer`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ questionId: q.id, answerData: 'Test answer' })
+        .expect(200);
+    }
+    await api
+      .post(`/api/v1/exam-session/${token}/submit`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(200);
+
+    const session = await prisma.examSession.findUnique({
+      where: { session_token: token },
+      select: { id: true },
+    });
+
+    const sent = await api
+      .post(`/api/v1/exams/${examId}/sessions/${session!.id}/scorecard/email`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+    expect(sent.body.status).toBe('success');
+    expect(sent.body.data.sentTo).toBe('email.scorecard@example.com');
+
+    await api
+      .post(`/api/v1/exams/${examId}/sessions/00000000-0000-0000-0000-000000000000/scorecard/email`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(404);
+  });
+
   it('copies bank questions into a draft without mutating the bank', async () => {
     const saved = await api
       .post('/api/v1/question-bank')

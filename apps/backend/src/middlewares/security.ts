@@ -58,7 +58,12 @@ export const securityMiddleware = helmet({
 
 /**
  * Step 2: Rate Limiter Configuration using express-rate-limit.
+ *
+ * Automated tests (Jest + supertest, NODE_ENV=test) fire the whole API suite
+ * from one IP in seconds and would otherwise trip these limits. Skipping
+ * here changes nothing in development or production.
  */
+const skipInTestEnv = () => process.env.NODE_ENV === 'test';
 
 // Strict rate limit for student join route (POST /api/exams/:id/join): 10 requests per 1 minute per IP
 export const studentJoinRateLimiter = rateLimit({
@@ -66,6 +71,7 @@ export const studentJoinRateLimiter = rateLimit({
   max: 10, // Limit each IP to 10 requests per 1 minute
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTestEnv,
   message: {
     status: "error",
     message: "Too many exam join attempts from this IP. Please try again after 1 minute.",
@@ -78,6 +84,7 @@ export const authRateLimiter = rateLimit({
   max: 15, // Limit each IP to 15 login attempts per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTestEnv,
   message: {
     status: "error",
     message: "Too many login attempts from this IP. Please try again after 15 minutes.",
@@ -90,6 +97,7 @@ export const apiRateLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTestEnv,
   message: {
     status: "error",
     message: "Too many requests from this IP. Please slow down.",

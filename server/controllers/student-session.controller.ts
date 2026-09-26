@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import { AuthenticatedStudentRequest } from '../middleware/validateStudentSession.js';
 import { gradeSubmission } from '../../packages/database/src/grading.service.js';
 import { resolveMaxWarnings } from '../../packages/database/src/shuffle.service.js';
+import { buildMarksheetPdf } from '../../apps/backend/src/services/emailDispatcher.js';
 import {
   roomName,
   sessionRoomName,
@@ -288,6 +289,45 @@ export const submitSession = async (
         },
       },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── GET /api/v1/exam-session/:token/scorecard.pdf ─────────────────────────────
+// Authenticated by validateStudentSession (Bearer session token).
+// SUBMITTED / AUTO_SUBMITTED sessions only — TERMINATED sessions get the
+// termination explanation instead of a scorecard (spec §6.7). Streams the
+// same marksheet PDF the teacher downloads, as a binary response (the one
+// documented envelope exception).
+export const downloadOwnScorecard = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { studentSession } = req as AuthenticatedStudentRequest;
+
+    const marksheet = await buildMarksheetPdf(
+      studentSession.examId,
+      studentSession.id,
+    );
+
+    if (!marksheet) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Scorecard is not available yet — results may still be grading.',
+      });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${marksheet.filename}"`,
+    );
+    res.setHeader('Content-Length', String(marksheet.pdfBuffer.length));
+    res.send(marksheet.pdfBuffer);
   } catch (err) {
     next(err);
   }

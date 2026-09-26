@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ExamStatus } from '@prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { gradeAllSubmissionsForExam, GRADED_STATUSES } from '../../packages/database/src/grading.service.js';
-import { dispatchResults, buildMarksheetPdf } from '../../apps/backend/src/services/emailDispatcher.js';
+import { dispatchResults, buildMarksheetPdf, sendSingleMarksheet } from '../../apps/backend/src/services/emailDispatcher.js';
 import prisma from '../../prisma/client.js';
 
 /**
@@ -54,6 +54,82 @@ export const downloadSessionMarksheet = async (
     res.setHeader('Content-Disposition', `attachment; filename="${marksheet.filename}"`);
     res.setHeader('Content-Length', String(marksheet.pdfBuffer.length));
     res.send(marksheet.pdfBuffer);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/v1/exams/:examId/sessions/:sessionId/scorecard/email
+ * Protected — valid teacher JWT required (owner only).
+ *
+ * Emails one student's marksheet PDF to their own address (reuses the bulk
+ * Nodemailer setup). Response shape follows spec §6.6 exactly.
+ */
+export const emailSessionScorecard = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { examId, sessionId } = req.params;
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { id: true, created_by: true },
+    });
+
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    if (exam.created_by !== teacher.userId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'You do not have access to this exam',
+      });
+      return;
+    }
+
+    const session = await prisma.examSession.findFirst({
+      where: { id: sessionId, exam_id: examId },
+      select: { id: true },
+    });
+    if (!session) {
+      res.status(404).json({ status: 'error', message: 'Session not found' });
+      return;
+    }
+
+    try {
+      const { sentTo } = await sendSingleMarksheet(examId, sessionId);
+      res.json({ status: 'success', data: { sentTo } });
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      if (code === 'SCORECARD_UNAVAILABLE') {
+        res.status(404).json({
+          status: 'error',
+          message: 'Session not found or not yet graded',
+        });
+        return;
+      }
+      if (code === 'SCORECARD_NO_EMAIL') {
+        res.status(400).json({
+          status: 'error',
+          message: 'Student has no email address on record',
+        });
+        return;
+      }
+      if (code === 'SCORECARD_SEND_FAILED') {
+        res.status(502).json({
+          status: 'error',
+          message: 'Email delivery failed — try again later',
+        });
+        return;
+      }
+      throw err;
+    }
   } catch (err) {
     next(err);
   }

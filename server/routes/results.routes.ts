@@ -3,6 +3,7 @@ import { requireTeacher } from '../middleware/auth.js';
 import {
   declareExamResults,
   downloadSessionMarksheet,
+  emailSessionScorecard,
   exportExamResultsCsv,
 } from '../controllers/results.controller.js';
 
@@ -26,5 +27,11 @@ router.get('/exams/:examId/results/export', requireTeacher, exportExamResultsCsv
  * Download one student's marksheet PDF. Protected — teacher JWT required (owner only).
  */
 router.get('/exams/:examId/sessions/:sessionId/marksheet', requireTeacher, downloadSessionMarksheet);
+
+/**
+ * POST /api/v1/exams/:examId/sessions/:sessionId/scorecard/email
+ * Email one student's marksheet PDF to their own address. Protected — teacher JWT required (owner only).
+ */
+router.post('/exams/:examId/sessions/:sessionId/scorecard/email', requireTeacher, emailSessionScorecard);
 
 export default router;

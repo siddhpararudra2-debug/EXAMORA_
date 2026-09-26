@@ -10,6 +10,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Download,
   Loader2,
   OctagonX,
   Send,
@@ -94,6 +95,7 @@ function TakeExamContent() {
     submittedAt: string;
   }>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [downloadingScorecard, setDownloadingScorecard] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [terminated, setTerminated] = useState(false);
   const [terminatedReason, setTerminatedReason] =
@@ -503,6 +505,47 @@ function TakeExamContent() {
     }
   }
 
+  // -------- Own scorecard download (spec §6.7) --------
+  // Offered on the post-submission overlay; uses the session token the
+  // student already holds. No account needed.
+  const downloadScorecard = useCallback(async () => {
+    if (!session?.sessionToken || downloadingScorecard) return;
+    setDownloadingScorecard(true);
+    try {
+      const res = await fetch(
+        `/api/v1/exam-session/${session.sessionToken}/scorecard.pdf`,
+        {
+          headers: { Authorization: `Bearer ${session.sessionToken}` },
+        }
+      );
+      if (!res.ok) {
+        toast({
+          title: "Scorecard unavailable",
+          description: "Your scorecard is not ready yet. Try again shortly.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "scorecard.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast({
+        title: "Download failed",
+        description: "Check your connection and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingScorecard(false);
+    }
+  }, [session, downloadingScorecard, toast]);
+
   // -------- Submission-success redirect --------
   // Auto (time's up) → /exam/times-up · Manual → /exam/already-completed
   useEffect(() => {
@@ -731,6 +774,23 @@ function TakeExamContent() {
                 </dd>
               </div>
             </dl>
+            <Button
+              onClick={() => void downloadScorecard()}
+              disabled={downloadingScorecard}
+              className="mt-8 h-12 w-full gap-2 text-base"
+            >
+              {downloadingScorecard ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Preparing scorecard…
+                </>
+              ) : (
+                <>
+                  <Download className="h-5 w-5" />
+                  Download your scorecard
+                </>
+              )}
+            </Button>
           </div>
         </div>
       )}
