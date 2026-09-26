@@ -44,8 +44,9 @@ test.describe("Examora happy path", () => {
     await teacherPage.getByLabel("Password").fill(TEACHER_PASSWORD);
     await teacherPage.getByRole("button", { name: /sign in/i }).click();
     await teacherPage.waitForURL("**/dashboard");
+    // Fresh teacher → first-run onboarding checklist (P1-1), not an empty list.
     await expect(
-      teacherPage.getByRole("heading", { name: "No exams yet" }),
+      teacherPage.getByText("Welcome to Examora", { exact: true }),
     ).toBeVisible();
 
     // ── 3. Create an exam with 2 MCQ questions via the UI ──────────────────
@@ -56,6 +57,11 @@ test.describe("Examora happy path", () => {
     );
     await teacherPage.getByLabel("Duration (minutes)").fill("30");
     await teacherPage.getByLabel("Total marks").fill("4");
+    // Disable camera checks for a deterministic happy-path run: the CI fake
+    // camera has no face and would otherwise generate warnings.
+    await teacherPage
+      .getByRole("switch", { name: "On-device camera checks" })
+      .click();
     await teacherPage
       .getByRole("button", { name: "Continue to questions" })
       .click();
@@ -110,9 +116,9 @@ test.describe("Examora happy path", () => {
     });
     const studentPage = await studentContext.newPage();
     await studentPage.goto(`/exam/${examId}/join`);
-    await expect(
-      studentPage.getByText(/Enter your details to begin/i),
-    ).toBeVisible();
+    // The join page shows the exam description (not the "Enter your details"
+    // fallback) whenever the exam has one — assert the form itself.
+    await expect(studentPage.getByLabel("Full name")).toBeVisible();
     await studentPage.getByLabel("Full name").fill(STUDENT_NAME);
     await studentPage.getByLabel("Email").fill(STUDENT_EMAIL);
     await studentPage
@@ -122,24 +128,39 @@ test.describe("Examora happy path", () => {
     await studentPage.waitForURL(`**/exam/${examId}/take**`);
 
     // ── 6. Answer both MCQ questions ───────────────────────────────────────
-    await expect(
-      studentPage.getByText("What is the capital of France?"),
-    ).toBeVisible();
-    await studentPage.getByText("Paris", { exact: true }).click();
-    await studentPage.getByRole("button", { name: "Next" }).click();
-    await expect(
-      studentPage.getByText("Which planet is known as the Red Planet?"),
-    ).toBeVisible();
-    await studentPage.getByText("Mars", { exact: true }).click();
+    // Questions may be shuffled per session, so answer whichever MCQ is displayed.
+    const correctAnswers = new Map([
+      ["What is the capital of France?", "Paris"],
+      ["Which planet is known as the Red Planet?", "Mars"],
+    ]);
+    for (let answered = 0; answered < 2; answered += 1) {
+      const questionText = (
+        await studentPage.locator("main h2").first().textContent()
+      )?.trim();
+      const expectedAnswer = questionText
+        ? correctAnswers.get(questionText)
+        : undefined;
+      expect(expectedAnswer).toBeTruthy();
+      await studentPage.getByText(expectedAnswer as string, { exact: true }).click();
+      if (await studentPage.getByRole("button", { name: "Next" }).count()) {
+        await studentPage.getByRole("button", { name: "Next" }).click();
+      } else {
+        break;
+      }
+    }
 
     // ── 7. Submit and land on the already-completed page ───────────────────
-    await studentPage.getByRole("button", { name: "Submit Exam" }).click();
-    await expect(studentPage.getByText("Submit your exam?")).toBeVisible();
+    await studentPage.getByRole("button", { name: "Submit", exact: true }).click();
+    await expect(
+      studentPage.getByRole("heading", { name: "Submit Exam" }),
+    ).toBeVisible();
     await studentPage.getByRole("button", { name: "Submit now" }).click();
     await expect(
       studentPage.getByText("Your exam has been submitted"),
     ).toBeVisible();
-    await studentPage.waitForURL("**/exam/already-completed");
+    // Trailing wildcard: the app redirects with query params
+    // (/exam/already-completed?warnings=...), which a bare glob would miss.
+    await studentPage.waitForURL("**/exam/already-completed*");
     await expect(
       studentPage.getByText("You've already taken this exam"),
     ).toBeVisible();

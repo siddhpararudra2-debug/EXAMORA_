@@ -194,6 +194,7 @@ function Toggle({
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={label}
         onClick={() => onChange(!checked)}
         className={cn(
           "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500",
@@ -1119,11 +1120,10 @@ function CreateExamContent() {
                                   <FormLabel className="text-sm font-medium text-emerald-700">
                                     Correct answer
                                   </FormLabel>
-                                  <Select
-                                    onValueChange={field.onChange}
-                                    defaultValue={field.value}
-                                    value={field.value || undefined}
-                                  >
+                                   <Select
+                                     onValueChange={field.onChange}
+                                     value={field.value || undefined}
+                                   >
                                     <FormControl>
                                       <SelectTrigger className="h-11 border-emerald-200 bg-emerald-50/40 text-base">
                                         <SelectValue placeholder="Pick the correct option" />

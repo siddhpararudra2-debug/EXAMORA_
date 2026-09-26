@@ -233,10 +233,10 @@ export function ProctoringWrapper({
       {children}
 
       {/* Step 5: Small picture-in-picture webcam preview in bottom-right corner with monitoring badge */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
-        <div className="relative overflow-hidden rounded-2xl border-2 border-slate-700 bg-slate-900 shadow-2xl transition-all">
+      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+        <div className="pointer-events-none relative overflow-hidden rounded-2xl border-2 border-slate-700 bg-slate-900 shadow-2xl transition-all">
           {/* Top Bar with AI Monitoring Badge (video never leaves the device) */}
-          <div className="flex items-center justify-between gap-2 bg-slate-950/90 px-3 py-1.5 backdrop-blur">
+          <div className="pointer-events-auto flex items-center justify-between gap-2 bg-slate-950/90 px-3 py-1.5 backdrop-blur">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
