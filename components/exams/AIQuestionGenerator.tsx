@@ -28,6 +28,10 @@ export interface GeneratedQuestion {
   /** Optional correct answer — used when AI providers return one (e.g. parsed documents). */
   correctAnswer?: string;
   marks: number;
+  /** P2-4 provenance: true when sourced from AI generation / document parsing. */
+  aiGenerated?: boolean;
+  /** P2-4 review gate: false until an educator approves the question. */
+  educatorReviewed?: boolean;
 }
 
 export interface AIQuestionGeneratorProps {

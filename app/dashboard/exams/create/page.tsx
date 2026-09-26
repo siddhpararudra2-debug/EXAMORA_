@@ -55,6 +55,8 @@ import {
   QuestionBankPicker,
   type BankQuestionFormValue,
 } from "@/components/exams/QuestionBankPicker";
+import { DocumentUploader } from "@/components/exams/DocumentUploader";
+import type { GeneratedQuestion } from "@/components/exams/AIQuestionGenerator";
 
 // ---------- Types & Schemas ----------
 
@@ -239,7 +241,55 @@ function CreateExamContent() {
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
 
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
+  const [isDocUploaderOpen, setIsDocUploaderOpen] = useState(false);
   const [savingToBank, setSavingToBank] = useState<number | null>(null);
+
+  // P2-1: document-parsed questions enter the draft as unreviewed AI content
+  // (aiGenerated: true, educatorReviewed: false) so the P2-4 publish gate
+  // applies. Nothing is persisted until the exam itself is saved.
+  const handleDocQuestionsAdded = (questions: GeneratedQuestion[]) => {
+    questions.forEach((q) => {
+      if (q.type === "TRUE_FALSE") {
+        append({
+          type: "TRUE_FALSE",
+          questionText: q.questionText,
+          marks: q.marks,
+          options: ["True", "False"],
+          correctAnswer: q.correctAnswer ?? "",
+          aiGenerated: true,
+          educatorReviewed: false,
+        });
+      } else if (q.type === "SHORT_ANSWER") {
+        append({
+          type: "SHORT_ANSWER",
+          questionText: q.questionText,
+          marks: q.marks,
+          options: [],
+          correctAnswer: q.correctAnswer ?? "",
+          aiGenerated: true,
+          educatorReviewed: false,
+        });
+      } else {
+        append({
+          type: "MCQ_SINGLE",
+          questionText: q.questionText,
+          marks: q.marks,
+          options:
+            q.options && q.options.length >= 2
+              ? q.options
+              : ["Option A", "Option B"],
+          correctAnswer: q.correctAnswer ?? "",
+          aiGenerated: true,
+          educatorReviewed: false,
+        });
+      }
+    });
+    setIsDocUploaderOpen(false);
+    toast({
+      title: "Questions added from document",
+      description: `Added ${questions.length} AI-extracted question(s). Review and approve each one before publishing.`,
+    });
+  };
 
 const handleBankQuestionsAdded = (
   questions: BankQuestionFormValue[]
@@ -1348,6 +1398,17 @@ const handleBankQuestionsAdded = (
                     </span>
                     Question bank
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsDocUploaderOpen(true)}
+                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 px-6 py-5 text-base font-semibold text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-100/50 shadow-sm"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-200">
+                      <FileText className="h-5 w-5" />
+                    </span>
+                    Upload paper
+                  </button>
                 </div>
               </div>
 
@@ -1434,6 +1495,13 @@ const handleBankQuestionsAdded = (
         isOpen={isBankPickerOpen}
         onClose={() => setIsBankPickerOpen(false)}
         onAddQuestions={handleBankQuestionsAdded}
+      />
+
+      {/* Document Import Review Modal (P2-1: preview-only, editable, nothing persisted) */}
+      <DocumentUploader
+        isOpen={isDocUploaderOpen}
+        onClose={() => setIsDocUploaderOpen(false)}
+        onAddQuestions={handleDocQuestionsAdded}
       />
     </div>
   );

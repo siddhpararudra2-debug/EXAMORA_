@@ -86,6 +86,10 @@ function toGeneratedQuestion(q: ParsedDocumentQuestion): GeneratedQuestion {
     options,
     correctAnswer: correctAnswer || undefined,
     marks: Math.max(1, Math.round(q.marks ?? 2) || 2),
+    // P2-4 provenance: everything from document parsing enters the exam as
+    // unreviewed AI content until the educator approves it in the wizard.
+    aiGenerated: true,
+    educatorReviewed: false,
   };
 }
 
@@ -311,8 +315,36 @@ export function DocumentUploader({
               </div>
 
               <div className="space-y-3">
+                <p className="text-xs text-slate-500">
+                  Review each question inline before adding it — edits stay in
+                  this preview until you confirm. Unchecked questions are excluded.
+                </p>
                 {parsedQuestions.map((q, idx) => {
                   const isSelected = selectedIds.has(q.id);
+                  const update = (patch: Partial<GeneratedQuestion>) => {
+                    setParsedQuestions((prev) =>
+                      prev.map((p) => (p.id === q.id ? { ...p, ...patch } : p))
+                    );
+                  };
+                  const setOptions = (options: string[]) => update({ options });
+                  const setQuestionType = (
+                    next: GeneratedQuestion["type"]
+                  ) => {
+                    if (next === q.type) return;
+                    if (next === "TRUE_FALSE") {
+                      update({ type: next, options: ["True", "False"] });
+                    } else if (next === "SHORT_ANSWER") {
+                      update({ type: next, options: [] });
+                    } else {
+                      update({
+                        type: next,
+                        options:
+                          q.options && q.options.length >= 2
+                            ? q.options
+                            : ["Option A", "Option B"],
+                      });
+                    }
+                  };
                   return (
                     <div
                       key={q.id}
@@ -328,46 +360,170 @@ export function DocumentUploader({
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelect(q.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Include question ${idx + 1}`}
                           className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                         />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex-1 space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="text-xs font-bold text-emerald-700">
-                              Q{idx + 1}. [{q.type}]
+                              Q{idx + 1}.
                             </span>
-                            <span className="text-xs font-semibold text-slate-500">
-                              {q.marks} Marks
-                            </span>
+                            <select
+                              value={q.type}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) =>
+                                setQuestionType(
+                                  e.target.value as GeneratedQuestion["type"]
+                                )
+                              }
+                              aria-label={`Question ${idx + 1} type`}
+                              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                            >
+                              <option value="MCQ_SINGLE">Multiple choice</option>
+                              <option value="TRUE_FALSE">True / False</option>
+                              <option value="SHORT_ANSWER">Short answer</option>
+                            </select>
+                            <label className="flex items-center gap-1 text-xs font-semibold text-slate-500">
+                              Marks
+                              <input
+                                type="number"
+                                min={1}
+                                value={q.marks}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) =>
+                                  update({
+                                    marks: Math.max(
+                                      1,
+                                      Math.round(Number(e.target.value)) || 1
+                                    ),
+                                  })
+                                }
+                                aria-label={`Question ${idx + 1} marks`}
+                                className="h-7 w-16 rounded-md border border-slate-300 bg-white px-2 text-xs"
+                              />
+                            </label>
                           </div>
-                          <p className="text-sm font-medium text-slate-900 leading-relaxed">
-                            {q.questionText}
-                          </p>
-                          {q.options && q.options.length > 0 && (
-                            <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-slate-600 pl-2">
-                              {q.options.map((opt, i) => (
-                                <li key={i} className="flex items-center gap-1.5">
-                                  <span
-                                    className={`h-1.5 w-1.5 rounded-full ${
-                                      opt === q.correctAnswer
-                                        ? "bg-emerald-500"
-                                        : "bg-slate-400"
-                                    }`}
-                                  />
-                                  {opt}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          {q.type === "SHORT_ANSWER" && q.correctAnswer && (
-                            <p className="mt-1.5 text-xs text-slate-500">
-                              <span className="font-semibold text-emerald-700">
-                                Model answer:
-                              </span>{" "}
-                              {q.correctAnswer.length > 120
-                                ? `${q.correctAnswer.slice(0, 120)}…`
-                                : q.correctAnswer}
-                            </p>
-                          )}
+                          {/* Editable zone — clicks here must not toggle inclusion. */}
+                          <div onClick={(e) => e.stopPropagation()} className="space-y-3">
+                            <textarea
+                              value={q.questionText}
+                              onChange={(e) =>
+                                update({ questionText: e.target.value })
+                              }
+                              rows={2}
+                              aria-label={`Question ${idx + 1} text`}
+                              className="w-full rounded-md border border-slate-300 bg-white p-2 text-sm font-medium leading-relaxed text-slate-900"
+                            />
+                            {q.type === "MCQ_SINGLE" && (
+                              <div className="space-y-1.5">
+                                {(q.options ?? []).map((opt, i) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <span className="w-4 text-xs font-bold text-slate-400">
+                                      {String.fromCharCode(65 + i)}
+                                    </span>
+                                    <input
+                                      value={opt}
+                                      onChange={(e) => {
+                                        const next = [...(q.options ?? [])];
+                                        next[i] = e.target.value;
+                                        setOptions(next);
+                                      }}
+                                      aria-label={`Question ${idx + 1} option ${String.fromCharCode(65 + i)}`}
+                                      className="h-8 flex-1 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={(q.options ?? []).length <= 2}
+                                      onClick={() =>
+                                        setOptions(
+                                          (q.options ?? []).filter(
+                                            (_, j) => j !== i
+                                          )
+                                        )
+                                      }
+                                      aria-label={`Remove option ${String.fromCharCode(65 + i)}`}
+                                      className="rounded-md px-1.5 py-1 text-xs font-bold text-red-500 hover:bg-red-50 disabled:opacity-30"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setOptions([...(q.options ?? []), ""])
+                                    }
+                                    className="text-xs font-semibold text-emerald-700 hover:underline"
+                                  >
+                                    + Add option
+                                  </button>
+                                  <label className="flex items-center gap-1 text-xs text-slate-500">
+                                    Correct
+                                    <select
+                                      value={q.correctAnswer ?? ""}
+                                      onChange={(e) =>
+                                        update({
+                                          correctAnswer: e.target.value || undefined,
+                                        })
+                                      }
+                                      aria-label={`Question ${idx + 1} correct answer`}
+                                      className="rounded-md border border-slate-300 bg-white px-1 py-1 text-xs"
+                                    >
+                                      <option value="">—</option>
+                                      {(q.options ?? []).map((opt, i) => (
+                                        <option key={i} value={opt}>
+                                          {String.fromCharCode(65 + i)}
+                                          {opt ? `: ${opt.slice(0, 24)}` : ""}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+                            {q.type === "TRUE_FALSE" && (
+                              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                                Correct answer
+                                <select
+                                  value={q.correctAnswer ?? ""}
+                                  onChange={(e) =>
+                                    update({
+                                      correctAnswer: e.target.value || undefined,
+                                    })
+                                  }
+                                  aria-label={`Question ${idx + 1} correct answer`}
+                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs"
+                                >
+                                  <option value="">—</option>
+                                  <option value="True">True</option>
+                                  <option value="False">False</option>
+                                </select>
+                              </label>
+                            )}
+                            {q.type === "SHORT_ANSWER" && (
+                              <label className="block text-xs font-semibold text-slate-600">
+                                <span className="mb-1 block">
+                                  Model answer{" "}
+                                  <span className="font-normal text-slate-400">
+                                    (required before the exam can be saved)
+                                  </span>
+                                </span>
+                                <textarea
+                                  value={q.correctAnswer ?? ""}
+                                  onChange={(e) =>
+                                    update({
+                                      correctAnswer: e.target.value || undefined,
+                                    })
+                                  }
+                                  rows={2}
+                                  aria-label={`Question ${idx + 1} model answer`}
+                                  className="w-full rounded-md border border-slate-300 bg-white p-2 text-xs text-slate-700"
+                                />
+                              </label>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
