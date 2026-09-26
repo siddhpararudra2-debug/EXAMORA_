@@ -29,3 +29,4 @@ This document tracks intentional deviations from the original `Examora_AI_Agent_
 - **Decision:** Reuse the shipped `/api/v1/question-bank` route.
 - **from-bank response:** Spec §6.6 shows `{ exam with nested questions }`; implemented as `{ added, questions: [created rows] }` — the payload the editor actually needs, without re-sending the whole exam.
 - **Token scorecard statuses:** Spec §6.7 allows the route while `SUBMITTED` only; implemented for `SUBMITTED` + `AUTO_SUBMITTED` (both are genuine graded submissions — only `TERMINATED` is excluded).
+- **Grade override route:** Spec §6.6 shows session-level `PATCH .../sessions/:sessionId/grade` with a singular body; implemented per-answer (`.../answers/:questionId/grade`) because the rationale, suggestion, and override are all per-question — the session shape cannot express which question is overridden. Session totals recompute by delta.

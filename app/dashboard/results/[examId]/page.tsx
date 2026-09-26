@@ -9,6 +9,7 @@ import {
   Award,
   BarChart3,
   CheckCircle2,
+  ChevronDown,
   Download,
   FileSpreadsheet,
   History,
@@ -30,6 +31,10 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
+import {
+  SessionAnswerReview,
+  type ReviewQuestion,
+} from "@/components/results/SessionAnswerReview";
 
 interface SessionResult {
   id: string;
@@ -46,6 +51,11 @@ interface SessionResult {
     is_correct: boolean | null;
     marks_awarded: number | null;
     needs_review: boolean;
+    graded_by?: string | null;
+    ai_suggested_score?: number | null;
+    ai_rationale?: string | null;
+    final_score?: number | null;
+    grading_note?: string | null;
   }[];
 }
 
@@ -113,6 +123,7 @@ function ExamResultsContent() {
   const [emailing, setEmailing] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
   const [downloads, setDownloads] = useState<Record<string, boolean>>({});
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const loadResults = useCallback(async () => {
     setLoading(true);
@@ -484,12 +495,13 @@ function ExamResultsContent() {
                 key={session.id}
                 id={`session-${session.id}`}
                 className={cn(
-                  "flex flex-col gap-3 rounded-xl border p-4 transition sm:flex-row sm:items-center sm:justify-between",
+                  "flex flex-col gap-3 rounded-xl border p-4 transition",
                   isHighlighted
                     ? "border-primary bg-primary/5 ring-2 ring-primary shadow-md"
                     : "border-border/60 bg-card/50 hover:border-primary/30 hover:bg-card"
                 )}
               >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-sm font-semibold text-foreground">
@@ -560,7 +572,41 @@ function ExamResultsContent() {
                     )}
                     {downloads[session.id] ? "Preparing…" : "Scorecard PDF"}
                   </Button>
+
+                  <Button
+                    variant={expandedId === session.id ? "secondary" : "outline"}
+                    size="sm"
+                    className="h-9 gap-1.5 border-border/40"
+                    onClick={() =>
+                      setExpandedId((prev) =>
+                        prev === session.id ? null : session.id
+                      )
+                    }
+                    aria-expanded={expandedId === session.id}
+                  >
+                    Review answers
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        expandedId === session.id && "rotate-180"
+                      )}
+                    />
+                  </Button>
                 </div>
+                </div>
+                {expandedId === session.id && (
+                  <div className="mt-1 w-full border-t border-border/40 pt-4">
+                    <SessionAnswerReview
+                      examId={examId}
+                      sessionId={session.id}
+                      questions={
+                        (data?.questions ?? []) as ReviewQuestion[]
+                      }
+                      answers={session.answers}
+                      onSaved={() => void loadResults()}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

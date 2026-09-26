@@ -19,6 +19,7 @@ import {
   getExamResults,
   getExamSessions,
   attachBankQuestions,
+  overrideAnswerGrade,
 } from '../controllers/exam.controller.js';
 import { generateAIQuestions } from '../../apps/backend/src/controllers/ai.controller.js';
 import { parseDocument } from '../../apps/backend/src/controllers/document.controller.js';
@@ -165,6 +166,17 @@ router.post(
  * Protected — valid teacher JWT required (owner only).
  */
 router.get('/:examId/results', requireTeacher, getExamResults);
+
+/**
+ * PATCH /api/exams/:examId/sessions/:sessionId/answers/:questionId/grade
+ * Educator override for one answer's score (P2-6 subjective grading).
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.patch(
+  '/:examId/sessions/:sessionId/answers/:questionId/grade',
+  requireTeacher,
+  overrideAnswerGrade,
+);
 
 /**
  * GET /api/exams/:id/sessions

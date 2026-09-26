@@ -7,9 +7,11 @@ import {
   createExamSchema,
   submitExamSchema,
   fromBankSchema,
+  gradeOverrideSchema,
   CreateExamInput,
   SubmitExamInput,
   FromBankInput,
+  GradeOverrideInput,
 } from '../validators/exam.js';
 import {
   createExamWithQuestions,
@@ -25,7 +27,7 @@ import {
   newShuffleSeed,
   resolveMaxWarnings,
 } from '../../packages/database/src/shuffle.service.js';
-import { gradeAllSubmissionsForExam, GRADED_STATUSES } from '../../packages/database/src/grading.service.js';
+import { gradeAllSubmissionsForExam, GRADED_STATUSES, applyGradeOverride } from '../../packages/database/src/grading.service.js';
 import prisma from '../../prisma/client.js';
 
 // ── Shared validation helper ──────────────────────────────────────────────────
@@ -1099,6 +1101,11 @@ export const getExamResults = async (
               is_correct: true,
               marks_awarded: true,
               needs_review: true,
+              graded_by: true,
+              ai_suggested_score: true,
+              ai_rationale: true,
+              final_score: true,
+              grading_note: true,
             },
             orderBy: { created_at: 'asc' },
           },
@@ -1119,6 +1126,8 @@ export const getExamResults = async (
       }),
     ]);
 
+    const numOrNull = (v: unknown): number | null =>
+      v === null || v === undefined ? null : Number(v);
     res.json({
       status: 'success',
       data: {
@@ -1133,10 +1142,82 @@ export const getExamResults = async (
           submittedAt: session.submitted_at,
           totalScore: session.total_score !== null && session.total_score !== undefined ? Number(session.total_score) : null,
           percentage: session.percentage !== null && session.percentage !== undefined ? Number(session.percentage) : null,
-          answers: session.answers,
+          answers: session.answers.map((a) => ({
+            ...a,
+            marks_awarded: numOrNull(a.marks_awarded),
+            ai_suggested_score: numOrNull(a.ai_suggested_score),
+            final_score: numOrNull(a.final_score),
+          })),
         })),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── PATCH /api/exams/:examId/sessions/:sessionId/answers/:questionId/grade ───
+// Protected: requires valid teacher JWT (owner only).
+// P2-6 educator override for one answer: writes final_score + grading_note
+// and recomputes the session total by delta. Per-answer route (the spec's
+// session-level shape cannot express which question is overridden).
+export const overrideAnswerGrade = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { examId, sessionId, questionId } = req.params;
+
+    const parsed = validate<GradeOverrideInput>(gradeOverrideSchema, req.body);
+    if (!parsed.success) {
+      res.status(400).json({ status: 'error', message: parsed.error });
+      return;
+    }
+
+    try {
+      const result = await applyGradeOverride(
+        examId,
+        sessionId,
+        questionId,
+        teacher.userId,
+        parsed.data.finalScore,
+        parsed.data.gradingNote,
+      );
+      res.json({
+        status: 'success',
+        data: {
+          sessionId: result.sessionId,
+          questionId: result.questionId,
+          aiSuggestedScore: result.aiSuggestedScore,
+          finalScore: result.finalScore,
+          gradingNote: result.gradingNote,
+          gradedBy: result.gradedBy,
+          sessionTotalScore: result.sessionTotalScore,
+          sessionPercentage: result.sessionPercentage,
+        },
+      });
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      if (code === 'EXAM_NOT_FOUND') {
+        res.status(404).json({ status: 'error', message: 'Exam not found' });
+        return;
+      }
+      if (code === 'UNAUTHORIZED') {
+        res.status(403).json({ status: 'error', message: 'You do not have access to this exam' });
+        return;
+      }
+      if (code === 'SESSION_NOT_FOUND' || code === 'QUESTION_NOT_FOUND' || code === 'ANSWER_NOT_FOUND') {
+        res.status(404).json({ status: 'error', message: 'Session, question, or answer not found' });
+        return;
+      }
+      if (code.startsWith('INVALID_SCORE')) {
+        res.status(400).json({ status: 'error', message: code.replace('INVALID_SCORE: ', '') });
+        return;
+      }
+      throw err;
+    }
   } catch (err) {
     next(err);
   }

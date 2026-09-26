@@ -255,6 +255,16 @@ model Answer {
   ai_confidence    Decimal?    @db.Decimal(5, 4)
   /// True when the answer was flagged for manual teacher review (low AI confidence, file upload, or AI outage).
   needs_review     Boolean     @default(false)
+  /// P2-6 subjective grading: the AI's suggested score (Decimal) and its
+  /// rationale text, populated by the AI grading path. Never edited directly —
+  /// educator overrides go to final_score. Effective score everywhere is
+  /// final_score ?? marks_awarded (marks_awarded holds the auto/AI score).
+  ai_suggested_score Decimal?  @db.Decimal(10, 2)
+  ai_rationale       String?
+  /// P2-6 educator override. Null until a teacher confirms/overrides via
+  /// PATCH .../answers/:questionId/grade; session totals recompute by delta.
+  final_score        Decimal?  @db.Decimal(10, 2)
+  grading_note       String?
   created_at       DateTime    @default(now())
   updated_at       DateTime    @updatedAt
 

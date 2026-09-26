@@ -638,6 +638,109 @@ describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
       .expect(200);
   });
 
+  it('applies an educator override and recomputes the session total by delta', async () => {
+    const joinRes = await api
+      .post(`/api/exams/${examId}/join`)
+      .send({
+        studentName: 'Override Student',
+        studentEmail: 'override@example.com',
+        enrollmentNo: 'CS2023-8888',
+      })
+      .expect(201);
+    const token = joinRes.body.data.sessionToken as string;
+
+    const qs = await prisma.question.findMany({
+      where: { exam_id: examId },
+      select: { id: true, correct_answer: true },
+      orderBy: { order_index: 'asc' },
+    });
+    for (const q of qs) {
+      await api
+        .post(`/api/v1/exam-session/${token}/answer`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ questionId: q.id, answerData: q.correct_answer ?? 'x' })
+        .expect(200);
+    }
+    await api
+      .post(`/api/v1/exam-session/${token}/submit`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(200);
+
+    const session = await prisma.examSession.findUnique({
+      where: { session_token: token },
+      select: { id: true, total_score: true },
+    });
+    expect(Number(session?.total_score)).toBe(4);
+
+    const overridden = await api
+      .patch(`/api/exams/${examId}/sessions/${session!.id}/answers/${qs[0].id}/grade`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ finalScore: 1, gradingNote: 'Partial credit for method.' })
+      .expect(200);
+
+    expect(overridden.body.status).toBe('success');
+    expect(overridden.body.data.finalScore).toBe(1);
+    expect(overridden.body.data.gradingNote).toBe('Partial credit for method.');
+    expect(overridden.body.data.gradedBy).toBe('TEACHER');
+    expect(overridden.body.data.sessionTotalScore).toBe(3);
+
+    const updated = await prisma.examSession.findUnique({
+      where: { session_token: token },
+      select: { total_score: true },
+    });
+    expect(Number(updated?.total_score)).toBe(3);
+
+    const answer = await prisma.answer.findUnique({
+      where: {
+        session_id_question_id: { session_id: session!.id, question_id: qs[0].id },
+      },
+      select: { final_score: true, grading_note: true, graded_by: true, needs_review: true },
+    });
+    expect(Number(answer?.final_score)).toBe(1);
+    expect(answer?.grading_note).toBe('Partial credit for method.');
+    expect(answer?.graded_by).toBe('TEACHER');
+    expect(answer?.needs_review).toBe(false);
+  });
+
+  it('rejects overrides above the question maximum and unknown targets', async () => {
+    const joinRes = await api
+      .post(`/api/exams/${examId}/join`)
+      .send({
+        studentName: 'Override Guard Student',
+        studentEmail: 'override.guard@example.com',
+        enrollmentNo: 'CS2023-8989',
+      })
+      .expect(201);
+    const token = joinRes.body.data.sessionToken as string;
+    const session = await prisma.examSession.findUnique({
+      where: { session_token: token },
+      select: { id: true },
+    });
+    const qs = await prisma.question.findMany({
+      where: { exam_id: examId },
+      select: { id: true },
+      orderBy: { order_index: 'asc' },
+    });
+
+    await api
+      .patch(`/api/exams/${examId}/sessions/${session!.id}/answers/${qs[0].id}/grade`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ finalScore: 99 })
+      .expect(400);
+
+    await api
+      .patch(`/api/exams/${examId}/sessions/${session!.id}/answers/00000000-0000-0000-0000-000000000000/grade`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ finalScore: 1 })
+      .expect(404);
+
+    await api
+      .patch(`/api/exams/${examId}/sessions/${session!.id}/answers/${qs[0].id}/grade`)
+      .send({ finalScore: 1 })
+      .expect(401);
+  });
+
   it('serves a submitted student their own scorecard, rejects terminated', async () => {
     const joinRes = await api
       .post(`/api/exams/${examId}/join`)

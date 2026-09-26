@@ -47,6 +47,9 @@ interface AnswerGradingUpdate {
   teacherFeedback: string | null;
   aiConfidence: number | null;
   needsReview: boolean;
+  /** P2-6: AI suggestion + rationale, set only by the AI subjective path. */
+  aiSuggestedScore: number | null;
+  aiRationale: string | null;
 }
 
 const normalize = (value: string): string => value.trim().toLowerCase();
@@ -209,6 +212,8 @@ export async function gradeSubmission(
         teacherFeedback: 'File upload submission requires teacher grading.',
         aiConfidence: null,
         needsReview: true,
+        aiSuggestedScore: null,
+        aiRationale: null,
       });
       continue;
     }
@@ -224,6 +229,8 @@ export async function gradeSubmission(
         teacherFeedback: null,
         aiConfidence: null,
         needsReview: false,
+        aiSuggestedScore: null,
+        aiRationale: null,
       });
       continue;
     }
@@ -251,6 +258,11 @@ export async function gradeSubmission(
             : ai.feedback || null,
           aiConfidence: ai.confidence,
           needsReview,
+          // P2-6: preserve the AI's suggestion + rationale verbatim. An
+          // educator override later writes final_score; marks_awarded stays
+          // as the auto-graded score for the fallback chain.
+          aiSuggestedScore: ai.marksAwarded,
+          aiRationale: ai.feedback || null,
         });
       } catch (error) {
         // AI service unavailable — do not guess. Flag the answer for manual
@@ -267,6 +279,8 @@ export async function gradeSubmission(
           teacherFeedback: null,
           aiConfidence: null,
           needsReview: true,
+          aiSuggestedScore: null,
+          aiRationale: null,
         });
       }
       continue;
@@ -287,6 +301,8 @@ export async function gradeSubmission(
       teacherFeedback: null,
       aiConfidence: null,
       needsReview: false,
+      aiSuggestedScore: null,
+      aiRationale: null,
     });
   }
 
@@ -311,6 +327,8 @@ export async function gradeSubmission(
           teacher_feedback: update.teacherFeedback,
           ai_confidence: update.aiConfidence,
           needs_review: update.needsReview,
+          ai_suggested_score: update.aiSuggestedScore,
+          ai_rationale: update.aiRationale,
         },
       });
     }
@@ -330,6 +348,124 @@ export async function gradeSubmission(
     totalMarks,
     correctAnswers,
     totalQuestions: questions.length,
+  };
+}
+
+export interface GradeOverrideResult {
+  sessionId: string;
+  questionId: string;
+  aiSuggestedScore: number | null;
+  finalScore: number;
+  gradingNote: string | null;
+  gradedBy: GradedBy;
+  sessionTotalScore: number;
+  sessionPercentage: number;
+}
+
+/**
+ * P2-6 educator override for one answer.
+ *
+ * Writes final_score + grading_note, marks the answer reviewed by a teacher,
+ * and recomputes the session total by DELTA (old effective → new final) so
+ * unrelated semantics — negative-marking deductions folded into the stored
+ * total, clamping — are preserved exactly instead of re-derived.
+ *
+ * Effective score everywhere: final_score ?? marks_awarded (marks_awarded
+ * holds the auto/AI score; ai_suggested_score preserves the AI's suggestion
+ * verbatim for display).
+ */
+export async function applyGradeOverride(
+  examId: string,
+  sessionId: string,
+  questionId: string,
+  teacherId: string,
+  finalScore: number,
+  gradingNote?: string,
+): Promise<GradeOverrideResult> {
+  const exam = await prisma.exam.findUnique({
+    where: { id: examId },
+    select: { id: true, created_by: true, total_marks: true },
+  });
+  if (!exam) {
+    throw new Error('EXAM_NOT_FOUND');
+  }
+  if (exam.created_by !== teacherId) {
+    throw new Error('UNAUTHORIZED');
+  }
+
+  const session = await prisma.examSession.findFirst({
+    where: { id: sessionId, exam_id: examId },
+    select: { id: true, total_score: true, percentage: true },
+  });
+  if (!session) {
+    throw new Error('SESSION_NOT_FOUND');
+  }
+
+  const question = await prisma.question.findFirst({
+    where: { id: questionId, exam_id: examId },
+    select: { id: true, marks: true },
+  });
+  if (!question) {
+    throw new Error('QUESTION_NOT_FOUND');
+  }
+
+  if (!Number.isFinite(finalScore) || finalScore < 0) {
+    throw new Error('INVALID_SCORE: finalScore must be a non-negative number');
+  }
+  if (finalScore > question.marks) {
+    throw new Error(
+      `INVALID_SCORE: finalScore (${finalScore}) exceeds the question maximum (${question.marks})`,
+    );
+  }
+
+  const answer = await prisma.answer.findUnique({
+    where: { session_id_question_id: { session_id: sessionId, question_id: questionId } },
+    select: {
+      marks_awarded: true,
+      final_score: true,
+      ai_suggested_score: true,
+    },
+  });
+  if (!answer) {
+    throw new Error('ANSWER_NOT_FOUND');
+  }
+
+  const toNumber = (v: unknown): number | null =>
+    v === null || v === undefined ? null : Number(v);
+  const oldEffective =
+    toNumber(answer.final_score) ?? toNumber(answer.marks_awarded) ?? 0;
+  const currentTotal = toNumber(session.total_score) ?? 0;
+  const newTotal = Math.max(0, currentTotal + (finalScore - oldEffective));
+  const newPercentage =
+    exam.total_marks > 0 ? (newTotal / exam.total_marks) * 100 : 0;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.answer.update({
+      where: {
+        session_id_question_id: { session_id: sessionId, question_id: questionId },
+      },
+      data: {
+        final_score: finalScore,
+        grading_note: gradingNote ?? null,
+        graded_by: GradedBy.TEACHER,
+        needs_review: false,
+      },
+    });
+    await tx.examSession.update({
+      where: { id: sessionId },
+      data: { total_score: newTotal, percentage: newPercentage },
+    });
+  });
+
+  return {
+    sessionId,
+    questionId,
+    aiSuggestedScore: toNumber(answer.ai_suggested_score),
+    finalScore,
+    gradingNote: gradingNote ?? null,
+    gradedBy: GradedBy.TEACHER,
+    sessionTotalScore: newTotal,
+    sessionPercentage: newPercentage,
   };
 }
 

@@ -49,6 +49,8 @@ export interface MarksheetSession {
     answer_text: string;
     marks_awarded: number | null;
     is_correct: boolean | null;
+    /** P2-6 educator override — takes precedence over marks_awarded. */
+    final_score: number | null;
   }[];
 }
 
@@ -216,7 +218,13 @@ export function buildSessionData(
       type: question.type,
       marks: question.marks,
       negativeMarks: Number(question.negative_marks) || 0,
-      marksAwarded: answer?.marks_awarded !== null && answer?.marks_awarded !== undefined ? Number(answer.marks_awarded) : null,
+      // P2-6 fallback chain: educator override wins over the auto/AI score.
+      marksAwarded:
+        answer?.final_score !== null && answer?.final_score !== undefined
+          ? Number(answer.final_score)
+          : answer?.marks_awarded !== null && answer?.marks_awarded !== undefined
+            ? Number(answer.marks_awarded)
+            : null,
       isCorrect: answer?.is_correct ?? null,
       answerText: answer?.answer_text ?? '',
     };

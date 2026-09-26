@@ -187,6 +187,7 @@ export const exportExamResultsCsv = async (
               answer_text: true,
               is_correct: true,
               marks_awarded: true,
+              final_score: true,
               needs_review: true,
             },
             orderBy: { created_at: 'asc' },
@@ -234,6 +235,8 @@ interface CsvSession {
     answer_text: string;
     is_correct: boolean | null;
     marks_awarded: import('@prisma/client').Prisma.Decimal | null;
+    /** P2-6 educator override — takes precedence over marks_awarded. */
+    final_score: import('@prisma/client').Prisma.Decimal | null;
     needs_review: boolean;
   }[];
 }
@@ -288,6 +291,13 @@ function buildResultsCsv(
       needsReview,
       ...questions.flatMap((q) => {
         const answer = answerByQuestion.get(q.id);
+        // P2-6 fallback chain: educator override wins over the auto/AI score.
+        const effective =
+          answer?.final_score !== null && answer?.final_score !== undefined
+            ? Number(answer.final_score)
+            : answer?.marks_awarded !== null && answer?.marks_awarded !== undefined
+              ? Number(answer.marks_awarded)
+              : '';
         return [
           answer?.answer_text ?? '',
           answer?.is_correct === null || answer?.is_correct === undefined
@@ -295,9 +305,7 @@ function buildResultsCsv(
             : answer.is_correct
             ? 'YES'
             : 'NO',
-          answer?.marks_awarded !== null && answer?.marks_awarded !== undefined
-            ? Number(answer.marks_awarded)
-            : '',
+          effective,
         ];
       }),
     ];

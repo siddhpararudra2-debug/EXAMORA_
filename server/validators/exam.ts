@@ -194,6 +194,15 @@ export const fromBankSchema = z.object({
 
 export type FromBankInput = z.infer<typeof fromBankSchema>;
 
+// ── Educator grade override (P2-6) ────────────────────────────────────────────
+
+export const gradeOverrideSchema = z.object({
+  finalScore: z.number('finalScore must be a number'),
+  gradingNote: z.string().max(2000, 'Grading note is too long').optional(),
+});
+
+export type GradeOverrideInput = z.infer<typeof gradeOverrideSchema>;
+
 // ── Submit Exam ───────────────────────────────────────────────────────────────
 
 export const submissionItemSchema = z.object({

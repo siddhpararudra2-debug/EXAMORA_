@@ -162,6 +162,16 @@ Auth: Teacher JWT (owner only). Returns all `ProctoringEvent` rows for a session
 
 Response `200`: `{ "status":"success", "data": { "events": [{ "id","sessionId","eventType","timestamp","metadata" }] } }`
 
+### PATCH `/api/exams/:examId/sessions/:sessionId/answers/:questionId/grade` — Educator grade override
+
+Auth: Teacher JWT (owner only). Writes `final_score` + `grading_note` on one answer, marks it teacher-reviewed, and recomputes the session total by delta. Effective score everywhere is `final_score ?? marks_awarded`.
+
+Zod: `{ finalScore: number (0..question marks), gradingNote?: string (max 2000) }`.
+
+Response `200`: `{ "status":"success", "data": { "sessionId","questionId","aiSuggestedScore","finalScore","gradingNote","gradedBy":"TEACHER","sessionTotalScore","sessionPercentage" } }`
+
+Errors: `400` validation/score above maximum, `401` unauthorized, `403` not the owner, `404` exam/session/question/answer not found.
+
 ### GET `/api/v1/exam-session/:token/scorecard.pdf` — Student's own scorecard
 
 Public, Bearer session token (must match `:token`). `SUBMITTED`/`AUTO_SUBMITTED` only — `TERMINATED` is rejected with `403`. Skips the exam-ACTIVE check so scorecards stay downloadable after results are declared. Binary PDF response (the envelope exception); `404` when ungraded.

@@ -1,4 +1,4 @@
-import { QuestionType, SubmissionStatus } from '@prisma/client';
+import { GradedBy, QuestionType, SubmissionStatus } from '@prisma/client';
 
 jest.mock('../../../../prisma/client.js', () => ({
   __esModule: true,
@@ -209,6 +209,49 @@ describe('grading.service', () => {
       await expect(gradeSubmission(examId, sessionId)).rejects.toThrow(
         `Session ${sessionId} not found for exam ${examId}`,
       );
+    });
+
+    it('persists AI suggestion + rationale for subjective answers (P2-6)', async () => {
+      const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          marks_awarded: 3,
+          confidence: 0.85,
+          feedback: 'Good method, arithmetic slip.',
+        }),
+      } as Response);
+      try {
+        (txMock.examSession.findFirst as jest.Mock).mockResolvedValue({ id: sessionId });
+        (txMock.answer.findMany as jest.Mock).mockResolvedValue([
+          { question_id: 'q1', answer_text: 'a partial explanation' },
+        ]);
+        (txMock.question.findMany as jest.Mock).mockResolvedValue([
+          {
+            id: 'q1',
+            type: QuestionType.SHORT_ANSWER,
+            correct_answer: 'The exact model answer',
+            marks: 5,
+            negative_marks: 0,
+          },
+        ]);
+        (txMock.examSession.update as jest.Mock).mockResolvedValue({ id: sessionId });
+
+        const result = await gradeSubmission(examId, sessionId);
+
+        expect(result.score).toBe(3);
+        expect(txMock.answer.updateMany).toHaveBeenCalledWith({
+          where: { session_id: sessionId, question_id: 'q1' },
+          data: expect.objectContaining({
+            marks_awarded: 3,
+            graded_by: GradedBy.AI,
+            ai_suggested_score: 3,
+            ai_rationale: 'Good method, arithmetic slip.',
+            needs_review: false,
+          }),
+        });
+      } finally {
+        fetchMock.mockRestore();
+      }
     });
   });
 
