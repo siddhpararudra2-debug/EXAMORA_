@@ -4,6 +4,9 @@
   "description": "Examora - Smart Online Exam Platform",
   "private": true,
   "license": "MIT",
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "next dev",
