@@ -171,15 +171,20 @@ export const inviteBulkStudents = async (
 
         const joinLink = `${frontendUrl}/exam/${examId}/take?token=${session.session_token}`;
 
-        // Send email
-        await sendExamInviteEmail({
+        // Send email — a failed delivery is a failed row, not a silent success.
+        const emailed = await sendExamInviteEmail({
           to: studentEmail,
           studentName: studentName || "Student",
           examTitle: exam.title,
           joinLink,
         });
 
-        successful++;
+        if (emailed) {
+          successful++;
+        } else {
+          failed++;
+          errors.push(`Row ${idx + 1} (${studentEmail}): email delivery failed`);
+        }
       } catch (err: any) {
         failed++;
         errors.push(`Row ${idx + 1} (${studentEmail}): ${err.message || "Failed to process"}`);

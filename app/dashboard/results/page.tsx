@@ -33,26 +33,7 @@ interface ExamListItem {
   _count: { questions: number; sessions: number };
 }
 
-const DEMO_EXAMS: ExamListItem[] = [
-  {
-    id: "demo-1",
-    title: "CS 301 — Computer Networks & Security Midterm",
-    status: "COMPLETED",
-    _count: { questions: 20, sessions: 28 },
-  },
-  {
-    id: "demo-2",
-    title: "CS 201 — Data Structures Final Examination",
-    status: "COMPLETED",
-    _count: { questions: 30, sessions: 45 },
-  },
-  {
-    id: "demo-3",
-    title: "CS 204 — Database Systems Assignment",
-    status: "ACTIVE",
-    _count: { questions: 15, sessions: 16 },
-  },
-];
+
 
 function StatusBadge({ status }: { status: ExamListItem["status"] }) {
   if (status === "ACTIVE") {
@@ -121,10 +102,10 @@ function ResultsContent() {
         return;
       }
       setIsDemoMode(true);
-      setExams(DEMO_EXAMS);
+      setExams([]);
     } catch {
       setIsDemoMode(true);
-      setExams(DEMO_EXAMS);
+      setExams([]);
     } finally {
       setLoading(false);
     }

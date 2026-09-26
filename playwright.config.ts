@@ -32,6 +32,10 @@ export default defineConfig({
       url: "http://localhost:4000/api/exams",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+      // Hermetic email: blank SMTP creds force the mock dispatcher path so
+      // E2E never depends on (or hammers) a real SMTP server. dotenv does
+      // not override already-set vars, so this wins over .env placeholders.
+      env: { SMTP_USER: "", SMTP_PASS: "" },
     },
   ],
 });

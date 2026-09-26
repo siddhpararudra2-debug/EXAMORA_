@@ -31,18 +31,7 @@ interface LiveExamItem {
   };
 }
 
-const DEMO_LIVE_EXAMS: LiveExamItem[] = [
-  {
-    id: "live_demo_1",
-    title: "CS 301 — Computer Networks & Security Midterm",
-    description: "Chapters 1–5: OSI model, TCP/IP handshake, Transport Layer, Cryptography",
-    duration_minutes: 60,
-    total_marks: 50,
-    status: "ACTIVE",
-    created_at: new Date().toISOString(),
-    _count: { questions: 20, sessions: 28 },
-  },
-];
+
 
 export default function LiveExamsOverviewPage() {
   const [loading, setLoading] = useState(true);
@@ -60,7 +49,7 @@ export default function LiveExamsOverviewPage() {
         const activeOnly = (payload.data?.exams || []).filter(
           (e: LiveExamItem) => e.status === "ACTIVE" || e.status === "PUBLISHED"
         );
-        setLiveExams(activeOnly.length > 0 ? activeOnly : DEMO_LIVE_EXAMS);
+        setLiveExams(activeOnly);
         setLoading(false);
         return;
       }
@@ -69,9 +58,9 @@ export default function LiveExamsOverviewPage() {
         return;
       }
     } catch {
-      // Fallback to demo
+      // Network error — show empty state
     }
-    setLiveExams(DEMO_LIVE_EXAMS);
+    setLiveExams([]);
     setLoading(false);
   };
 
@@ -96,7 +85,7 @@ export default function LiveExamsOverviewPage() {
             Live Supervision
           </h1>
           <p className="text-xs text-zinc-500 mt-0.5">
-            Monitor active candidate camera streams, network status, and proctoring flags.
+            Monitor active sessions, warning signals, and proctoring events in real time.
           </p>
         </div>
 

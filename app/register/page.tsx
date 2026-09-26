@@ -202,12 +202,16 @@ export default function TeacherRegisterPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                      <FormLabel
+                        htmlFor="register-password"
+                        className="text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                      >
                         Password
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
                           <Input
+                            id="register-password"
                             placeholder="Minimum 8 characters"
                             type={showPassword ? "text" : "password"}
                             autoComplete="new-password"

@@ -741,6 +741,25 @@ describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
       .expect(401);
   });
 
+  it('reports per-row invite errors instead of a bare count (P2-7)', async () => {
+    const res = await api
+      .post(`/api/exams/${examId}/invite-bulk`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        students: [
+          { name: 'Good Student', email: 'bulk.good@example.com', enrollmentNo: 'BULK1' },
+          { name: 'Bad Student', email: '', enrollmentNo: 'BULK2' },
+        ],
+      })
+      .expect(200);
+
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.successful).toBe(1);
+    expect(res.body.data.failed).toBe(1);
+    expect(res.body.data.errors).toHaveLength(1);
+    expect(res.body.data.errors[0]).toMatch(/^Row 2/);
+  });
+
   it('serves a submitted student their own scorecard, rejects terminated', async () => {
     const joinRes = await api
       .post(`/api/exams/${examId}/join`)

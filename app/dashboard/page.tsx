@@ -56,38 +56,7 @@ interface ExamListItem {
   };
 }
 
-const DEMO_EXAMS: ExamListItem[] = [
-  {
-    id: "demo_active_1",
-    title: "CS 301 — Computer Networks & Security Midterm",
-    description: "Chapters 1–5: OSI model, TCP/IP, Cryptography",
-    duration_minutes: 60,
-    total_marks: 50,
-    status: "ACTIVE",
-    created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    _count: { questions: 20, sessions: 28 },
-  },
-  {
-    id: "demo_completed_1",
-    title: "CS 201 — Data Structures Final Examination",
-    description: "Trees, Graphs, Dynamic Programming",
-    duration_minutes: 120,
-    total_marks: 100,
-    status: "COMPLETED",
-    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    _count: { questions: 30, sessions: 45 },
-  },
-  {
-    id: "demo_draft_1",
-    title: "CS 204 — Database Systems Assignment",
-    description: "Normalization, SQL, and Indexing",
-    duration_minutes: 45,
-    total_marks: 30,
-    status: "DRAFT",
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    _count: { questions: 15, sessions: 0 },
-  },
-];
+
 
 function StatusBadge({ status }: { status: ExamStatus }) {
   if (status === "ACTIVE" || status === "PUBLISHED") {
@@ -132,6 +101,7 @@ function DashboardHomeContent() {
   } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ExamListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
 
   const PAGE_SIZE = 20;
 
@@ -168,14 +138,28 @@ function DashboardHomeContent() {
         handleAuthFailure();
         return;
       }
-      if (!append) setExams(DEMO_EXAMS);
+      if (!append) {
+        setFetchError(true);
+        toast({
+          title: "Could not load exams",
+          description: "The server returned an error. Please try again.",
+          variant: "destructive",
+        });
+      }
     } catch {
-      if (!append) setExams(DEMO_EXAMS);
+      if (!append) {
+        setFetchError(true);
+        toast({
+          title: "Could not load exams",
+          description: "Network unavailable. Check your connection and try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     void loadExams();
@@ -378,16 +362,61 @@ function DashboardHomeContent() {
                   <Skeleton className="h-7 w-16" />
                 </div>
               ))
+            ) : fetchError ? (
+              <div className="flex flex-col items-center justify-center p-10 text-center">
+                <div className="h-10 w-10 rounded-lg bg-red-50 dark:bg-red-950/20 flex items-center justify-center mb-3">
+                  <ClipboardList className="h-5 w-5 text-red-500 dark:text-red-400" />
+                </div>
+                <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Could not load your exams</p>
+                <p className="text-[11px] text-zinc-400 mt-1 max-w-xs">
+                  The server may be unavailable. Check your connection and try again.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-4 h-7 text-xs border-zinc-200 dark:border-zinc-800"
+                  onClick={() => { setFetchError(false); void loadExams(); }}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : exams.length === 0 && !searchQuery ? (
+              /* First-run onboarding — shows for new teachers with zero exams */
+              <div className="p-6 space-y-5">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Welcome to Examora</p>
+                  <p className="text-xs text-zinc-500 mt-1">Get started by following these steps to create and run your first exam.</p>
+                </div>
+                <div className="space-y-3">
+                  {[
+                    { label: "Create your first exam", desc: "Set up questions, duration, and grading rules.", href: "/dashboard/exams/create", done: false },
+                    { label: "Publish it", desc: "Review your exam and make it available for students.", href: null, done: false },
+                    { label: "Share the join link", desc: "Students enter the access code or scan the QR code to begin.", href: null, done: false },
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-start gap-3 rounded-md border border-zinc-200 dark:border-zinc-800 p-3">
+                      <div className="h-5 w-5 rounded border border-zinc-300 dark:border-zinc-700 flex items-center justify-center mt-0.5 shrink-0">
+                        <span className="text-[10px] font-mono font-medium text-zinc-400">{i + 1}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">{step.label}</p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">{step.desc}</p>
+                      </div>
+                      {step.href && (
+                        <Button asChild size="sm" className="h-7 text-xs bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 shrink-0">
+                          <Link href={step.href}>Start</Link>
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : filteredExams.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-10 text-center text-xs text-zinc-500">
-                <ClipboardList className="h-6 w-6 text-zinc-300 dark:text-zinc-700 mb-2" />
+                <ClipboardList className="h-5 w-5 text-zinc-300 dark:text-zinc-700 mb-2" />
                 <p className="font-medium text-zinc-700 dark:text-zinc-300">No assessments found</p>
                 <p className="text-zinc-400 mt-0.5">
-                  {searchQuery ? "Try a different search keyword." : "Create your first exam to get started."}
+                  {searchQuery ? "Try a different search keyword." : "No exams match this filter."}
                 </p>
-                <Button asChild size="sm" className="mt-3 h-7 text-xs bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900">
-                  <Link href="/dashboard/exams/create">Create Exam</Link>
-                </Button>
               </div>
             ) : (
               filteredExams.map((e) => (

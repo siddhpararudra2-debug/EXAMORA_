@@ -192,7 +192,10 @@ export default function TeacherLoginPage() {
                   render={({ field }) => (
                     <FormItem>
                       <div className="flex items-center justify-between">
-                        <FormLabel className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                        <FormLabel
+                          htmlFor="login-password"
+                          className="text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                        >
                           Password
                         </FormLabel>
                         <Link
@@ -205,6 +208,7 @@ export default function TeacherLoginPage() {
                       <FormControl>
                         <div className="relative">
                           <Input
+                            id="login-password"
                             placeholder="••••••••"
                             type={showPassword ? "text" : "password"}
                             autoComplete="current-password"

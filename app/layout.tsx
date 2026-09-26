@@ -8,7 +8,7 @@ const outfit = Outfit({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Examora — Next-Gen AI Examination & Live Proctoring Platform",
   description:
-    "Autonomous online examinations, real-time AI WebRTC proctoring, and instant automated grading for modern educators.",
+    "Create structured assessments with on-device AI proctoring, automated grading, and PDF scorecards. Free, open-source, and privacy-first.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

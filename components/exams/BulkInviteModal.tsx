@@ -10,8 +10,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { authHeaders } from "@/lib/auth-token";
 import {
-  Upload,
   FileSpreadsheet,
   Download,
   CheckCircle2,
@@ -44,11 +44,11 @@ export function BulkInviteModal({
   const [parsedRows, setParsedRows] = useState<StudentInviteRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
   const [sending, setSending] = useState<boolean>(false);
-  const [result, setResult] = useState<{
-    successful: number;
-    failed: number;
-    errors?: string[];
-  } | null>(null);
+  /** Per-row outcomes after sending, index-aligned with parsedRows. */
+  const [rowResults, setRowResults] = useState<
+    { row: StudentInviteRow; ok: boolean; error?: string }[] | null
+  >(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -57,7 +57,8 @@ export function BulkInviteModal({
   // Handles CSV parsing
   const handleFileChange = (file: File) => {
     setParseError(null);
-    setResult(null);
+    setRowResults(null);
+    setSendError(null);
 
     if (!file.name.endsWith(".csv")) {
       setParseError("Please select a valid .csv file");
@@ -78,16 +79,18 @@ export function BulkInviteModal({
           return;
         }
 
+        // Keep EVERY data line (even short ones) so preview indices stay
+        // 1:1 aligned with the server's row numbers in per-row errors.
+        // No fabricated names or enrollment numbers — blanks stay blank and
+        // the server reports them per row.
         const rows: StudentInviteRow[] = [];
         for (let i = 1; i < lines.length; i++) {
           const cols = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-          if (cols.length >= 2) {
-            rows.push({
-              name: cols[0] || `Student ${i}`,
-              email: cols[1] || "",
-              enrollmentNo: cols[2] || `ENR${1000 + i}`,
-            });
-          }
+          rows.push({
+            name: cols[0] || "",
+            email: cols[1] || "",
+            enrollmentNo: cols[2] || "",
+          });
         }
 
         setParsedRows(rows);
@@ -112,42 +115,60 @@ export function BulkInviteModal({
     document.body.removeChild(link);
   };
 
-  // Sends invites via API
+  // Sends invites via API. No fabricated outcomes: HTTP/network failures
+  // surface as errors, and per-row results come from the server's errors[]
+  // ("Row N: ..." / "Row N (email): ...", 1-based over the data rows).
   const handleSendInvites = async () => {
     if (!csvFile || parsedRows.length === 0) return;
 
     setSending(true);
-    setResult(null);
+    setRowResults(null);
+    setSendError(null);
 
     try {
       const formData = new FormData();
       formData.append("file", csvFile);
       formData.append("students", JSON.stringify(parsedRows));
 
-      const res = await fetch(`/api/exams/${examId}/bulk-invite`, {
+      const res = await fetch(`/api/exams/${examId}/invite-bulk`, {
         method: "POST",
         credentials: "include",
+        headers: { ...authHeaders() },
         body: formData,
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setResult({
-          successful: data.successful || parsedRows.length,
-          failed: data.failed || 0,
-        });
-      } else {
-        // Fallback demo success response
-        setResult({
-          successful: parsedRows.length,
-          failed: 0,
-        });
+      const payload = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        data?: { successful?: number; failed?: number; errors?: string[] };
+      };
+
+      if (!res.ok) {
+        setSendError(
+          payload?.message ?? "The invite request failed. No invites were sent."
+        );
+        return;
       }
-    } catch (err) {
-      setResult({
-        successful: parsedRows.length,
-        failed: 0,
-      });
+
+      const errorByRow = new Map<number, string>();
+      for (const entry of payload.data?.errors ?? []) {
+        const match = /^Row (\d+)\s*(?:\(.*?\))?\s*:?\s*(.*)$/.exec(entry);
+        if (match) {
+          const idx = Number(match[1]) - 1;
+          if (idx >= 0 && !errorByRow.has(idx)) {
+            errorByRow.set(idx, match[2] || entry);
+          }
+        }
+      }
+
+      setRowResults(
+        parsedRows.map((row, index) => ({
+          row,
+          ok: !errorByRow.has(index),
+          error: errorByRow.get(index),
+        }))
+      );
+    } catch {
+      setSendError("Could not reach the server. No invites were sent.");
     } finally {
       setSending(false);
     }
@@ -157,7 +178,8 @@ export function BulkInviteModal({
     setCsvFile(null);
     setParsedRows([]);
     setParseError(null);
-    setResult(null);
+    setRowResults(null);
+    setSendError(null);
   };
 
   return (
@@ -184,16 +206,81 @@ export function BulkInviteModal({
 
         {/* Content Body */}
         <div className="py-6 space-y-5">
-          {/* Result Summary View if sent */}
-          {result ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-6 text-center space-y-3">
-              <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600 animate-bounce" />
-              <h3 className="text-lg font-bold text-emerald-950">Invites Sent Successfully!</h3>
-              <p className="text-sm text-emerald-800">
-                Processed <strong>{result.successful}</strong> student email invitation{result.successful === 1 ? "" : "s"}.
-              </p>
-              <div className="pt-2">
-                <Button onClick={handleReset} variant="outline" className="border-emerald-300 text-emerald-800">
+          {sendError && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold">Invites were not sent</p>
+                <p className="mt-0.5">{sendError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Per-row result table after sending */}
+          {rowResults ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                {rowResults.every((r) => r.ok) ? (
+                  <>
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    <p className="font-bold text-emerald-950">
+                      All {rowResults.length} invite
+                      {rowResults.length === 1 ? "" : "s"} sent
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-5 w-5 text-amber-600" />
+                    <p className="font-bold text-slate-900">
+                      {rowResults.filter((r) => r.ok).length} sent ·{" "}
+                      {rowResults.filter((r) => !r.ok).length} failed
+                    </p>
+                  </>
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 font-semibold text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="p-2.5">Name</th>
+                      <th className="p-2.5">Email</th>
+                      <th className="p-2.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {rowResults.map(({ row, ok, error }, i) => (
+                      <tr key={i} className={ok ? "" : "bg-red-50/50"}>
+                        <td className="p-2.5 font-medium text-slate-900">
+                          {row.name || <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="p-2.5 font-mono text-slate-600">
+                          {row.email || <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="p-2.5">
+                          {ok ? (
+                            <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Sent
+                            </span>
+                          ) : (
+                            <span>
+                              <span className="inline-flex items-center gap-1 font-semibold text-red-700">
+                                <AlertCircle className="h-3.5 w-3.5" /> Failed
+                              </span>
+                              {error && (
+                                <span className="mt-0.5 block font-normal text-red-600">
+                                  {error}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="pt-1 text-center">
+                <Button onClick={handleReset} variant="outline">
                   Invite More Students
                 </Button>
               </div>
@@ -296,7 +383,7 @@ export function BulkInviteModal({
           <Button variant="outline" onClick={onClose} disabled={sending}>
             Cancel
           </Button>
-          {!result && (
+          {!rowResults && (
             <Button
               onClick={handleSendInvites}
               disabled={parsedRows.length === 0 || sending}
