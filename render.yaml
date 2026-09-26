@@ -2,10 +2,20 @@
 # Examora Backend — Render.com deployment (canonical config)
 #
 # Steps:
-#   1. Create a free PostgreSQL + Redis (or Upstash) instance on Render.
-#   2. Create a "Blueprint" in the Render dashboard and point it at this file.
-#   3. Fill in the `sync: false` values in the dashboard.
+#   1. Create a "Blueprint" in the Render dashboard and point it at this file.
+#      The managed PostgreSQL below is provisioned automatically — no manual
+#      database setup needed.
+#   2. Fill in the `sync: false` values in the dashboard.
+#   3. Set BACKEND_URL + NEXT_PUBLIC_SOCKET_URL on the Vercel frontend to the
+#      public URL of the deployed examora-backend service (Task P0-1).
 # ──────────────────────────────────────────────────────────────────────────────
+
+databases:
+  - name: examora-db
+    databaseName: examora_db
+    user: examora
+    region: oregon
+    plan: free
 
 services:
   - type: web
@@ -13,19 +23,27 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run server:build
+    buildCommand: npm install --no-audit --no-fund && npx prisma generate && npx prisma migrate deploy && npm run server:build
     startCommand: npm run server:start
     healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 4000
       - key: DATABASE_URL
-        sync: false            # Render PostgreSQL connection string
+        fromDatabase:
+          name: examora-db
+          property: connectionString
+      - key: DIRECT_URL
+        fromDatabase:
+          name: examora-db
+          property: connectionString
+      - key: TRUST_PROXY
+        value: 1               # backend runs behind Render's reverse proxy
       - key: REDIS_URL
         sync: false            # optional — Redis for Socket.io scaling
+      - key: AI_SERVICE_URL
+        sync: false            # optional — FastAPI doc-parsing service URL
       - key: JWT_SECRET
         generateValue: true
       - key: SESSION_SECRET
