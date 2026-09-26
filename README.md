@@ -18,9 +18,8 @@ Examora is a 100% free and open-source AI-proctored online exam platform. Teache
   <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss" />
   <img alt="Playwright" src="https://img.shields.io/badge/Playwright-E2E-2EAD33?logo=playwright" />
   <img alt="TensorFlow.js" src="https://img.shields.io/badge/TensorFlow.js-4-FF6F00?logo=tensorflow" />
-  <img alt="Build" src="https://img.shields.io/badge/build-passing-brightgreen" />
+  <a href="https://github.com/siddhpararudra2-debug/EXAMORA_/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/siddhpararudra2-debug/EXAMORA_/actions/workflows/ci.yml/badge.svg" /></a>
   <img alt="Tests" src="https://img.shields.io/badge/tests-jest+playwright-important" />
-  <img alt="Coverage" src="https://img.shields.io/badge/coverage-API+unit-9cf" />
   <img alt="Docs" src="https://img.shields.io/badge/docs-API_Reference-blueviolet" />
 </p>
 
@@ -349,11 +348,13 @@ Socket.io events: `join_exam_room`, `student_status_update`, `exam_terminated`, 
 
 | Landing page | Teacher dashboard | Exam creation |
 | --- | --- | --- |
-| _(add screenshot)_ | _(add screenshot)_ | _(add screenshot)_ |
+| ![Landing page](public/screenshots/landing.png) | ![Teacher dashboard](public/screenshots/dashboard.png) | ![Exam creation](public/screenshots/exam-create.png) |
 
 | Student join | Exam taking (proctored) | Results / scorecard |
 | --- | --- | --- |
-| _(add screenshot)_ | _(add screenshot)_ | _(add screenshot)_ |
+| ![Student join](public/screenshots/student-join.png) | ![Exam taking](public/screenshots/exam-taking.png) | ![Results and item analysis](public/screenshots/results.png) |
+
+Screenshots captured from seeded demo data (`npx prisma db seed`).
 
 ---
 
