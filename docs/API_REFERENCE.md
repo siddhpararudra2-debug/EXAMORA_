@@ -115,6 +115,7 @@ z.object({
 - MCQ requires ≥ 2 options; TRUE_FALSE requires exactly 2 options.
 - Created inside a transaction — a failed question rolls back the whole exam.
 - `maxWarnings` (1–10) sets `Exam.max_warnings`. When omitted, the server derives it from `settings.warningThreshold`, else 3. `PUT /api/exams/:id` behaves identically.
+- `deliveryMode` (`LIVE`|`TAKE_HOME`, default `LIVE`) with `availableFrom`/`availableUntil` ISO datetimes. `TAKE_HOME` requires both, with until after from. `GET /:id/status` returns `400` with the window times outside it; `POST /:id/join` enforces the same gate.
 
 Response `201`: `data.exam` (exam with nested questions, answers excluded).
 Errors: `400` validation, `401` unauthorized.

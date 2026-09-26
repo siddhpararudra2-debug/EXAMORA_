@@ -68,6 +68,20 @@ export default function JoinExamPage() {
           if (!canceled) setCheck({ state: "not-found" });
           return;
         }
+        // P4-1: take-home window rejections carry the window times — show
+        // the server message instead of a generic not-found screen.
+        if (res.status === 400) {
+          const payload = (await res.json().catch(() => ({}))) as {
+            message?: string;
+          };
+          if (!canceled)
+            setCheck({
+              state: "error",
+              message:
+                payload.message ?? "This exam is not currently joinable.",
+            });
+          return;
+        }
         if (res.ok) {
           const payload = (await res.json()) as {
             data?: {

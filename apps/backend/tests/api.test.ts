@@ -820,6 +820,85 @@ describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
     await api.get(`/api/exams/${analyticsExamId}/analytics`).expect(401);
   });
 
+  it('rejects take-home joins outside the window with window times (P4-1)', async () => {
+    const past = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        ...EXAM_PAYLOAD,
+        title: 'Past Take-Home Exam',
+        deliveryMode: 'TAKE_HOME',
+        availableFrom: new Date(Date.now() - 2 * 86400000).toISOString(),
+        availableUntil: new Date(Date.now() - 86400000).toISOString(),
+      })
+      .expect(201);
+    const pastId = past.body.data.exam.id as string;
+    expect(past.body.data.exam.delivery_mode).toBe('TAKE_HOME');
+    await api
+      .post(`/api/exams/${pastId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const status = await api.get(`/api/exams/${pastId}/status`).expect(400);
+    expect(status.body.status).toBe('error');
+    expect(status.body.message).toContain('available from');
+    expect(status.body.message).toContain('until');
+
+    await api
+      .post(`/api/exams/${pastId}/join`)
+      .send({ studentName: 'Late Student', studentEmail: 'late@example.com', enrollmentNo: 'LATE1' })
+      .expect(400);
+  });
+
+  it('allows take-home joins inside the window like a live exam (P4-1)', async () => {
+    const open = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        ...EXAM_PAYLOAD,
+        title: 'Open Take-Home Exam',
+        deliveryMode: 'TAKE_HOME',
+        availableFrom: new Date(Date.now() - 86400000).toISOString(),
+        availableUntil: new Date(Date.now() + 86400000).toISOString(),
+      })
+      .expect(201);
+    const openId = open.body.data.exam.id as string;
+    await api
+      .post(`/api/exams/${openId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const status = await api.get(`/api/exams/${openId}/status`).expect(200);
+    expect(status.body.data.exam.isJoinable).toBe(true);
+    expect(status.body.data.exam.deliveryMode).toBe('TAKE_HOME');
+
+    const join = await api
+      .post(`/api/exams/${openId}/join`)
+      .send({ studentName: 'OnTime Student', studentEmail: 'ontime@example.com', enrollmentNo: 'ONTIME1' })
+      .expect(201);
+    expect(join.body.data.sessionToken).toBeTruthy();
+  });
+
+  it('validates the take-home window on create/update (P4-1)', async () => {
+    await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ ...EXAM_PAYLOAD, title: 'Windowless Take-Home', deliveryMode: 'TAKE_HOME' })
+      .expect(400);
+
+    await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        ...EXAM_PAYLOAD,
+        title: 'Backwards Take-Home',
+        deliveryMode: 'TAKE_HOME',
+        availableFrom: new Date(Date.now() + 86400000).toISOString(),
+        availableUntil: new Date(Date.now() - 86400000).toISOString(),
+      })
+      .expect(400);
+  });
+
   it('reports per-row invite errors instead of a bare count (P2-7)', async () => {
     const res = await api
       .post(`/api/exams/${examId}/invite-bulk`)

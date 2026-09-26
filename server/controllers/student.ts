@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ExamStatus, SubmissionStatus } from '@prisma/client';
+import { DeliveryMode, ExamStatus, SubmissionStatus } from '@prisma/client';
 import { studentJoinSchema, StudentJoinInput } from '../validators/student.js';
 import prisma from '../../prisma/client.js';
 
@@ -41,6 +41,26 @@ export const joinExam = async (req: Request, res: Response, next: NextFunction):
         message: 'Exam is not active yet — it has not been published',
       });
       return;
+    }
+
+    // P4-1: a TAKE_HOME exam additionally requires joining inside its
+    // availability window. The window governs joining, not a shared clock:
+    // once started, the per-session duration timer applies as usual.
+    if (exam.delivery_mode === DeliveryMode.TAKE_HOME) {
+      const now = new Date();
+      const from = exam.available_from;
+      const until = exam.available_until;
+      const fmt = (d: Date | null): string =>
+        d ? d.toISOString() : 'unspecified';
+      if (!from || !until || now < from || now > until) {
+        res.status(400).json({
+          status: 'error',
+          message:
+            `This take-home exam is available from ${fmt(from)} until ${fmt(until)}. ` +
+            'Please come back inside the availability window.',
+        });
+        return;
+      }
     }
 
     // Check if the exam window has ended (end_time is optional)

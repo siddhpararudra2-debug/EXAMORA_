@@ -140,9 +140,44 @@ const examSchema = z.object({
     .min(1, { message: "Use at least 1 warning." })
     .max(10, { message: "Use no more than 10 warnings." }),
   supervisionCamera: z.boolean().optional(),
+  deliveryMode: z.enum(["LIVE", "TAKE_HOME"]).optional().default("LIVE"),
+  availableFrom: z.string().optional().default(""),
+  availableUntil: z.string().optional().default(""),
   questions: z
     .array(questionSchema)
     .min(1, { message: "Add at least one question to your exam." }),
+}).superRefine((val, ctx) => {
+  const from = val.availableFrom?.trim() ? new Date(val.availableFrom) : null;
+  const until = val.availableUntil?.trim() ? new Date(val.availableUntil) : null;
+  if (from && Number.isNaN(from.getTime())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["availableFrom"],
+      message: "Enter a valid date and time.",
+    });
+  }
+  if (until && Number.isNaN(until.getTime())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["availableUntil"],
+      message: "Enter a valid date and time.",
+    });
+  }
+  if (val.deliveryMode === "TAKE_HOME") {
+    if (!from || !until) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["availableUntil"],
+        message: "Take-home exams need an availability window.",
+      });
+    } else if (until <= from) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["availableUntil"],
+        message: "The window must end after it begins.",
+      });
+    }
+  }
 });
 
 type ExamFormValues = z.infer<typeof examSchema>;
@@ -168,6 +203,9 @@ const DEFAULT_VALUES: ExamFormValues = {
   shuffleOptions: true,
   maxWarnings: 3,
   supervisionCamera: true,
+  deliveryMode: "LIVE",
+  availableFrom: "",
+  availableUntil: "",
   questions: [DEFAULT_QUESTION(0)],
 };
 
@@ -175,6 +213,24 @@ const STEPS = [
   { id: 1, title: "Exam details", icon: FileText },
   { id: 2, title: "Questions", icon: Wand2 },
 ] as const;
+
+/** Server ISO date → datetime-local input value (local timezone). */
+function toDateTimeLocal(value: unknown): string {
+  if (!value) return "";
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`;
+}
+
+/** datetime-local input value → ISO string, or undefined when blank/invalid. */
+function toIsoOrUndefined(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+}
 
 // ---------- Helpers ----------
 
@@ -532,6 +588,13 @@ const handleBankQuestionsAdded = async (
               maxWarnings:
                 exam.maxWarnings ?? exam.settings?.warningThreshold ?? 3,
               supervisionCamera: exam.settings?.supervision?.camera ?? true,
+              deliveryMode: exam.deliveryMode ?? exam.delivery_mode ?? "LIVE",
+              availableFrom: toDateTimeLocal(
+                exam.availableFrom ?? exam.available_from
+              ),
+              availableUntil: toDateTimeLocal(
+                exam.availableUntil ?? exam.available_until
+              ),
               questions: parsedQuestions.length > 0 ? parsedQuestions : [DEFAULT_QUESTION(0)],
             });
 
@@ -672,6 +735,9 @@ const handleBankQuestionsAdded = async (
         durationMinutes: Number(data.durationMinutes),
         totalMarks: Number(data.totalMarks),
         maxWarnings: Number(data.maxWarnings),
+        deliveryMode: data.deliveryMode ?? "LIVE",
+        availableFrom: toIsoOrUndefined(data.availableFrom),
+        availableUntil: toIsoOrUndefined(data.availableUntil),
         settings: {
           shuffleQuestions: data.shuffleQuestions ?? false,
           shuffleOptions: data.shuffleOptions ?? false,
@@ -1024,6 +1090,104 @@ const handleBankQuestionsAdded = async (
                     </FormItem>
                   )}
                 />
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 md:col-span-2">
+                  <p className="text-sm font-semibold text-slate-900">
+                    Delivery mode
+                  </p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                    Live exams run proctored while ACTIVE. Take-home exams open
+                    for joining only inside the availability window below.
+                  </p>
+                  <FormField
+                    control={control}
+                    name="deliveryMode"
+                    render={({ field }) => (
+                      <div
+                        className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"
+                        role="radiogroup"
+                        aria-label="Delivery mode"
+                      >
+                        {(
+                          [
+                            {
+                              value: "LIVE",
+                              title: "Live proctored",
+                              desc: "Students join while the exam is ACTIVE.",
+                            },
+                            {
+                              value: "TAKE_HOME",
+                              title: "Take-home",
+                              desc: "Students join any time inside the window.",
+                            },
+                          ] as const
+                        ).map((mode) => (
+                          <button
+                            key={mode.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={field.value === mode.value}
+                            onClick={() => field.onChange(mode.value)}
+                            className={cn(
+                              "rounded-lg border p-3 text-left transition",
+                              field.value === mode.value
+                                ? "border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-300"
+                                : "border-slate-200 bg-white hover:border-slate-300"
+                            )}
+                          >
+                            <span className="block text-sm font-semibold text-slate-900">
+                              {mode.title}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-slate-500">
+                              {mode.desc}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  />
+                  {watch("deliveryMode") === "TAKE_HOME" && (
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField
+                        control={control}
+                        name="availableFrom"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-semibold text-slate-900">
+                              Available from
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="datetime-local"
+                                className="mt-2 h-10 bg-white"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={control}
+                        name="availableUntil"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-semibold text-slate-900">
+                              Available until
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="datetime-local"
+                                className="mt-2 h-10 bg-white"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
                 <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-4 text-sm text-emerald-900 md:col-span-2 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100">
                   <p className="font-semibold">Privacy-first supervision</p>
                   <p className="mt-1 text-xs leading-5 text-emerald-800/90 dark:text-emerald-100/80">

@@ -21,6 +21,8 @@ export const QuestionTypeEnum = z.enum([
 
 const ExamStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'ARCHIVED']);
 
+export const DeliveryModeEnum = z.enum(['LIVE', 'TAKE_HOME']);
+
 // ── Question ──────────────────────────────────────────────────────────────────
 
 /**
@@ -169,6 +171,17 @@ export const createExamSchema = z.object({
     .positive('Total marks must be a positive integer'),
   status: ExamStatusEnum.optional().default('DRAFT'),
   settings: examSettingsSchema.optional(),
+  // P4-1 delivery mode. TAKE_HOME requires an availability window; the
+  // window governs joining, not a shared clock across students.
+  deliveryMode: DeliveryModeEnum.optional().default('LIVE'),
+  availableFrom: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z.coerce.date().optional(),
+  ),
+  availableUntil: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z.coerce.date().optional(),
+  ),
   // Authoritative per-exam warning limit (maps to Exam.max_warnings).
   // Optional (no Zod default) so legacy callers that only send
   // settings.warningThreshold keep their policy via server-side resolution.
@@ -181,6 +194,37 @@ export const createExamSchema = z.object({
   questions: z
     .array(questionSchema)
     .min(1, 'Exam must have at least one question'),
+}).superRefine((val, ctx) => {
+  // z.coerce.date() never fails — it yields Invalid Date for garbage input.
+  if (val.availableFrom !== undefined && Number.isNaN(val.availableFrom.getTime())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['availableFrom'],
+      message: 'availableFrom must be a valid date-time',
+    });
+  }
+  if (val.availableUntil !== undefined && Number.isNaN(val.availableUntil.getTime())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['availableUntil'],
+      message: 'availableUntil must be a valid date-time',
+    });
+  }
+  if (val.deliveryMode === 'TAKE_HOME') {
+    if (!val.availableFrom || !val.availableUntil) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['availableUntil'],
+        message: 'Take-home exams require an availability window (availableFrom and availableUntil)',
+      });
+    } else if (val.availableUntil <= val.availableFrom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['availableUntil'],
+        message: 'availableUntil must be after availableFrom',
+      });
+    }
+  }
 });
 
 // ── Attach bank questions to a draft exam ─────────────────────────────────────

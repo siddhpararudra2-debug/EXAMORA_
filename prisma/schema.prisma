@@ -85,6 +85,14 @@ enum EmailLogStatus {
   @@map("email_log_status")
 }
 
+/// P4-1 assessment delivery mode.
+enum DeliveryMode {
+  LIVE
+  TAKE_HOME
+
+  @@map("delivery_mode")
+}
+
 model Teacher {
   id                  String    @id @default(uuid())
   google_id           String?   @unique
@@ -120,6 +128,13 @@ model Exam {
   duration_minutes Int
   total_marks      Int
   max_warnings     Int          @default(3)
+  /// P4-1 delivery mode: LIVE (proctored, join while ACTIVE) vs TAKE_HOME
+  /// (async, joinable only inside the availability window below).
+  delivery_mode    DeliveryMode @default(LIVE)
+  /// P4-1 take-home window. The window governs *joining*, not a shared
+  /// clock: once started, the per-session duration timer applies as usual.
+  available_from   DateTime?
+  available_until  DateTime?
   creation_mode    CreationMode @default(MANUAL)
   access_uuid      String
   qr_code_url      String?

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { SubmissionStatus, ExamStatus } from '@prisma/client';
+import { SubmissionStatus, ExamStatus, DeliveryMode } from '@prisma/client';
 import { ZodType, ZodTypeDef } from 'zod';
 
 import { AuthenticatedRequest } from '../middleware/auth.js';
@@ -128,6 +128,9 @@ export const getExamDetails = async (
       totalMarks: exam.total_marks,
       status: exam.status,
       maxWarnings: exam.max_warnings,
+      deliveryMode: exam.delivery_mode,
+      availableFrom: exam.available_from,
+      availableUntil: exam.available_until,
       settings: exam.settings,
       accessUuid: exam.access_uuid,
       qrCodeUrl: exam.qr_code_url,
@@ -302,6 +305,9 @@ export const updateExam = async (
           duration_minutes: examData.durationMinutes,
           total_marks: examData.totalMarks,
           max_warnings: maxWarnings,
+          delivery_mode: examData.deliveryMode ?? DeliveryMode.LIVE,
+          available_from: examData.availableFrom ?? null,
+          available_until: examData.availableUntil ?? null,
           settings: examData.settings
             ? ({ ...examData.settings, warningThreshold: maxWarnings } as any)
             : undefined,
@@ -680,6 +686,9 @@ export const getExamStatus = async (
         end_time: true,
         settings: true,
         max_warnings: true,
+        delivery_mode: true,
+        available_from: true,
+        available_until: true,
         _count: { select: { questions: true } },
       },
     });
@@ -690,6 +699,26 @@ export const getExamStatus = async (
         message: 'Exam not found',
       });
       return;
+    }
+
+    // P4-1: a TAKE_HOME exam is joinable only inside its availability window.
+    // Outside the window this endpoint rejects with 400 stating the window
+    // (spec P4-1 acceptance) instead of a bare isJoinable:false.
+    if (exam.delivery_mode === DeliveryMode.TAKE_HOME) {
+      const now = new Date();
+      const from = exam.available_from;
+      const until = exam.available_until;
+      const fmt = (d: Date | null): string =>
+        d ? d.toISOString() : 'unspecified';
+      if (!from || !until || now < from || now > until) {
+        res.status(400).json({
+          status: 'error',
+          message:
+            `This take-home exam is available from ${fmt(from)} until ${fmt(until)}. ` +
+            'Please come back inside the availability window.',
+        });
+        return;
+      }
     }
 
     const isJoinable =
@@ -704,6 +733,9 @@ export const getExamStatus = async (
           title: exam.title,
           description: exam.description,
           status: exam.status,
+          deliveryMode: exam.delivery_mode,
+          availableFrom: exam.available_from,
+          availableUntil: exam.available_until,
           isJoinable,
           durationMinutes: exam.duration_minutes,
           endTime: exam.end_time,

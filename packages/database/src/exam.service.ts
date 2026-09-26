@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { Answer, Exam, ExamStatus, Prisma, QuestionType } from '@prisma/client';
+import { Answer, DeliveryMode, Exam, ExamStatus, Prisma, QuestionType } from '@prisma/client';
 import prisma from '../../../prisma/client.js';
 import { ExamSettingsShape } from './shuffle.service.js';
 
@@ -11,6 +11,10 @@ export interface ExamCreationData {
   totalMarks: number;
   status?: ExamStatus;
   settings?: ExamSettingsShape;
+  /** P4-1 delivery mode + take-home window (window validated upstream). */
+  deliveryMode?: DeliveryMode;
+  availableFrom?: Date;
+  availableUntil?: Date;
   /**
    * Authoritative per-exam warning limit (maps to `max_warnings`). When
    * absent, derived from `settings.warningThreshold`, else 3 — so legacy
@@ -99,6 +103,9 @@ export async function createExamWithQuestions(
         total_marks: examData.totalMarks,
         status: examData.status ?? ExamStatus.DRAFT,
         max_warnings: maxWarnings,
+        delivery_mode: examData.deliveryMode ?? DeliveryMode.LIVE,
+        available_from: examData.availableFrom ?? null,
+        available_until: examData.availableUntil ?? null,
         settings: examData.settings
           ? ({
               ...examData.settings,
