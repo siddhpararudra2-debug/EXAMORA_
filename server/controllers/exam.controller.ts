@@ -6,8 +6,10 @@ import { AuthenticatedRequest } from '../middleware/auth.js';
 import {
   createExamSchema,
   submitExamSchema,
+  fromBankSchema,
   CreateExamInput,
   SubmitExamInput,
+  FromBankInput,
 } from '../validators/exam.js';
 import {
   createExamWithQuestions,
@@ -706,6 +708,115 @@ export const getExamStatus = async (
           questionCount: exam._count.questions,
           warningsLimit: resolveMaxWarnings(exam),
         },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── POST /api/exams/:id/questions/from-bank ───────────────────────────────────
+// Protected: requires valid teacher JWT (applied at the router level). Owner only.
+// Copies the teacher's bank questions into a DRAFT exam as NEW Question rows
+// (aiGenerated:false, educatorReviewed:true — bank content is human-authored).
+// The BankQuestion rows are never mutated. Order follows questionIds.
+export const attachBankQuestions = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const parsed = validate<FromBankInput>(fromBankSchema, req.body);
+    if (!parsed.success) {
+      res.status(400).json({ status: 'error', message: parsed.error });
+      return;
+    }
+
+    const exam = await prisma.exam.findFirst({
+      where: { id: examId, created_by: teacher.userId, deleted_at: null },
+      select: { id: true, status: true },
+    });
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+    if (exam.status !== ExamStatus.DRAFT) {
+      res.status(409).json({
+        status: 'error',
+        message: 'Bank questions can only be attached to draft exams.',
+      });
+      return;
+    }
+
+    const bankQuestions = await prisma.bankQuestion.findMany({
+      where: {
+        id: { in: parsed.data.questionIds },
+        teacher_id: teacher.userId,
+        deleted_at: null,
+      },
+    });
+    if (bankQuestions.length !== parsed.data.questionIds.length) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Some questions were not found in your bank',
+      });
+      return;
+    }
+
+    const byId = new Map(bankQuestions.map((q) => [q.id, q]));
+    const ordered = parsed.data.questionIds.map((id) => byId.get(id)!);
+
+    const maxOrder = await prisma.question.aggregate({
+      where: { exam_id: examId, deleted_at: null },
+      _max: { order_index: true },
+    });
+    const base = maxOrder._max.order_index ?? 0;
+
+    const created = await prisma.$transaction(
+      ordered.map((q, i) =>
+        prisma.question.create({
+          data: {
+            exam_id: examId,
+            type: q.type,
+            question_text: q.question_text,
+            options: q.options ?? undefined,
+            correct_answer: q.correct_answer,
+            marks: q.marks,
+            order_index: base + i + 1,
+            ai_generated: false,
+            educator_reviewed: true,
+          },
+          select: {
+            id: true,
+            type: true,
+            question_text: true,
+            options: true,
+            correct_answer: true,
+            marks: true,
+            order_index: true,
+          },
+        }),
+      ),
+    );
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        added: created.length,
+        questions: created.map((q) => ({
+          id: q.id,
+          type: q.type,
+          questionText: q.question_text,
+          options: q.options,
+          correctAnswer: q.correct_answer,
+          marks: q.marks,
+          orderIndex: q.order_index,
+          aiGenerated: false,
+          educatorReviewed: true,
+        })),
       },
     });
   } catch (err) {

@@ -183,6 +183,17 @@ export const createExamSchema = z.object({
     .min(1, 'Exam must have at least one question'),
 });
 
+// ── Attach bank questions to a draft exam ─────────────────────────────────────
+
+export const fromBankSchema = z.object({
+  questionIds: z
+    .array(z.string().uuid('questionIds must be valid UUIDs'))
+    .min(1, 'Select at least one bank question')
+    .max(100, 'Cannot attach more than 100 questions at once'),
+});
+
+export type FromBankInput = z.infer<typeof fromBankSchema>;
+
 // ── Submit Exam ───────────────────────────────────────────────────────────────
 
 export const submissionItemSchema = z.object({

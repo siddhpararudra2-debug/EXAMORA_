@@ -18,6 +18,7 @@ import {
   getSessionEvents,
   getExamResults,
   getExamSessions,
+  attachBankQuestions,
 } from '../controllers/exam.controller.js';
 import { generateAIQuestions } from '../../apps/backend/src/controllers/ai.controller.js';
 import { parseDocument } from '../../apps/backend/src/controllers/document.controller.js';
@@ -26,6 +27,7 @@ import {
   createExamSchema,
   submitExamSchema,
   aiGenerateSchema,
+  fromBankSchema,
 } from '../validators/exam.js';
 
 const router = Router();
@@ -144,6 +146,18 @@ router.post('/:id/unpublish', requireTeacher, unpublishExam);
  * Protected — valid teacher JWT required (owner only).
  */
 router.post('/:id/grade-all', requireTeacher, gradeAllSessions);
+
+/**
+ * POST /api/exams/:id/questions/from-bank
+ * Copy bank questions into a DRAFT exam as new Question rows.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.post(
+  '/:id/questions/from-bank',
+  requireTeacher,
+  validateBody(fromBankSchema),
+  attachBankQuestions,
+);
 
 /**
  * GET /api/exams/:examId/results

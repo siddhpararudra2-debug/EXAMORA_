@@ -638,6 +638,114 @@ describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
       .expect(200);
   });
 
+  it('copies bank questions into a draft without mutating the bank', async () => {
+    const saved = await api
+      .post('/api/v1/question-bank')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        type: 'MCQ_SINGLE',
+        questionText: 'Bank: what is 2 + 2?',
+        options: ['3', '4'],
+        correctAnswer: '4',
+        marks: 2,
+      })
+      .expect(201);
+
+    const bankId = saved.body.data.question.id as string;
+
+    const draft = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ ...EXAM_PAYLOAD, title: 'From-Bank Target Exam' })
+      .expect(201);
+
+    const draftId = draft.body.data.exam.id as string;
+
+    const attached = await api
+      .post(`/api/exams/${draftId}/questions/from-bank`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ questionIds: [bankId] })
+      .expect(201);
+
+    expect(attached.body.status).toBe('success');
+    expect(attached.body.data.added).toBe(1);
+    expect(attached.body.data.questions[0].questionText).toBe(
+      'Bank: what is 2 + 2?',
+    );
+    expect(attached.body.data.questions[0].aiGenerated).toBe(false);
+    expect(attached.body.data.questions[0].educatorReviewed).toBe(true);
+
+    // New Question row on the target exam…
+    const rows = await prisma.question.findMany({
+      where: { exam_id: draftId },
+    });
+    expect(rows).toHaveLength(3);
+    expect(
+      rows.some(
+        (r) =>
+          r.question_text === 'Bank: what is 2 + 2?' &&
+          r.ai_generated === false &&
+          r.educator_reviewed === true,
+      ),
+    ).toBe(true);
+
+    // …and the bank row itself is untouched.
+    const bankRow = await prisma.bankQuestion.findUnique({
+      where: { id: bankId },
+    });
+    expect(bankRow?.question_text).toBe('Bank: what is 2 + 2?');
+    expect(bankRow?.deleted_at).toBeNull();
+  });
+
+  it('rejects attach to published exams and unknown bank ids', async () => {
+    const draft = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ ...EXAM_PAYLOAD, title: 'From-Bank Guard Exam' })
+      .expect(201);
+    const draftId = draft.body.data.exam.id as string;
+
+    await api
+      .post(`/api/exams/${draftId}/questions/from-bank`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ questionIds: ['00000000-0000-0000-0000-000000000000'] })
+      .expect(404);
+
+    await api
+      .post(`/api/exams/${draftId}/questions/from-bank`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ questionIds: [] })
+      .expect(400);
+
+    await api
+      .post(`/api/exams/${draftId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const saved = await api
+      .post('/api/v1/question-bank')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        type: 'MCQ_SINGLE',
+        questionText: 'Bank guard question?',
+        options: ['Yes', 'No'],
+        correctAnswer: 'Yes',
+        marks: 1,
+      })
+      .expect(201);
+
+    await api
+      .post(`/api/exams/${draftId}/questions/from-bank`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ questionIds: [saved.body.data.question.id] })
+      .expect(409);
+
+    await api
+      .post(`/api/exams/${draftId}/questions/from-bank`)
+      .send({ questionIds: [saved.body.data.question.id] })
+      .expect(401);
+  });
+
   it('derives the column from legacy settings.warningThreshold', async () => {
     const legacy = await api
       .post('/api/exams')

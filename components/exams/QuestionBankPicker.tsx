@@ -40,13 +40,15 @@ const TYPE_LABEL: Record<string, string> = {
 
 export function toFormValue(item: BankQuestionItem): BankQuestionFormValue {
   const options = Array.isArray(item.options) ? item.options : [];
+  // No fabricated answers: missing correct answers stay empty so exam-form
+  // validation flags them for the educator instead of silently inventing one.
   if (item.type === "TRUE_FALSE") {
     return {
       type: "TRUE_FALSE",
       questionText: item.question_text,
       marks: item.marks,
       options: ["True", "False"],
-      correctAnswer: item.correct_answer === "False" ? "False" : "True",
+      correctAnswer: item.correct_answer || "",
     };
   }
   if (item.type === "SHORT_ANSWER") {
@@ -55,7 +57,7 @@ export function toFormValue(item: BankQuestionItem): BankQuestionFormValue {
       questionText: item.question_text,
       marks: item.marks,
       options: [],
-      correctAnswer: item.correct_answer || "Model answer sample",
+      correctAnswer: item.correct_answer || "",
     };
   }
   return {
@@ -74,12 +76,21 @@ export function QuestionBankPicker({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onAddQuestions: (questions: BankQuestionFormValue[]) => void;
+  /**
+   * Receives converted form values plus the source bank ids (same order),
+   * so hosts editing an existing draft can persist via
+   * POST /api/exams/:id/questions/from-bank instead of local append.
+   */
+  onAddQuestions: (
+    questions: BankQuestionFormValue[],
+    sourceIds: string[]
+  ) => void;
 }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<BankQuestionItem[]>([]);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,8 +132,35 @@ export function QuestionBankPicker({
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === questions.length && questions.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(questions.map((q) => q.id)));
+    }
+  };
+
   const add = (item: BankQuestionItem) => {
-    onAddQuestions([toFormValue(item)]);
+    onAddQuestions([toFormValue(item)], [item.id]);
+  };
+
+  const addSelected = () => {
+    const selected = questions.filter((q) => selectedIds.has(q.id));
+    if (selected.length === 0) return;
+    onAddQuestions(
+      selected.map(toFormValue),
+      selected.map((q) => q.id)
+    );
+    setSelectedIds(new Set());
   };
 
   return (
@@ -134,10 +172,33 @@ export function QuestionBankPicker({
             Your question bank
           </DialogTitle>
           <DialogDescription>
-            Reuse questions you&apos;ve saved from previous exams. Click Add to
-            copy one into this draft.
+            Reuse questions you&apos;ve saved from previous exams. Select one
+            or more and add them — copies, never moves.
           </DialogDescription>
         </DialogHeader>
+
+        {!loading && questions.length > 0 && (
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="text-xs font-semibold text-indigo-700 hover:underline"
+            >
+              {selectedIds.size === questions.length
+                ? "Deselect all"
+                : "Select all"}
+            </button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={selectedIds.size === 0}
+              onClick={addSelected}
+              className="h-9"
+            >
+              <Plus className="h-4 w-4" /> Add selected ({selectedIds.size})
+            </Button>
+          </div>
+        )}
 
         <div className="space-y-3">
           {loading ? (
@@ -156,7 +217,15 @@ export function QuestionBankPicker({
                 key={q.id}
                 className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/50 p-4 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(q.id)}
+                    onChange={() => toggleSelect(q.id)}
+                    aria-label={`Select ${q.question_text.slice(0, 60)}`}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary" className="text-[10px]">
                       {TYPE_LABEL[q.type] ?? q.type}
@@ -168,6 +237,7 @@ export function QuestionBankPicker({
                   <p className="mt-1.5 line-clamp-2 text-sm font-medium text-foreground">
                     {q.question_text}
                   </p>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Button

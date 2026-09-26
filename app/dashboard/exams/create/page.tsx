@@ -291,19 +291,99 @@ function CreateExamContent() {
     });
   };
 
-const handleBankQuestionsAdded = (
-  questions: BankQuestionFormValue[]
+const handleBankQuestionsAdded = async (
+  questions: BankQuestionFormValue[],
+  sourceIds: string[]
 ) => {
   // Bank questions are already human-authored: they bypass the AI review gate.
-  questions.forEach((q) =>
-    append({ ...q, aiGenerated: false, educatorReviewed: true })
-  );
-    setIsBankPickerOpen(false);
-    toast({
-      title: "Questions added from bank",
-      description: `Added ${questions.length} question(s) from your question bank.`,
-    });
-  };
+  const withFlags = questions.map((q) => ({
+    ...q,
+    aiGenerated: false,
+    educatorReviewed: true,
+  }));
+  // Editing an existing draft persists the attach server-side first, so no
+  // work is lost if the educator closes the tab before hitting Save.
+  if (isEditMode && fromId && sourceIds.length > 0) {
+    try {
+      const res = await fetch(`/api/exams/${fromId}/questions/from-bank`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        credentials: "include",
+        body: JSON.stringify({ questionIds: sourceIds }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        data?: {
+          questions?: Array<{
+            type: string;
+            questionText: string;
+            options?: unknown;
+            correctAnswer?: string | null;
+            marks: number;
+          }>;
+        };
+      };
+      if (!res.ok) {
+        toast({
+          title: "Couldn't attach bank questions",
+          description: payload?.message ?? "The server returned an error.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Append the server-created rows (same content the DB now holds).
+      (payload.data?.questions ?? []).forEach((q) => {
+        const rawOptions = Array.isArray(q.options) ? q.options : [];
+        if (q.type === "TRUE_FALSE") {
+          append({
+            type: "TRUE_FALSE",
+            questionText: q.questionText,
+            marks: q.marks,
+            options: ["True", "False"],
+            correctAnswer: q.correctAnswer ?? "",
+            aiGenerated: false,
+            educatorReviewed: true,
+          });
+        } else if (q.type === "SHORT_ANSWER") {
+          append({
+            type: "SHORT_ANSWER",
+            questionText: q.questionText,
+            marks: q.marks,
+            options: [],
+            correctAnswer: q.correctAnswer ?? "",
+            aiGenerated: false,
+            educatorReviewed: true,
+          });
+        } else {
+          append({
+            type: "MCQ_SINGLE",
+            questionText: q.questionText,
+            marks: q.marks,
+            options:
+              rawOptions.length >= 2 ? rawOptions : ["Option A", "Option B"],
+            correctAnswer: q.correctAnswer ?? "",
+            aiGenerated: false,
+            educatorReviewed: true,
+          });
+        }
+      });
+    } catch {
+      toast({
+        title: "Couldn't attach bank questions",
+        description: "The server could not be reached. Nothing was added.",
+        variant: "destructive",
+      });
+      return;
+    }
+  } else {
+    withFlags.forEach((q) => append(q));
+  }
+  setIsBankPickerOpen(false);
+  toast({
+    title: "Questions added from bank",
+    description: `Added ${questions.length} question(s) from your question bank.`,
+  });
+};
 
   const handleSaveToBank = async (index: number) => {
     const q = getValues(`questions.${index}` as const) as QuestionFormValue;

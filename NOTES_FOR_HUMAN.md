@@ -27,3 +27,4 @@ This document tracks intentional deviations from the original `Examora_AI_Agent_
 - **Spec:** `/api/questions/bank`
 - **Reality:** Shipped code uses `/api/v1/question-bank`.
 - **Decision:** Reuse the shipped `/api/v1/question-bank` route.
+- **from-bank response:** Spec §6.6 shows `{ exam with nested questions }`; implemented as `{ added, questions: [created rows] }` — the payload the editor actually needs, without re-sending the whole exam.

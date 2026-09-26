@@ -162,6 +162,16 @@ Auth: Teacher JWT (owner only). Returns all `ProctoringEvent` rows for a session
 
 Response `200`: `{ "status":"success", "data": { "events": [{ "id","sessionId","eventType","timestamp","metadata" }] } }`
 
+### POST `/api/exams/:id/questions/from-bank` — Attach bank questions to a draft
+
+Auth: Teacher JWT (owner only). Copies bank questions into a `DRAFT` exam as new `Question` rows (`aiGenerated:false, educatorReviewed:true`); bank rows are never mutated. Order follows `questionIds`.
+
+Zod: `{ questionIds: string[].uuid().min(1).max(100) }`.
+
+Response `201`: `{ "status":"success", "data": { "added": 1, "questions": [{ "id","type","questionText","options","correctAnswer","marks","orderIndex","aiGenerated","educatorReviewed" }] } }`
+
+Errors: `400` validation, `401` unauthorized, `404` exam or bank questions not found, `409` exam is not a draft.
+
 ### GET `/api/exams/:id/sessions` — Live session list with warning counts
 
 Auth: Teacher JWT (owner only). Backs the live supervision grid. Warning counts are aggregated server-side from `Violation` rows (single `groupBy`, no N+1).
