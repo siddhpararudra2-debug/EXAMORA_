@@ -15,11 +15,13 @@ import {
   recordSubmissions,
   publishExamService,
   unpublishExamService,
+  resolveMaxWarningsForWrite,
 } from '../../packages/database/src/exam.service.js';
 import {
   normalizeExamSettings,
   shuffleQuestionsForStudent,
   newShuffleSeed,
+  resolveMaxWarnings,
 } from '../../packages/database/src/shuffle.service.js';
 import { gradeAllSubmissionsForExam, GRADED_STATUSES } from '../../packages/database/src/grading.service.js';
 import prisma from '../../prisma/client.js';
@@ -121,6 +123,7 @@ export const getExamDetails = async (
       durationMinutes: exam.duration_minutes,
       totalMarks: exam.total_marks,
       status: exam.status,
+      maxWarnings: exam.max_warnings,
       settings: exam.settings,
       accessUuid: exam.access_uuid,
       qrCodeUrl: exam.qr_code_url,
@@ -183,6 +186,7 @@ export const getExamSessions = async (
         title: true,
         status: true,
         settings: true,
+        max_warnings: true,
         sessions: {
           where: { deleted_at: null },
           orderBy: { started_at: 'desc' },
@@ -203,8 +207,7 @@ export const getExamSessions = async (
       return;
     }
 
-    const settings = normalizeExamSettings(exam.settings);
-    const warningsLimit = settings.warningThreshold ?? 3;
+    const warningsLimit = resolveMaxWarnings(exam);
 
     // One grouped query for all warning counts — no N+1 per session.
     const warningCounts = await prisma.violation.groupBy({
@@ -257,7 +260,7 @@ export const updateExam = async (
 
     const existing = await prisma.exam.findFirst({
       where: { id: examId, created_by: teacher.userId, deleted_at: null },
-      select: { id: true, status: true },
+      select: { id: true, status: true, max_warnings: true, settings: true },
     });
 
     if (!existing) {
@@ -275,6 +278,12 @@ export const updateExam = async (
 
     const { questions, ...examData } = parsed.data;
 
+    // Authoritative column wins; legacy JSON-only payloads keep their policy.
+    const maxWarnings = resolveMaxWarningsForWrite(
+      examData.maxWarnings,
+      examData.settings,
+    );
+
     const updated = await prisma.$transaction(async (tx) => {
       // Delete previous questions
       await tx.question.deleteMany({ where: { exam_id: examId } });
@@ -286,7 +295,10 @@ export const updateExam = async (
           description: examData.description ?? null,
           duration_minutes: examData.durationMinutes,
           total_marks: examData.totalMarks,
-          settings: examData.settings ? (examData.settings as any) : undefined,
+          max_warnings: maxWarnings,
+          settings: examData.settings
+            ? ({ ...examData.settings, warningThreshold: maxWarnings } as any)
+            : undefined,
           questions: {
             create: questions.map((q, idx) => ({
               type: q.type,
@@ -424,7 +436,7 @@ export const getStudentView = async (
         exam: {
           ...exam,
           questions,
-          warningsLimit: settings.warningThreshold ?? 3,
+          warningsLimit: resolveMaxWarnings(exam),
           // Only the fields needed by the student runtime are exposed — never answer keys or raw settings.
           settings: { supervision: settings.supervision },
         },
@@ -659,6 +671,7 @@ export const getExamStatus = async (
         duration_minutes: true,
         end_time: true,
         settings: true,
+        max_warnings: true,
         _count: { select: { questions: true } },
       },
     });
@@ -671,7 +684,6 @@ export const getExamStatus = async (
       return;
     }
 
-    const settings = normalizeExamSettings(exam.settings);
     const isJoinable =
       exam.status === ExamStatus.ACTIVE &&
       (!exam.end_time || new Date() <= exam.end_time);
@@ -688,7 +700,7 @@ export const getExamStatus = async (
           durationMinutes: exam.duration_minutes,
           endTime: exam.end_time,
           questionCount: exam._count.questions,
-          warningsLimit: settings.warningThreshold ?? 3,
+          warningsLimit: resolveMaxWarnings(exam),
         },
       },
     });
@@ -852,6 +864,7 @@ export const getSessionEvents = async (
             duration_minutes: true,
             total_marks: true,
             settings: true,
+            max_warnings: true,
           },
         },
       },
@@ -892,7 +905,7 @@ export const getSessionEvents = async (
       studentEmail: session.student_email ?? '',
       enrollmentNo: session.enrollment_number ?? '',
       totalWarnings: warningsCount,
-      warningsLimit: normalizeExamSettings(session.exam.settings).warningThreshold ?? 3,
+      warningsLimit: resolveMaxWarnings(session.exam),
       finalScore: session.total_score !== null && session.total_score !== undefined ? Number(session.total_score) : undefined,
       maxScore: session.exam.total_marks,
       sessionStatus: session.status,

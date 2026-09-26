@@ -4,16 +4,13 @@ import { Server } from 'socket.io';
 
 import { AuthenticatedStudentRequest } from '../middleware/validateStudentSession.js';
 import { gradeSubmission } from '../../packages/database/src/grading.service.js';
-import { normalizeExamSettings } from '../../packages/database/src/shuffle.service.js';
+import { resolveMaxWarnings } from '../../packages/database/src/shuffle.service.js';
 import {
-  MAX_WARNINGS,
   roomName,
   sessionRoomName,
   PROCTORING_EVENTS,
 } from '../../apps/backend/src/socket/proctoring.handler.js';
 import prisma from '../../prisma/client.js';
-
-export { MAX_WARNINGS };
 
 // ── POST /api/v1/exam-session/:token/answer ─────────────────────────────────────
 // Authenticated by validateStudentSession (Bearer session token).
@@ -111,10 +108,9 @@ export const reportViolation = async (
     // 2. Resolve the exam policy and count total warnings for the session.
     const exam = await prisma.exam.findUnique({
       where: { id: studentSession.examId, deleted_at: null },
-      select: { settings: true },
+      select: { settings: true, max_warnings: true },
     });
-    const warningsLimit =
-      normalizeExamSettings(exam?.settings).warningThreshold ?? MAX_WARNINGS;
+    const warningsLimit = resolveMaxWarnings(exam ?? {});
     const warningsCount = await prisma.violation.count({
       where: { session_id: studentSession.id },
     });
@@ -256,11 +252,10 @@ export const submitSession = async (
         prisma.violation.count({ where: { session_id: studentSession.id } }),
         prisma.exam.findUnique({
           where: { id: studentSession.examId, deleted_at: null },
-          select: { settings: true },
+          select: { settings: true, max_warnings: true },
         }),
       ]);
-      const warningsLimit =
-        normalizeExamSettings(exam?.settings).warningThreshold ?? MAX_WARNINGS;
+      const warningsLimit = resolveMaxWarnings(exam ?? {});
 
       io.to(roomName(studentSession.examId)).emit('student_status_update', {
         examId: studentSession.examId,

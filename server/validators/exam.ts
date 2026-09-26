@@ -163,6 +163,15 @@ export const createExamSchema = z.object({
     .positive('Total marks must be a positive integer'),
   status: ExamStatusEnum.optional().default('DRAFT'),
   settings: examSettingsSchema.optional(),
+  // Authoritative per-exam warning limit (maps to Exam.max_warnings).
+  // Optional (no Zod default) so legacy callers that only send
+  // settings.warningThreshold keep their policy via server-side resolution.
+  maxWarnings: z
+    .number()
+    .int('Warning limit must be a whole number')
+    .min(1, 'Warning limit must be at least 1')
+    .max(10, 'Warning limit cannot exceed 10')
+    .optional(),
   questions: z
     .array(questionSchema)
     .min(1, 'Exam must have at least one question'),

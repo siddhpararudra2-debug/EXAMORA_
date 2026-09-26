@@ -119,6 +119,7 @@ model Exam {
   college_name     String?
   duration_minutes Int
   total_marks      Int
+  max_warnings     Int          @default(3)
   creation_mode    CreationMode @default(MANUAL)
   access_uuid      String
   qr_code_url      String?

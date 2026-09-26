@@ -537,3 +537,86 @@ describe('GET /api/exams/:id/sessions', () => {
     await api.get(`/api/exams/${examId}/sessions`).expect(401);
   });
 });
+
+describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
+  it('terminates only on the Nth warning when maxWarnings is set', async () => {
+    const strict = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ ...EXAM_PAYLOAD, title: 'Strict Exam', maxWarnings: 5 })
+      .expect(201);
+
+    const strictId = strict.body.data.exam.id;
+    expect(strict.body.data.exam.max_warnings).toBe(5);
+
+    await api
+      .post(`/api/exams/${strictId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const joinRes = await api
+      .post(`/api/exams/${strictId}/join`)
+      .send({
+        studentName: 'Strict Student',
+        studentEmail: 'strict@example.com',
+        enrollmentNo: 'CS2023-5555',
+      })
+      .expect(201);
+
+    const strictToken = joinRes.body.data.sessionToken;
+
+    for (let i = 1; i <= 5; i++) {
+      const res = await api
+        .post(`/api/v1/exam-session/${strictToken}/violation`)
+        .set('Authorization', `Bearer ${strictToken}`)
+        .send({ type: 'TAB_SWITCH', description: `Switch ${i}` })
+        .expect(201);
+
+      expect(res.body.data.warningsCount).toBe(i);
+      expect(res.body.data.maxWarnings).toBe(5);
+      expect(res.body.data.terminated).toBe(i === 5);
+    }
+  });
+
+  it('derives the column from legacy settings.warningThreshold', async () => {
+    const legacy = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        ...EXAM_PAYLOAD,
+        title: 'Legacy Threshold Exam',
+        settings: { warningThreshold: 4 },
+      })
+      .expect(201);
+
+    const legacyId = legacy.body.data.exam.id;
+    expect(legacy.body.data.exam.max_warnings).toBe(4);
+
+    await api
+      .post(`/api/exams/${legacyId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const joinRes = await api
+      .post(`/api/exams/${legacyId}/join`)
+      .send({
+        studentName: 'Legacy Student',
+        studentEmail: 'legacy@example.com',
+        enrollmentNo: 'CS2023-4444',
+      })
+      .expect(201);
+
+    const legacyToken = joinRes.body.data.sessionToken;
+
+    for (let i = 1; i <= 4; i++) {
+      const res = await api
+        .post(`/api/v1/exam-session/${legacyToken}/violation`)
+        .set('Authorization', `Bearer ${legacyToken}`)
+        .send({ type: 'TAB_SWITCH', description: `Switch ${i}` })
+        .expect(201);
+
+      expect(res.body.data.maxWarnings).toBe(4);
+      expect(res.body.data.terminated).toBe(i === 4);
+    }
+  });
+});

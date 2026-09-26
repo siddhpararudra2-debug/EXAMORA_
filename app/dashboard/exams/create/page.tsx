@@ -122,9 +122,9 @@ const examSchema = z.object({
     .min(1, { message: "Minimum 1 mark." }),
   shuffleQuestions: z.boolean().optional(),
   shuffleOptions: z.boolean().optional(),
-  warningThreshold: z.coerce
-    .number({ invalid_type_error: "Warning threshold must be a number." })
-    .int("Warning threshold must be a whole number.")
+  maxWarnings: z.coerce
+    .number({ invalid_type_error: "Warning limit must be a number." })
+    .int("Warning limit must be a whole number.")
     .min(1, { message: "Use at least 1 warning." })
     .max(10, { message: "Use no more than 10 warnings." }),
   supervisionCamera: z.boolean().optional(),
@@ -152,7 +152,7 @@ const DEFAULT_VALUES: ExamFormValues = {
   totalMarks: 20,
   shuffleQuestions: true,
   shuffleOptions: true,
-  warningThreshold: 3,
+  maxWarnings: 3,
   supervisionCamera: true,
   questions: [DEFAULT_QUESTION(0)],
 };
@@ -371,7 +371,8 @@ function CreateExamContent() {
               totalMarks: Number(exam.totalMarks || exam.total_marks || 20),
               shuffleQuestions: exam.settings?.shuffleQuestions ?? true,
               shuffleOptions: exam.settings?.shuffleOptions ?? true,
-              warningThreshold: exam.settings?.warningThreshold ?? 3,
+              maxWarnings:
+                exam.maxWarnings ?? exam.settings?.warningThreshold ?? 3,
               supervisionCamera: exam.settings?.supervision?.camera ?? true,
               questions: parsedQuestions.length > 0 ? parsedQuestions : [DEFAULT_QUESTION(0)],
             });
@@ -512,10 +513,11 @@ function CreateExamContent() {
         description: data.description?.trim() || null,
         durationMinutes: Number(data.durationMinutes),
         totalMarks: Number(data.totalMarks),
+        maxWarnings: Number(data.maxWarnings),
         settings: {
           shuffleQuestions: data.shuffleQuestions ?? false,
           shuffleOptions: data.shuffleOptions ?? false,
-          warningThreshold: Number(data.warningThreshold),
+          warningThreshold: Number(data.maxWarnings),
           supervision: { camera: data.supervisionCamera ?? true },
         },
         questions: data.questions.map((q) => ({
@@ -823,11 +825,11 @@ function CreateExamContent() {
                 />
                 <FormField
                   control={control}
-                  name="warningThreshold"
+                  name="maxWarnings"
                   render={({ field }) => (
                     <FormItem className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
                       <FormLabel className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        Warning limit
+                        Integrity strictness
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -836,15 +838,15 @@ function CreateExamContent() {
                           max={10}
                           step={1}
                           inputMode="numeric"
-                          aria-describedby="warning-threshold-help"
+                          aria-describedby="warning-limit-help"
                           className="mt-2 h-10 max-w-[120px] bg-white dark:bg-slate-950"
                           {...field}
                           value={field.value ?? 3}
                           onChange={(event) => field.onChange(event.target.value)}
                         />
                       </FormControl>
-                      <FormDescription id="warning-threshold-help" className="text-xs leading-5">
-                        The session closes when this many integrity signals are recorded. Signals are review evidence, not an automatic finding of misconduct.
+                      <FormDescription id="warning-limit-help" className="text-xs leading-5">
+                        Session ends automatically after this many recorded warnings. Signals are review evidence, not an automatic finding of misconduct.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

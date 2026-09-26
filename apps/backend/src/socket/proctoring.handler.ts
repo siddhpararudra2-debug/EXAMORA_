@@ -3,9 +3,7 @@ import jwt from 'jsonwebtoken';
 import { SubmissionStatus, ViolationType } from '@prisma/client';
 import prisma from '../../../../prisma/client.js';
 import { JWT_SECRET } from '../../../../server/config.js';
-import { normalizeExamSettings } from '../../../../packages/database/src/shuffle.service.js';
-
-export const MAX_WARNINGS = 3;
+import { resolveMaxWarnings } from '../../../../packages/database/src/shuffle.service.js';
 
 /**
  * MVP privacy boundary: remote media is opt-in for a future governed release.
@@ -185,10 +183,9 @@ const registerJoinExamRoomHandler = (io: Server, socket: Socket): void => {
           });
           const examSettings = await prisma.exam.findUnique({
             where: { id: examId, deleted_at: null },
-            select: { settings: true },
+            select: { settings: true, max_warnings: true },
           });
-          const warningsLimit =
-            normalizeExamSettings(examSettings?.settings).warningThreshold ?? MAX_WARNINGS;
+          const warningsLimit = resolveMaxWarnings(examSettings ?? {});
           const payload = {
             examId,
             sessionId: session.id,

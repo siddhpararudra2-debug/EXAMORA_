@@ -29,10 +29,13 @@ export interface ExamSettingsShape {
  * documents the de facto behavior. Educators opt out per exam by setting
  * settings.supervision.camera to false (no video ever leaves the device).
  */
+/** Fallback warning limit when neither the column nor JSON settings provide one. */
+export const DEFAULT_WARNING_LIMIT = 3;
+
 export const DEFAULT_EXAM_SETTINGS: ExamSettingsShape = {
   shuffleQuestions: false,
   shuffleOptions: false,
-  warningThreshold: 3,
+  warningThreshold: DEFAULT_WARNING_LIMIT,
   supervision: { camera: true, mic: false },
 };
 
@@ -66,6 +69,31 @@ export function normalizeExamSettings(settings: unknown): ExamSettingsShape {
           : DEFAULT_EXAM_SETTINGS.supervision?.mic,
     },
   };
+}
+
+/**
+ * Resolves the authoritative per-exam warning limit.
+ * The typed `max_warnings` column wins when it holds an integer in 1–10;
+ * otherwise (legacy rows, out-of-range values) falls back to the JSON
+ * `settings.warningThreshold` via normalizeExamSettings (default 3).
+ */
+export function resolveMaxWarnings(exam: {
+  max_warnings?: number | null;
+  settings?: unknown;
+}): number {
+  const column = exam.max_warnings;
+  if (
+    typeof column === 'number' &&
+    Number.isInteger(column) &&
+    column >= 1 &&
+    column <= 10
+  ) {
+    return column;
+  }
+  return (
+    normalizeExamSettings(exam.settings).warningThreshold ??
+    DEFAULT_WARNING_LIMIT
+  );
 }
 
 /** Small, fast, seedable PRNG (mulberry32). */

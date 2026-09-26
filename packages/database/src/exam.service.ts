@@ -11,6 +11,40 @@ export interface ExamCreationData {
   totalMarks: number;
   status?: ExamStatus;
   settings?: ExamSettingsShape;
+  /**
+   * Authoritative per-exam warning limit (maps to `max_warnings`). When
+   * absent, derived from `settings.warningThreshold`, else 3 — so legacy
+   * callers that only send the JSON setting keep their configured policy.
+   */
+  maxWarnings?: number;
+}
+
+/**
+ * Resolves the warning limit for a write: explicit top-level value wins,
+ * then a valid JSON `warningThreshold`, else the default 3.
+ */
+export function resolveMaxWarningsForWrite(
+  maxWarnings: number | undefined,
+  settings: ExamSettingsShape | undefined,
+): number {
+  if (
+    typeof maxWarnings === 'number' &&
+    Number.isInteger(maxWarnings) &&
+    maxWarnings >= 1 &&
+    maxWarnings <= 10
+  ) {
+    return maxWarnings;
+  }
+  const threshold = settings?.warningThreshold;
+  if (
+    typeof threshold === 'number' &&
+    Number.isInteger(threshold) &&
+    threshold >= 1 &&
+    threshold <= 10
+  ) {
+    return threshold;
+  }
+  return 3;
 }
 
 export interface QuestionCreationData {
@@ -48,6 +82,10 @@ export async function createExamWithQuestions(
   examData: ExamCreationData,
   questionsData: QuestionCreationData[],
 ): Promise<Exam> {
+  const maxWarnings = resolveMaxWarningsForWrite(
+    examData.maxWarnings,
+    examData.settings,
+  );
   return prisma.$transaction(async (tx) => {
     return tx.exam.create({
       data: {
@@ -56,8 +94,12 @@ export async function createExamWithQuestions(
         duration_minutes: examData.durationMinutes,
         total_marks: examData.totalMarks,
         status: examData.status ?? ExamStatus.DRAFT,
+        max_warnings: maxWarnings,
         settings: examData.settings
-          ? (examData.settings as Prisma.InputJsonValue)
+          ? ({
+              ...examData.settings,
+              warningThreshold: maxWarnings,
+            } as Prisma.InputJsonValue)
           : undefined,
         created_by: teacherId,
         access_uuid: crypto.randomUUID(),
@@ -90,6 +132,7 @@ export async function getExamForStudent(examId: string) {
       description: true,
       duration_minutes: true,
       total_marks: true,
+      max_warnings: true,
       status: true,
       end_time: true,
       settings: true,

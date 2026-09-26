@@ -101,6 +101,7 @@ z.object({
   durationMinutes: z.number().int().positive(),
   totalMarks: z.number().int().positive(),
   status: z.enum(["DRAFT","ACTIVE","COMPLETED"]).default("DRAFT"),
+  maxWarnings: z.number().int().min(1).max(10).optional(),
   questions: z.array(z.object({
     type: z.enum(["MCQ","TRUE_FALSE","SHORT_ANSWER"]),
     questionText: z.string().min(1),
@@ -113,6 +114,7 @@ z.object({
 
 - MCQ requires ≥ 2 options; TRUE_FALSE requires exactly 2 options.
 - Created inside a transaction — a failed question rolls back the whole exam.
+- `maxWarnings` (1–10) sets `Exam.max_warnings`. When omitted, the server derives it from `settings.warningThreshold`, else 3. `PUT /api/exams/:id` behaves identically.
 
 Response `201`: `data.exam` (exam with nested questions, answers excluded).
 Errors: `400` validation, `401` unauthorized.
@@ -244,7 +246,7 @@ Errors: `400` invalid question/session not active/already submitted, `401` bad t
 
 ### POST `/api/v1/exam-session/:token/violation` — Report a proctoring violation
 
-Public, authenticated by the anonymous Bearer session token. Enforces the **3-warning rule**: each violation increments `warningsCount`; at 3 the session is automatically `TERMINATED` and the teacher's live room is notified via Socket.io.
+Public, authenticated by the anonymous Bearer session token. Enforces the per-exam warning rule: each violation increments `warningsCount`; when it reaches the exam's limit the session is automatically `TERMINATED` and the teacher's live room is notified via Socket.io. The limit is `Exam.max_warnings` (1–10, default 3), with legacy `settings.warningThreshold` as fallback.
 
 Zod schema:
 
