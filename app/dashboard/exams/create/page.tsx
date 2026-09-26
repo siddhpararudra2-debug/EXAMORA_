@@ -140,6 +140,10 @@ const examSchema = z.object({
     .min(1, { message: "Use at least 1 warning." })
     .max(10, { message: "Use no more than 10 warnings." }),
   supervisionCamera: z.boolean().optional(),
+  // P4-2 assessment type. PRACTICE_QUIZ hides delivery/warning/camera
+  // controls and shows the instant-feedback toggle instead.
+  assessmentType: z.enum(["EXAM", "PRACTICE_QUIZ"]).optional().default("EXAM"),
+  instantFeedback: z.boolean().optional().default(false),
   deliveryMode: z.enum(["LIVE", "TAKE_HOME"]).optional().default("LIVE"),
   availableFrom: z.string().optional().default(""),
   availableUntil: z.string().optional().default(""),
@@ -203,6 +207,8 @@ const DEFAULT_VALUES: ExamFormValues = {
   shuffleOptions: true,
   maxWarnings: 3,
   supervisionCamera: true,
+  assessmentType: "EXAM",
+  instantFeedback: false,
   deliveryMode: "LIVE",
   availableFrom: "",
   availableUntil: "",
@@ -588,6 +594,8 @@ const handleBankQuestionsAdded = async (
               maxWarnings:
                 exam.maxWarnings ?? exam.settings?.warningThreshold ?? 3,
               supervisionCamera: exam.settings?.supervision?.camera ?? true,
+              assessmentType: exam.assessmentType ?? exam.assessment_type ?? "EXAM",
+              instantFeedback: exam.instantFeedback ?? exam.instant_feedback ?? false,
               deliveryMode: exam.deliveryMode ?? exam.delivery_mode ?? "LIVE",
               availableFrom: toDateTimeLocal(
                 exam.availableFrom ?? exam.available_from
@@ -735,6 +743,8 @@ const handleBankQuestionsAdded = async (
         durationMinutes: Number(data.durationMinutes),
         totalMarks: Number(data.totalMarks),
         maxWarnings: Number(data.maxWarnings),
+        assessmentType: data.assessmentType ?? "EXAM",
+        instantFeedback: data.instantFeedback ?? false,
         deliveryMode: data.deliveryMode ?? "LIVE",
         availableFrom: toIsoOrUndefined(data.availableFrom),
         availableUntil: toIsoOrUndefined(data.availableUntil),
@@ -894,6 +904,70 @@ const handleBankQuestionsAdded = async (
             <Card className="border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-100">
               <CardHeader className="px-6 pb-4 pt-6">
                 <CardTitle className="text-xl font-semibold tracking-tight text-slate-900">
+                  Assessment type
+                </CardTitle>
+                <CardDescription className="text-sm text-slate-500">
+                  Choose first — it changes which settings are shown below.
+                  Never call a practice quiz an exam: the distinction is
+                  load-bearing for student trust.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-6 pb-6">
+                <FormField
+                  control={control}
+                  name="assessmentType"
+                  render={({ field }) => (
+                    <div
+                      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                      role="radiogroup"
+                      aria-label="Assessment type"
+                    >
+                      {(
+                        [
+                          {
+                            value: "EXAM",
+                            title: "Proctored Exam",
+                            desc: "Integrity signals, warnings, termination. Scores count.",
+                          },
+                          {
+                            value: "PRACTICE_QUIZ",
+                            title: "Practice Quiz",
+                            desc: "No proctoring. Optional instant feedback. Low stakes.",
+                          },
+                        ] as const
+                      ).map((mode) => (
+                        <button
+                          key={mode.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={field.value === mode.value}
+                          onClick={() => field.onChange(mode.value)}
+                          className={cn(
+                            "rounded-lg border p-4 text-left transition",
+                            field.value === mode.value
+                              ? "border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-300"
+                              : "border-slate-200 bg-white hover:border-slate-300"
+                          )}
+                        >
+                          <span className="block text-sm font-semibold text-slate-900">
+                            {mode.title}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            {mode.desc}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {step === 1 && (
+            <Card className="border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-100">
+              <CardHeader className="px-6 pb-4 pt-6">
+                <CardTitle className="text-xl font-semibold tracking-tight text-slate-900">
                   Exam details
                 </CardTitle>
                 <CardDescription className="text-sm text-slate-500">
@@ -1049,6 +1123,10 @@ const handleBankQuestionsAdded = async (
                     />
                   )}
                 />
+                {/* Proctored-exam controls only — practice quizzes skip
+                    proctoring entirely (no camera, warnings, or delivery mode). */}
+                {watch("assessmentType") !== "PRACTICE_QUIZ" && (
+                  <>
                 <FormField
                   control={control}
                   name="supervisionCamera"
@@ -1188,12 +1266,42 @@ const handleBankQuestionsAdded = async (
                     </div>
                   )}
                 </div>
+                  </>
+                )}
+                {/* Practice-quiz controls only — instant feedback replaces
+                    the entire proctoring stack. */}
+                {watch("assessmentType") === "PRACTICE_QUIZ" && (
+                  <>
+                    <FormField
+                      control={control}
+                      name="instantFeedback"
+                      render={({ field }) => (
+                        <Toggle
+                          checked={field.value ?? false}
+                          onChange={field.onChange}
+                          label="Instant feedback"
+                          description="Show correct / incorrect immediately after each multiple-choice or true/false answer. Short answers are never revealed — they queue for review."
+                        />
+                      )}
+                    />
+                    <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-4 text-sm text-emerald-900 md:col-span-2 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100">
+                      <p className="font-semibold">Low-stakes practice</p>
+                      <p className="mt-1 text-xs leading-5 text-emerald-800/90 dark:text-emerald-100/80">
+                        Practice quizzes never mount proctoring: no camera
+                        checks, no warnings, no termination. Scores don&apos;t
+                        count — this is for learning, not assessment.
+                      </p>
+                    </div>
+                  </>
+                )}
+                {watch("assessmentType") !== "PRACTICE_QUIZ" && (
                 <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-4 text-sm text-emerald-900 md:col-span-2 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100">
                   <p className="font-semibold">Privacy-first supervision</p>
                   <p className="mt-1 text-xs leading-5 text-emerald-800/90 dark:text-emerald-100/80">
                     Examora records reviewable browser and integrity events. Device-local checks stay on the student&apos;s device; the MVP does not share camera, microphone, snapshots, or recordings with educators.
                   </p>
                 </div>
+                )}
               </CardContent>
             </Card>
           )}

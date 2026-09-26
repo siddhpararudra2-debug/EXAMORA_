@@ -23,6 +23,8 @@ const ExamStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'ARC
 
 export const DeliveryModeEnum = z.enum(['LIVE', 'TAKE_HOME']);
 
+export const AssessmentTypeEnum = z.enum(['EXAM', 'PRACTICE_QUIZ']);
+
 // ── Question ──────────────────────────────────────────────────────────────────
 
 /**
@@ -182,6 +184,10 @@ export const createExamSchema = z.object({
     (v) => (v === '' || v === null ? undefined : v),
     z.coerce.date().optional(),
   ),
+  // P4-2 assessment type. PRACTICE_QUIZ shows the instant-feedback toggle
+  // instead of delivery-mode/window fields (enforced in the editor UI).
+  assessmentType: AssessmentTypeEnum.optional().default('EXAM'),
+  instantFeedback: z.boolean().optional().default(false),
   // Authoritative per-exam warning limit (maps to Exam.max_warnings).
   // Optional (no Zod default) so legacy callers that only send
   // settings.warningThreshold keep their policy via server-side resolution.

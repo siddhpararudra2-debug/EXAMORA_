@@ -93,6 +93,15 @@ enum DeliveryMode {
   @@map("delivery_mode")
 }
 
+/// P4-2 assessment type. PRACTICE_QUIZ is low-stakes: no proctoring hooks
+/// mount, and instant per-answer feedback is available.
+enum AssessmentType {
+  EXAM
+  PRACTICE_QUIZ
+
+  @@map("assessment_type")
+}
+
 model Teacher {
   id                  String    @id @default(uuid())
   google_id           String?   @unique
@@ -130,7 +139,13 @@ model Exam {
   max_warnings     Int          @default(3)
   /// P4-1 delivery mode: LIVE (proctored, join while ACTIVE) vs TAKE_HOME
   /// (async, joinable only inside the availability window below).
-  delivery_mode    DeliveryMode @default(LIVE)
+  delivery_mode    DeliveryMode   @default(LIVE)
+  /// P4-2 assessment type (default EXAM). PRACTICE_QUIZ skips all
+  /// proctoring and may reveal answers instantly (see instant_feedback).
+  assessment_type  AssessmentType @default(EXAM)
+  /// P4-2: when true on a PRACTICE_QUIZ, the student sees correct/incorrect
+  /// immediately after each objective answer. Never applies to SHORT_ANSWER.
+  instant_feedback Boolean        @default(false)
   /// P4-1 take-home window. The window governs *joining*, not a shared
   /// clock: once started, the per-session duration timer applies as usual.
   available_from   DateTime?

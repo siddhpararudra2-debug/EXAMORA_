@@ -116,6 +116,7 @@ z.object({
 - Created inside a transaction — a failed question rolls back the whole exam.
 - `maxWarnings` (1–10) sets `Exam.max_warnings`. When omitted, the server derives it from `settings.warningThreshold`, else 3. `PUT /api/exams/:id` behaves identically.
 - `deliveryMode` (`LIVE`|`TAKE_HOME`, default `LIVE`) with `availableFrom`/`availableUntil` ISO datetimes. `TAKE_HOME` requires both, with until after from. `GET /:id/status` returns `400` with the window times outside it; `POST /:id/join` enforces the same gate.
+- `assessmentType` (`EXAM`|`PRACTICE_QUIZ`, default `EXAM`) with `instantFeedback` boolean (default `false`). Practice quizzes skip proctoring; with instant feedback on, `GET /:id/student-view` includes `correct_answer` per question (proctored exams never leak keys).
 
 Response `201`: `data.exam` (exam with nested questions, answers excluded).
 Errors: `400` validation, `401` unauthorized.

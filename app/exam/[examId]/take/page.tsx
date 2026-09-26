@@ -16,6 +16,7 @@ import {
   Send,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +36,8 @@ interface ExamQuestion {
   question_text: string;
   options?: string[];
   marks: number;
+  // P4-2: present only for practice quizzes with instant feedback on.
+  correct_answer?: string | null;
 }
 
 interface ExamData {
@@ -44,6 +47,9 @@ interface ExamData {
   duration_minutes: number;
   questions: ExamQuestion[];
   warningsLimit: number;
+  // P4-2 assessment type. PRACTICE_QUIZ skips proctoring entirely.
+  assessmentType?: string;
+  instantFeedback?: boolean;
   settings?: {
     supervision?: {
       camera?: boolean;
@@ -93,6 +99,9 @@ function TakeExamContent() {
   const [submittedViaAuto, setSubmittedViaAuto] = useState(false);
   const [submittedResult, setSubmittedResult] = useState<null | {
     submittedAt: string;
+    score?: number;
+    totalMarks?: number;
+    percentage?: number;
   }>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [downloadingScorecard, setDownloadingScorecard] = useState(false);
@@ -356,17 +365,39 @@ function TakeExamContent() {
   // Keeping detection in exactly one place means disabling it (e.g. for a
   // future practice mode) is a single `enabled` flag, not six listeners.
 
+  // -------- Assessment mode (P4-2) --------
+  // Practice quizzes skip proctoring entirely: the wrapper below is not
+  // mounted, so useExamLockdown/useAIFaceDetection never run and no camera
+  // is ever requested. Instant feedback reveals objective answers only —
+  // SHORT_ANSWER still queues for review since it isn't auto-gradable.
+  const isPracticeQuiz = exam?.assessmentType === "PRACTICE_QUIZ";
+  const practiceFeedback = isPracticeQuiz && exam?.instantFeedback === true;
+
   // -------- Proctoring mount flags --------
   // Detection itself lives in <ProctoringWrapper> (mounted around the exam
   // tree below). These flags are the single switch: false here means no
-  // listeners attach and no camera is requested — the same switch a future
-  // practice mode will reuse.
-  const proctoringEnabled = !!session && !!exam && !submitted && !terminated;
+  // listeners attach and no camera is requested.
+  const proctoringEnabled =
+    !!session && !!exam && !submitted && !terminated && !isPracticeQuiz;
   const cameraAllowed = exam?.settings?.supervision?.camera !== false;
 
   // -------- Derived --------
   const totalQuestions = exam?.questions.length ?? 0;
   const currentQuestion = exam?.questions[currentIndex];
+  // P4-2 instant feedback: reveal objective answers only, and only after the
+  // student has answered (SHORT_ANSWER never reveals — it queues for review).
+  const practiceStudentAnswer = currentQuestion
+    ? answers[currentQuestion.id]?.trim() || ""
+    : "";
+  const practiceReveal =
+    practiceFeedback &&
+    !!currentQuestion &&
+    (currentQuestion.type === "MCQ_SINGLE" ||
+      currentQuestion.type === "TRUE_FALSE") &&
+    practiceStudentAnswer.length > 0 &&
+    currentQuestion.correct_answer != null;
+  const practiceCorrect =
+    practiceReveal && practiceStudentAnswer === currentQuestion?.correct_answer;
   const answeredCount = useMemo(
     () =>
       Object.values(answers).filter(
@@ -464,7 +495,10 @@ function TakeExamContent() {
       const data = (await res.json().catch(() => ({}))) as {
         submittedAt?: string;
         message?: string;
-        data?: { message?: string };
+        data?: {
+          message?: string;
+          result?: { score?: number; totalMarks?: number; percentage?: number };
+        };
       };
 
       if (!res.ok) {
@@ -490,6 +524,9 @@ function TakeExamContent() {
       setShowConfirm(false);
       setSubmittedResult({
         submittedAt: new Date().toISOString(),
+        score: data?.data?.result?.score,
+        totalMarks: data?.data?.result?.totalMarks,
+        percentage: data?.data?.result?.percentage,
       });
     } catch {
       toast({
@@ -628,19 +665,7 @@ function TakeExamContent() {
   const timerWarn =
     timeLeft !== null && timeLeft <= 5 * 60 && !timerAlmostOver;
 
-  return (
-    <ProctoringWrapper
-      token={session?.sessionToken ?? ""}
-      enabled={proctoringEnabled}
-      cameraAllowed={cameraAllowed}
-      maxWarnings={exam.warningsLimit}
-      warnings={warnings}
-      examId={exam.id}
-      sessionId={session?.id}
-      onWarning={handleProctorWarning}
-      onTerminate={() => doTerminate("warnings_limit")}
-      onAutoSubmit={flushAnswers}
-    >
+  const pageBody = (
     <div className="flex min-h-screen flex-col bg-background text-foreground relative selection:bg-primary/20">
       {/* Strict termination overlay */}
       {terminated && (
@@ -730,6 +755,31 @@ function TakeExamContent() {
             <p className="mt-3 text-lg text-muted-foreground">
               Thanks — your answers have been received and saved. Redirecting…
             </p>
+            {/* P4-2: low-stakes score reveal for practice only. No
+                leaderboards, streaks, or badges anywhere near the EXAM type. */}
+            {isPracticeQuiz && submittedResult?.score !== undefined && (
+              <div
+                role="status"
+                className="mx-auto mt-8 max-w-sm rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-6"
+              >
+                <p className="text-sm font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
+                  Nice work!
+                </p>
+                <p className="mt-2 text-4xl font-bold tracking-tight text-foreground">
+                  {submittedResult.score}
+                  <span className="text-lg font-medium text-muted-foreground">
+                    {" "}
+                    / {submittedResult.totalMarks ?? totalQuestions}
+                  </span>
+                </p>
+                {submittedResult.percentage !== undefined && (
+                  <p className="mt-1 text-sm font-medium text-muted-foreground">
+                    {Math.round(submittedResult.percentage * 10) / 10}% — keep
+                    practicing.
+                  </p>
+                )}
+              </div>
+            )}
             <dl className="mt-10 grid grid-cols-2 gap-4 rounded-xl bg-secondary/30 p-6 text-left border border-border/40">
               <div>
                 <dt className="text-sm font-medium text-muted-foreground">
@@ -827,33 +877,42 @@ function TakeExamContent() {
                   </span>
                 </div>
 
-                <div className="hidden items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-xs font-semibold text-emerald-700 sm:flex dark:text-emerald-300">
-                  <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                  Device-local checks
-                </div>
+                {isPracticeQuiz ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-2.5 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+                    <Sparkles className="h-4 w-4" aria-hidden="true" />
+                    Practice Quiz
+                  </div>
+                ) : (
+                  <>
+                    <div className="hidden items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-xs font-semibold text-emerald-700 sm:flex dark:text-emerald-300">
+                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                      Device-local checks
+                    </div>
 
-                <div
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-lg border px-4 py-2.5 transition-colors",
-                    warningsCritical || terminated
-                      ? "border-destructive/40 bg-destructive/10 text-destructive"
-                      : warnings === warningLimit - 1
-                      ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-500"
-                      : "border-border/40 bg-secondary/30 text-foreground"
-                  )}
-                  title="Proctoring warnings"
-                >
-                  {warningsCritical || terminated ? (
-                    <ShieldAlert className="h-4 w-4" aria-hidden />
-                  ) : warnings === warningLimit - 1 ? (
-                    <AlertTriangle className="h-4 w-4" aria-hidden />
-                  ) : (
-                    <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  )}
-                  <span className="text-sm font-semibold">
-                    Warnings: {warnings} / {warningLimit}
-                  </span>
-                </div>
+                    <div
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-lg border px-4 py-2.5 transition-colors",
+                        warningsCritical || terminated
+                          ? "border-destructive/40 bg-destructive/10 text-destructive"
+                          : warnings === warningLimit - 1
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-500"
+                          : "border-border/40 bg-secondary/30 text-foreground"
+                      )}
+                      title="Proctoring warnings"
+                    >
+                      {warningsCritical || terminated ? (
+                        <ShieldAlert className="h-4 w-4" aria-hidden />
+                      ) : warnings === warningLimit - 1 ? (
+                        <AlertTriangle className="h-4 w-4" aria-hidden />
+                      ) : (
+                        <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden />
+                      )}
+                      <span className="text-sm font-semibold">
+                        Warnings: {warnings} / {warningLimit}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </header>
@@ -909,13 +968,21 @@ function TakeExamContent() {
                       const optionKey = String.fromCharCode(65 + i);
                       const value = option;
                       const selected = answers[currentQuestion.id] === value;
+                      const isRevealedAnswer =
+                        practiceReveal && option === currentQuestion.correct_answer;
+                      const isRevealedWrong =
+                        practiceReveal && selected && !practiceCorrect;
                       return (
                         <label
                           key={`${currentQuestion.id}-${i}`}
                           className={cn(
                             "group relative rounded-xl border p-5 text-lg transition-all duration-200 sm:text-xl",
                             disabled && "pointer-events-none opacity-50",
-                            selected
+                            isRevealedAnswer
+                              ? "border-emerald-500 bg-emerald-500/5 ring-1 ring-emerald-500 cursor-pointer shadow-sm"
+                              : isRevealedWrong
+                              ? "border-destructive/60 bg-destructive/5 ring-1 ring-destructive/60 cursor-pointer shadow-sm"
+                              : selected
                               ? "border-primary bg-primary/5 ring-1 ring-primary cursor-pointer shadow-sm"
                               : "border-border/40 bg-secondary/20 hover:border-border hover:bg-secondary/60 cursor-pointer"
                           )}
@@ -954,6 +1021,21 @@ function TakeExamContent() {
                         </label>
                       );
                     })}
+                    {practiceReveal && (
+                      <div
+                        role="status"
+                        className={cn(
+                          "rounded-xl border p-4 text-sm font-semibold",
+                          practiceCorrect
+                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                            : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                        )}
+                      >
+                        {practiceCorrect
+                          ? "Correct — nice work!"
+                          : `Not quite — the correct answer is ${currentQuestion.correct_answer}.`}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1152,6 +1234,25 @@ function TakeExamContent() {
         </>
       )}
     </div>
+  );
+
+  // P4-2: practice quizzes never mount the proctoring shell — and therefore
+  // never run useExamLockdown/useAIFaceDetection or request the camera.
+  if (isPracticeQuiz) return pageBody;
+  return (
+    <ProctoringWrapper
+      token={session?.sessionToken ?? ""}
+      enabled={proctoringEnabled}
+      cameraAllowed={cameraAllowed}
+      maxWarnings={exam.warningsLimit}
+      warnings={warnings}
+      examId={exam.id}
+      sessionId={session?.id}
+      onWarning={handleProctorWarning}
+      onTerminate={() => doTerminate("warnings_limit")}
+      onAutoSubmit={flushAnswers}
+    >
+      {pageBody}
     </ProctoringWrapper>
   );
 }

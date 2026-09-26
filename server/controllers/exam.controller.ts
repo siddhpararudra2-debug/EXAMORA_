@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { SubmissionStatus, ExamStatus, DeliveryMode } from '@prisma/client';
+import { SubmissionStatus, ExamStatus, DeliveryMode, AssessmentType } from '@prisma/client';
 import { ZodType, ZodTypeDef } from 'zod';
 
 import { AuthenticatedRequest } from '../middleware/auth.js';
@@ -131,6 +131,8 @@ export const getExamDetails = async (
       deliveryMode: exam.delivery_mode,
       availableFrom: exam.available_from,
       availableUntil: exam.available_until,
+      assessmentType: exam.assessment_type,
+      instantFeedback: exam.instant_feedback,
       settings: exam.settings,
       accessUuid: exam.access_uuid,
       qrCodeUrl: exam.qr_code_url,
@@ -308,6 +310,8 @@ export const updateExam = async (
           delivery_mode: examData.deliveryMode ?? DeliveryMode.LIVE,
           available_from: examData.availableFrom ?? null,
           available_until: examData.availableUntil ?? null,
+          assessment_type: examData.assessmentType ?? AssessmentType.EXAM,
+          instant_feedback: examData.instantFeedback ?? false,
           settings: examData.settings
             ? ({ ...examData.settings, warningThreshold: maxWarnings } as any)
             : undefined,
@@ -434,11 +438,21 @@ export const getStudentView = async (
         data: { shuffle_seed: seed },
       });
     }
-    const questions = shuffleQuestionsForStudent(
+    const shuffled = shuffleQuestionsForStudent(
       exam.questions,
       settings,
       seed ?? 0,
     );
+
+    // P4-2: answer keys reach the browser ONLY for practice quizzes with
+    // instant feedback on. Proctored exams never see correct_answer here —
+    // stripping after shuffle keeps one query for both modes.
+    const revealAnswers =
+      exam.assessment_type === AssessmentType.PRACTICE_QUIZ &&
+      exam.instant_feedback === true;
+    const questions = revealAnswers
+      ? shuffled
+      : shuffled.map(({ correct_answer, ...rest }) => rest);
 
     const warningsCount = await prisma.violation.count({
       where: { session_id: session.id },
@@ -449,6 +463,8 @@ export const getStudentView = async (
       data: {
         exam: {
           ...exam,
+          assessmentType: exam.assessment_type,
+          instantFeedback: exam.instant_feedback,
           questions,
           warningsLimit: resolveMaxWarnings(exam),
           // Only the fields needed by the student runtime are exposed — never answer keys or raw settings.

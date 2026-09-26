@@ -741,6 +741,60 @@ describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
       .expect(401);
   });
 
+  it('reveals answers only to practice quizzes with instant feedback (P4-2)', async () => {
+    const quiz = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        ...EXAM_PAYLOAD,
+        title: 'Practice Quiz',
+        assessmentType: 'PRACTICE_QUIZ',
+        instantFeedback: true,
+      })
+      .expect(201);
+    const quizId = quiz.body.data.exam.id as string;
+    expect(quiz.body.data.exam.assessment_type).toBe('PRACTICE_QUIZ');
+    await api
+      .post(`/api/exams/${quizId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const join = await api
+      .post(`/api/exams/${quizId}/join`)
+      .send({ studentName: 'Quizzer', studentEmail: 'quizzer@example.com', enrollmentNo: 'QZ1' })
+      .expect(201);
+    const view = await api
+      .get(`/api/exams/${quizId}/student-view`)
+      .query({ sessionToken: join.body.data.sessionToken })
+      .expect(200);
+    expect(view.body.data.exam.assessmentType).toBe('PRACTICE_QUIZ');
+    expect(view.body.data.exam.instantFeedback).toBe(true);
+    for (const q of view.body.data.exam.questions) {
+      expect(q.correct_answer).toBeTruthy();
+    }
+
+    // Proctored exams never leak answer keys, even with instantFeedback set.
+    const locked = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ ...EXAM_PAYLOAD, title: 'Locked Exam', instantFeedback: true })
+      .expect(201);
+    const lockedId = locked.body.data.exam.id as string;
+    await api
+      .post(`/api/exams/${lockedId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+    const lockedJoin = await api
+      .post(`/api/exams/${lockedId}/join`)
+      .send({ studentName: 'Locked', studentEmail: 'locked@example.com', enrollmentNo: 'LK1' })
+      .expect(201);
+    const lockedView = await api
+      .get(`/api/exams/${lockedId}/student-view`)
+      .query({ sessionToken: lockedJoin.body.data.sessionToken })
+      .expect(200);
+    expect(JSON.stringify(lockedView.body)).not.toContain('correct_answer');
+  });
+
   it('reports per-question correct rates over submitted sessions (P3-1)', async () => {
     const created = await api
       .post('/api/exams')

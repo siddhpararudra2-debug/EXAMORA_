@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { Answer, DeliveryMode, Exam, ExamStatus, Prisma, QuestionType } from '@prisma/client';
+import { Answer, AssessmentType, DeliveryMode, Exam, ExamStatus, Prisma, QuestionType } from '@prisma/client';
 import prisma from '../../../prisma/client.js';
 import { ExamSettingsShape } from './shuffle.service.js';
 
@@ -15,6 +15,9 @@ export interface ExamCreationData {
   deliveryMode?: DeliveryMode;
   availableFrom?: Date;
   availableUntil?: Date;
+  /** P4-2 assessment type + instant feedback toggle. */
+  assessmentType?: AssessmentType;
+  instantFeedback?: boolean;
   /**
    * Authoritative per-exam warning limit (maps to `max_warnings`). When
    * absent, derived from `settings.warningThreshold`, else 3 — so legacy
@@ -83,6 +86,10 @@ const STUDENT_QUESTION_SELECT = {
   type: true,
   options: true,
   marks: true,
+  // P4-2: correct answers are selected here but STRIPPED by getStudentView
+  // unless the exam is a PRACTICE_QUIZ with instant feedback on. Selecting
+  // (then stripping) keeps one query for both modes.
+  correct_answer: true,
 } satisfies Prisma.QuestionSelect;
 
 export async function createExamWithQuestions(
@@ -106,6 +113,8 @@ export async function createExamWithQuestions(
         delivery_mode: examData.deliveryMode ?? DeliveryMode.LIVE,
         available_from: examData.availableFrom ?? null,
         available_until: examData.availableUntil ?? null,
+        assessment_type: examData.assessmentType ?? AssessmentType.EXAM,
+        instant_feedback: examData.instantFeedback ?? false,
         settings: examData.settings
           ? ({
               ...examData.settings,
@@ -149,6 +158,8 @@ export async function getExamForStudent(examId: string) {
       status: true,
       end_time: true,
       settings: true,
+      assessment_type: true,
+      instant_feedback: true,
       questions: {
         select: STUDENT_QUESTION_SELECT,
       },
