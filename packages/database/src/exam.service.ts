@@ -55,6 +55,10 @@ export interface QuestionCreationData {
   /** Required for objective questions; optional for e.g. subjective types. */
   correctAnswer?: string;
   marks: number;
+  /** P2-4 provenance: true when sourced from AI generation / doc parsing. */
+  aiGenerated?: boolean;
+  /** P2-4 review gate: must be true for every aiGenerated question at publish. */
+  educatorReviewed?: boolean;
 }
 
 export interface SubmissionCreationData {
@@ -113,6 +117,8 @@ export async function createExamWithQuestions(
                 : undefined,
             correct_answer: q.correctAnswer ?? null,
             marks: q.marks,
+            ai_generated: q.aiGenerated ?? false,
+            educator_reviewed: q.educatorReviewed ?? true,
           })),
         },
       },
@@ -203,6 +209,21 @@ export async function publishExamService(
 
   if (exam._count.questions === 0) {
     throw new Error('NO_QUESTIONS: Cannot publish an exam without questions. Please add at least one question.');
+  }
+
+  // P2-4 review gate: AI-sourced questions must be educator-reviewed first.
+  const unreviewedAiCount = await prisma.question.count({
+    where: {
+      exam_id: examId,
+      deleted_at: null,
+      ai_generated: true,
+      educator_reviewed: false,
+    },
+  });
+  if (unreviewedAiCount > 0) {
+    throw new Error(
+      `UNREVIEWED_AI_QUESTIONS: ${unreviewedAiCount} AI-generated question(s) have not been reviewed. Review them before publishing.`,
+    );
   }
 
   const access_uuid = crypto.randomUUID();

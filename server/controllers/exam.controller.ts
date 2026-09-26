@@ -139,6 +139,8 @@ export const getExamDetails = async (
         correctAnswer: q.correct_answer,
         marks: q.marks,
         orderIndex: q.order_index,
+        aiGenerated: q.ai_generated,
+        educatorReviewed: q.educator_reviewed,
       })),
     };
 
@@ -310,6 +312,8 @@ export const updateExam = async (
               correct_answer: q.correctAnswer ?? null,
               marks: q.marks,
               order_index: idx + 1,
+              ai_generated: q.aiGenerated ?? false,
+              educator_reviewed: q.educatorReviewed ?? true,
             })),
           },
         },
@@ -749,6 +753,10 @@ export const publishExam = async (
     }
     if (err.message?.startsWith('NO_QUESTIONS')) {
       res.status(400).json({ status: 'error', message: err.message.replace('NO_QUESTIONS: ', '') });
+      return;
+    }
+    if (err.message?.startsWith('UNREVIEWED_AI_QUESTIONS')) {
+      res.status(400).json({ status: 'error', message: err.message.replace('UNREVIEWED_AI_QUESTIONS: ', '') });
       return;
     }
     next(err);

@@ -38,6 +38,12 @@ export const questionBaseSchema = z.object({
   correctAnswer: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   marks: z.number().int().positive('Marks must be a positive integer'),
+  // P2-4 review-gate provenance. The frontend sets aiGenerated:true for
+  // questions arriving from AI generation / document parsing; manual
+  // questions arrive as false/true. Absent flags default to human-authored
+  // so legacy payloads keep working.
+  aiGenerated: z.boolean().optional(),
+  educatorReviewed: z.boolean().optional(),
 });
 
 export const questionRefinements = (

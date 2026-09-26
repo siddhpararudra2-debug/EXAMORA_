@@ -138,6 +138,7 @@ Auth: Teacher JWT (owner only). Transitions `DRAFT → ACTIVE`; idempotent for a
 
 Response `200`: `{ "data": { "exam": { "id", "status" } } }`
 Errors: `403` not the owner, `404` not found, `409` completed exams cannot be republished.
+P2-4 review gate: `400` `"N AI-generated question(s) have not been reviewed. Review them before publishing."` when any question has `aiGenerated: true, educatorReviewed: false`. Questions accept `aiGenerated`/`educatorReviewed` flags on create/update (absent flags default to human-authored `false`/`true`).
 
 ### POST `/api/exams/:id/grade-all` — Grade all submitted sessions
 

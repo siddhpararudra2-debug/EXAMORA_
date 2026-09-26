@@ -185,6 +185,12 @@ model Question {
   metadata       Json?        @db.JsonB
   marks          Int
   negative_marks Decimal      @default(0) @db.Decimal(5, 2)
+  /// P2-4 review gate: true when the question originated from AI generation
+  /// or document parsing. Existing rows are grandfathered as human-authored.
+  ai_generated      Boolean @default(false)
+  /// P2-4 review gate: an exam with any ai_generated && !educator_reviewed
+  /// question cannot be published. Manual questions are reviewed by authorship.
+  educator_reviewed Boolean @default(true)
   created_at     DateTime     @default(now())
   updated_at     DateTime     @updatedAt
   deleted_at     DateTime?

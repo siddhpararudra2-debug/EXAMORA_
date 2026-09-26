@@ -51,7 +51,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { authHeaders, handleAuthFailure } from "@/lib/auth-token";
 import { cn } from "@/lib/utils";
-import { QuestionBankPicker } from "@/components/exams/QuestionBankPicker";
+import {
+  QuestionBankPicker,
+  type BankQuestionFormValue,
+} from "@/components/exams/QuestionBankPicker";
 
 // ---------- Types & Schemas ----------
 
@@ -77,6 +80,13 @@ const baseQuestion = z.object({
   correctAnswer: z
     .string()
     .min(1, { message: "Please enter or select a correct answer." }),
+  // P2-4 review-gate provenance. Manual questions are false/true; AI or
+  // document-sourced questions arrive as true/false until approved.
+  // Plain optional (no Zod default) so bank-picker values and clones — which
+  // predate the flags — still satisfy the form type; use sites fall back
+  // with ?? false / ?? true.
+  aiGenerated: z.boolean().optional(),
+  educatorReviewed: z.boolean().optional(),
 });
 
 const mcqQuestion = baseQuestion.extend({
@@ -143,6 +153,8 @@ const DEFAULT_QUESTION = (i: number): QuestionFormValue => ({
   marks: 2,
   options: ["", ""],
   correctAnswer: "",
+  aiGenerated: false,
+  educatorReviewed: true,
 });
 
 const DEFAULT_VALUES: ExamFormValues = {
@@ -229,8 +241,13 @@ function CreateExamContent() {
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
   const [savingToBank, setSavingToBank] = useState<number | null>(null);
 
-  const handleBankQuestionsAdded = (questions: QuestionFormValue[]) => {
-    questions.forEach((q) => append(q));
+const handleBankQuestionsAdded = (
+  questions: BankQuestionFormValue[]
+) => {
+  // Bank questions are already human-authored: they bypass the AI review gate.
+  questions.forEach((q) =>
+    append({ ...q, aiGenerated: false, educatorReviewed: true })
+  );
     setIsBankPickerOpen(false);
     toast({
       title: "Questions added from bank",
@@ -309,7 +326,7 @@ function CreateExamContent() {
     getValues,
     reset,
     trigger,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
   } = form;
 
   const { fields, append, remove, insert } = useFieldArray({
@@ -337,6 +354,11 @@ function CreateExamContent() {
             setDraftTitle(exam.title || null);
             const parsedQuestions: QuestionFormValue[] = (exam.questions || []).map((q: any) => {
               const rawOptions = Array.isArray(q.options) ? q.options : [];
+              // P2-4 provenance survives draft reloads (server sends both
+              // camelCase and snake_case shapes).
+              const aiGenerated = q.aiGenerated ?? q.ai_generated ?? false;
+              const educatorReviewed =
+                q.educatorReviewed ?? q.educator_reviewed ?? true;
               if (q.type === "TRUE_FALSE") {
                 return {
                   type: "TRUE_FALSE",
@@ -344,6 +366,8 @@ function CreateExamContent() {
                   marks: Number(q.marks) || 1,
                   options: ["True", "False"],
                   correctAnswer: q.correctAnswer || q.correct_answer || "True",
+                  aiGenerated,
+                  educatorReviewed,
                 };
               }
               if (q.type === "SHORT_ANSWER") {
@@ -353,6 +377,8 @@ function CreateExamContent() {
                   marks: Number(q.marks) || 5,
                   options: [],
                   correctAnswer: q.correctAnswer || q.correct_answer || "Sample answer",
+                  aiGenerated,
+                  educatorReviewed,
                 };
               }
               return {
@@ -361,6 +387,8 @@ function CreateExamContent() {
                 marks: Number(q.marks) || 2,
                 options: rawOptions.length >= 2 ? rawOptions : ["Option A", "Option B"],
                 correctAnswer: q.correctAnswer || q.correct_answer || rawOptions[0] || "",
+                aiGenerated,
+                educatorReviewed,
               };
             });
 
@@ -520,18 +548,32 @@ function CreateExamContent() {
           warningThreshold: Number(data.maxWarnings),
           supervision: { camera: data.supervisionCamera ?? true },
         },
-        questions: data.questions.map((q) => ({
-          type: q.type,
-          questionText: q.questionText.trim(),
-          options:
-            q.type === "MCQ_SINGLE"
-              ? (q as z.infer<typeof mcqQuestion>).options.map((o) => o.trim())
-              : q.type === "TRUE_FALSE"
-              ? ["True", "False"]
-              : undefined,
-          correctAnswer: q.correctAnswer.trim(),
-          marks: Number(q.marks),
-        })),
+        questions: data.questions.map((q, idx) => {
+          // P2-4: editing any field of an AI-sourced question counts as
+          // review. dirtyFields tracks per-question edits; a change to any
+          // field other than the review flag itself marks it reviewed.
+          const dirty = dirtyFields.questions?.[idx] as
+            | Record<string, boolean>
+            | undefined;
+          const edited =
+            !!dirty &&
+            Object.keys(dirty).some((key) => key !== "educatorReviewed" && dirty[key]);
+          return {
+            type: q.type,
+            questionText: q.questionText.trim(),
+            options:
+              q.type === "MCQ_SINGLE"
+                ? (q as z.infer<typeof mcqQuestion>).options.map((o) => o.trim())
+                : q.type === "TRUE_FALSE"
+                ? ["True", "False"]
+                : undefined,
+            correctAnswer: q.correctAnswer.trim(),
+            marks: Number(q.marks),
+            aiGenerated: q.aiGenerated ?? false,
+            educatorReviewed:
+              (q.educatorReviewed ?? true) || ((q.aiGenerated ?? false) && edited),
+          };
+        }),
       };
 
       const method = isEditMode && fromId ? "PUT" : "POST";
@@ -888,7 +930,7 @@ function CreateExamContent() {
                             <GripVertical className="h-4 w-4" />
                           </span>
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <p className="text-sm font-semibold text-slate-900">
                                 Question {index + 1}
                               </p>
@@ -896,6 +938,12 @@ function CreateExamContent() {
                               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
                                 {marks} {marks === 1 ? "mark" : "marks"}
                               </span>
+                              {watch(`${qPath}.aiGenerated`) &&
+                                !watch(`${qPath}.educatorReviewed`) && (
+                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
+                                    AI-generated — review required
+                                  </span>
+                                )}
                             </div>
                             {(errors.questions?.[index] as
                               | { questionText?: { message?: string } }
@@ -928,6 +976,25 @@ function CreateExamContent() {
                             )}
                             Save to bank
                           </Button>
+                          {watch(`${qPath}.aiGenerated`) &&
+                            !watch(`${qPath}.educatorReviewed`) && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setValue(
+                                    `${qPath}.educatorReviewed`,
+                                    true,
+                                    { shouldDirty: true, shouldValidate: true }
+                                  )
+                                }
+                                className="h-9 border-amber-300 text-amber-700 hover:bg-amber-50"
+                              >
+                                <CheckCircle2 className="mr-1 h-4 w-4" />
+                                Approve
+                              </Button>
+                            )}
                           <Button
                             type="button"
                             size="sm"

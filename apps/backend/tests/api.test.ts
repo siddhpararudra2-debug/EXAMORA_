@@ -578,6 +578,66 @@ describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
     }
   });
 
+  it('rejects publish with unreviewed AI questions, then allows after review', async () => {
+    const aiExam = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        ...EXAM_PAYLOAD,
+        title: 'AI Review Gate Exam',
+        questions: [
+          {
+            type: 'MCQ_SINGLE',
+            questionText: 'AI drafted: what is 2 + 2?',
+            options: ['3', '4'],
+            correctAnswer: '4',
+            marks: 2,
+            aiGenerated: true,
+            educatorReviewed: false,
+          },
+        ],
+      })
+      .expect(201);
+
+    const aiExamId = aiExam.body.data.exam.id;
+
+    const blocked = await api
+      .post(`/api/exams/${aiExamId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(400);
+
+    expect(blocked.body.status).toBe('error');
+    expect(blocked.body.message).toBe(
+      '1 AI-generated question(s) have not been reviewed. Review them before publishing.',
+    );
+
+    // Approve via edit-and-save (PUT replaces the draft, flags included).
+    await api
+      .put(`/api/exams/${aiExamId}`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        ...EXAM_PAYLOAD,
+        title: 'AI Review Gate Exam',
+        questions: [
+          {
+            type: 'MCQ_SINGLE',
+            questionText: 'AI drafted: what is 2 + 2?',
+            options: ['3', '4'],
+            correctAnswer: '4',
+            marks: 2,
+            aiGenerated: true,
+            educatorReviewed: true,
+          },
+        ],
+      })
+      .expect(200);
+
+    await api
+      .post(`/api/exams/${aiExamId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+  });
+
   it('derives the column from legacy settings.warningThreshold', async () => {
     const legacy = await api
       .post('/api/exams')
