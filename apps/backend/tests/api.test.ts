@@ -741,6 +741,85 @@ describe('P2-3 configurable warning threshold (Exam.max_warnings)', () => {
       .expect(401);
   });
 
+  it('reports per-question correct rates over submitted sessions (P3-1)', async () => {
+    const created = await api
+      .post('/api/exams')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        title: 'Analytics Exam',
+        durationMinutes: 30,
+        totalMarks: 6,
+        status: 'DRAFT',
+        questions: [
+          { type: 'MCQ_SINGLE', questionText: 'A-Q1?', options: ['Yes', 'No'], correctAnswer: 'Yes', marks: 2 },
+          { type: 'MCQ_SINGLE', questionText: 'A-Q2?', options: ['Yes', 'No'], correctAnswer: 'Yes', marks: 2 },
+          { type: 'MCQ_SINGLE', questionText: 'A-Q3?', options: ['Yes', 'No'], correctAnswer: 'Yes', marks: 2 },
+        ],
+      })
+      .expect(201);
+    const analyticsExamId = created.body.data.exam.id as string;
+    await api
+      .post(`/api/exams/${analyticsExamId}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const qs = await prisma.question.findMany({
+      where: { exam_id: analyticsExamId },
+      select: { id: true },
+      orderBy: { order_index: 'asc' },
+    });
+
+    // S1: all correct. S2: Q1 wrong. S3: Q1+Q2 wrong, Q3 unanswered.
+    const plans: { email: string; answers: Record<number, string> }[] = [
+      { email: 'an.s1@example.com', answers: { 0: 'Yes', 1: 'Yes', 2: 'Yes' } },
+      { email: 'an.s2@example.com', answers: { 0: 'No', 1: 'Yes', 2: 'Yes' } },
+      { email: 'an.s3@example.com', answers: { 0: 'No', 1: 'No' } },
+    ];
+    for (const [i, plan] of plans.entries()) {
+      const join = await api
+        .post(`/api/exams/${analyticsExamId}/join`)
+        .send({ studentName: `An S${i + 1}`, studentEmail: plan.email, enrollmentNo: `AN${i}` })
+        .expect(201);
+      const token = join.body.data.sessionToken as string;
+      for (const [qi, text] of Object.entries(plan.answers)) {
+        await api
+          .post(`/api/v1/exam-session/${token}/answer`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ questionId: qs[Number(qi)].id, answerData: text })
+          .expect(200);
+      }
+      await api
+        .post(`/api/v1/exam-session/${token}/submit`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({})
+        .expect(200);
+    }
+
+    const res = await api
+      .get(`/api/exams/${analyticsExamId}/analytics`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.examId).toBe(analyticsExamId);
+    expect(res.body.data.totalSessions).toBe(3);
+    expect(res.body.data.submittedSessions).toBe(3);
+    const items = res.body.data.questions as Array<{
+      questionText: string;
+      correctCount: number;
+      incorrectCount: number;
+      unansweredCount: number;
+      correctRatePercent: number;
+    }>;
+    expect(items).toHaveLength(3);
+    const byText = new Map(items.map((q) => [q.questionText, q]));
+    expect(byText.get('A-Q1?')).toMatchObject({ correctCount: 1, incorrectCount: 2, unansweredCount: 0, correctRatePercent: 33.3 });
+    expect(byText.get('A-Q2?')).toMatchObject({ correctCount: 2, incorrectCount: 1, unansweredCount: 0, correctRatePercent: 66.7 });
+    expect(byText.get('A-Q3?')).toMatchObject({ correctCount: 2, incorrectCount: 0, unansweredCount: 1, correctRatePercent: 66.7 });
+
+    await api.get(`/api/exams/${analyticsExamId}/analytics`).expect(401);
+  });
+
   it('reports per-row invite errors instead of a bare count (P2-7)', async () => {
     const res = await api
       .post(`/api/exams/${examId}/invite-bulk`)

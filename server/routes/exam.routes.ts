@@ -20,6 +20,7 @@ import {
   getExamSessions,
   attachBankQuestions,
   overrideAnswerGrade,
+  getExamAnalytics,
 } from '../controllers/exam.controller.js';
 import { generateAIQuestions } from '../../apps/backend/src/controllers/ai.controller.js';
 import { parseDocument } from '../../apps/backend/src/controllers/document.controller.js';
@@ -166,6 +167,13 @@ router.post(
  * Protected — valid teacher JWT required (owner only).
  */
 router.get('/:examId/results', requireTeacher, getExamResults);
+
+/**
+ * GET /api/exams/:id/analytics
+ * Item-level analytics: per-question correct/incorrect/unanswered counts.
+ * Protected — valid teacher JWT required (owner only).
+ */
+router.get('/:id/analytics', requireTeacher, getExamAnalytics);
 
 /**
  * PATCH /api/exams/:examId/sessions/:sessionId/answers/:questionId/grade

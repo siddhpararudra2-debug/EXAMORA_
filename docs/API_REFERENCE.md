@@ -194,6 +194,14 @@ Response `201`: `{ "status":"success", "data": { "added": 1, "questions": [{ "id
 
 Errors: `400` validation, `401` unauthorized, `404` exam or bank questions not found, `409` exam is not a draft.
 
+### GET `/api/exams/:id/analytics` — Item-level analytics
+
+Auth: Teacher JWT (owner only). Per-question correct/incorrect/unanswered counts over `SUBMITTED`/`AUTO_SUBMITTED` sessions (`correctRatePercent` = correct ÷ submitted).
+
+Response `200`: `{ "status":"success", "data": { "examId","totalSessions","submittedSessions","averageScorePercent", "questions": [{ "questionId","questionText","correctCount","incorrectCount","unansweredCount","correctRatePercent" }] } }`
+
+Errors: `401` unauthorized, `404` exam not found.
+
 ### GET `/api/exams/:id/sessions` — Live session list with warning counts
 
 Auth: Teacher JWT (owner only). Backs the live supervision grid. Warning counts are aggregated server-side from `Violation` rows (single `groupBy`, no N+1).

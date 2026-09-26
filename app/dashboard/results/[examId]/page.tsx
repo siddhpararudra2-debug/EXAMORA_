@@ -74,6 +74,23 @@ interface ResultsPayload {
   results: SessionResult[];
 }
 
+interface AnalyticsItem {
+  questionId: string;
+  questionText: string;
+  correctCount: number;
+  incorrectCount: number;
+  unansweredCount: number;
+  correctRatePercent: number;
+}
+
+interface AnalyticsPayload {
+  examId: string;
+  totalSessions: number;
+  submittedSessions: number;
+  averageScorePercent: number;
+  questions: AnalyticsItem[];
+}
+
 function StatusBadge({ status }: { status: string }) {
   if (status === "TERMINATED") {
     return (
@@ -124,6 +141,7 @@ function ExamResultsContent() {
   const [exportingCsv, setExportingCsv] = useState(false);
   const [downloads, setDownloads] = useState<Record<string, boolean>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
 
   const loadResults = useCallback(async () => {
     setLoading(true);
@@ -158,9 +176,25 @@ function ExamResultsContent() {
     }
   }, [examId]);
 
+  const loadAnalytics = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/exams/${examId}/analytics`, {
+        credentials: "include",
+        headers: { ...authHeaders() },
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        data?: AnalyticsPayload;
+      };
+      if (res.ok && payload.data) setAnalytics(payload.data);
+    } catch (err) {
+      console.warn("Could not fetch exam analytics:", err);
+    }
+  }, [examId]);
+
   useEffect(() => {
     void loadResults();
-  }, [loadResults]);
+    void loadAnalytics();
+  }, [loadResults, loadAnalytics]);
 
   // Auto-scroll to selected student session card if passed in query string
   useEffect(() => {
@@ -191,6 +225,7 @@ function ExamResultsContent() {
           description: payload.message ?? "All submissions graded successfully.",
         });
         await loadResults();
+        await loadAnalytics();
       } else {
         toast({
           title: "Grading failed",
@@ -208,7 +243,7 @@ function ExamResultsContent() {
     } finally {
       setGrading(false);
     }
-  }, [examId, loadResults]);
+  }, [examId, loadResults, loadAnalytics]);
 
   const exportCsv = useCallback(async () => {
     setExportingCsv(true);
@@ -475,6 +510,73 @@ function ExamResultsContent() {
             })}
       </section>
 
+      {/* P3-1 item analysis — hardest questions first */}
+      {analytics && analytics.submittedSessions > 0 && (
+        <Card className="glass-panel">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              Item analysis
+            </CardTitle>
+            <CardDescription>
+              Per-question correct rate over {analytics.submittedSessions}{" "}
+              submitted session
+              {analytics.submittedSessions === 1 ? "" : "s"} · class average{" "}
+              {analytics.averageScorePercent.toFixed(1)}%. Hardest first.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[...analytics.questions]
+              .sort((a, b) => a.correctRatePercent - b.correctRatePercent)
+              .map((item) => (
+                <div key={item.questionId} className="space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                      {item.questionText}
+                    </p>
+                    <p
+                      className={cn(
+                        "shrink-0 text-sm font-bold",
+                        item.correctRatePercent < 50
+                          ? "text-destructive"
+                          : item.correctRatePercent < 75
+                            ? "text-amber-600"
+                            : "text-emerald-600"
+                      )}
+                    >
+                      {item.correctRatePercent.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div
+                    className="h-2 overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuenow={item.correctRatePercent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Correct rate for ${item.questionText}`}
+                  >
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all",
+                        item.correctRatePercent < 50
+                          ? "bg-destructive"
+                          : item.correctRatePercent < 75
+                            ? "bg-amber-500"
+                            : "bg-emerald-500"
+                      )}
+                      style={{ width: `${item.correctRatePercent}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {item.correctCount} correct · {item.incorrectCount}{" "}
+                    incorrect · {item.unansweredCount} unanswered
+                  </p>
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="glass-panel">
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
@@ -603,7 +705,10 @@ function ExamResultsContent() {
                         (data?.questions ?? []) as ReviewQuestion[]
                       }
                       answers={session.answers}
-                      onSaved={() => void loadResults()}
+                      onSaved={() => {
+                        void loadResults();
+                        void loadAnalytics();
+                      }}
                     />
                   </div>
                 )}

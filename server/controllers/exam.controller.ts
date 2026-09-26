@@ -1156,6 +1156,108 @@ export const getExamResults = async (
   }
 };
 
+// ── GET /api/exams/:id/analytics ─────────────────────────────────────────────
+// Protected: requires valid teacher JWT (owner only).
+// P3-1 item-level analytics: per-question correct/incorrect/unanswered counts
+// over submitted sessions, plus session totals and average score.
+export const getExamAnalytics = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { teacher } = req as AuthenticatedRequest;
+    const { id: examId } = req.params;
+
+    const exam = await prisma.exam.findFirst({
+      where: { id: examId, created_by: teacher.userId, deleted_at: null },
+      select: { id: true, title: true },
+    });
+    if (!exam) {
+      res.status(404).json({ status: 'error', message: 'Exam not found' });
+      return;
+    }
+
+    const [sessions, questions, answers] = await Promise.all([
+      prisma.examSession.findMany({
+        where: { exam_id: examId, deleted_at: null },
+        select: { id: true, status: true, percentage: true },
+      }),
+      prisma.question.findMany({
+        where: { exam_id: examId, deleted_at: null },
+        select: { id: true, question_text: true },
+        orderBy: { order_index: 'asc' },
+      }),
+      prisma.answer.findMany({
+        where: {
+          question: { exam_id: examId, deleted_at: null },
+          session: { exam_id: examId, deleted_at: null },
+        },
+        select: { session_id: true, question_id: true, is_correct: true },
+      }),
+    ]);
+
+    const submitted = sessions.filter(
+      (s) =>
+        s.status === SubmissionStatus.SUBMITTED ||
+        s.status === SubmissionStatus.AUTO_SUBMITTED,
+    );
+    const submittedIds = new Set(submitted.map((s) => s.id));
+
+    const percentages = submitted
+      .map((s) => (s.percentage !== null ? Number(s.percentage) : null))
+      .filter((p): p is number => p !== null);
+    const averageScorePercent =
+      percentages.length > 0
+        ? Math.round(
+            (percentages.reduce((a, b) => a + b, 0) / percentages.length) * 10,
+          ) / 10
+        : 0;
+
+    const answerBySessionQuestion = new Map(
+      answers
+        .filter((a) => submittedIds.has(a.session_id))
+        .map((a) => [`${a.session_id}:${a.question_id}`, a.is_correct]),
+    );
+
+    const items = questions.map((q) => {
+      let correctCount = 0;
+      let incorrectCount = 0;
+      for (const s of submitted) {
+        const flag = answerBySessionQuestion.get(`${s.id}:${q.id}`);
+        if (flag === true) correctCount += 1;
+        else if (flag === false) incorrectCount += 1;
+      }
+      const unansweredCount = submitted.length - correctCount - incorrectCount;
+      const correctRatePercent =
+        submitted.length > 0
+          ? Math.round((correctCount / submitted.length) * 1000) / 10
+          : 0;
+      return {
+        questionId: q.id,
+        questionText: q.question_text,
+        correctCount,
+        incorrectCount,
+        unansweredCount,
+        correctRatePercent,
+      };
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        examId: exam.id,
+        totalSessions: sessions.length,
+        submittedSessions: submitted.length,
+        averageScorePercent,
+        questions: items,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ── PATCH /api/exams/:examId/sessions/:sessionId/answers/:questionId/grade ───
 // Protected: requires valid teacher JWT (owner only).
 // P2-6 educator override for one answer: writes final_score + grading_note
