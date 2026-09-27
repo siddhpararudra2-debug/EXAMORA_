@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { connectDatabase } from './prisma/client.js';
 import { createApp, AppBundle } from './server/app.js';
 import { startAutoSubmitSweep } from './server/jobs/autoSubmit.sweep.js';
+import { startRetentionPurge } from './server/jobs/retention.purge.js';
 
 // Load environment variables
 dotenv.config();
@@ -53,6 +54,10 @@ const PORT = process.env.PORT || 4000;
 // never races the boot sequence.
 let autoSubmitSweep: NodeJS.Timeout | null = null;
 
+// Daily violation-metadata retention purge (90 days after exam completion).
+// Same lifecycle: started after listen, cleared on SIGTERM.
+let retentionPurge: NodeJS.Timeout | null = null;
+
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database
@@ -68,6 +73,8 @@ const startServer = async (): Promise<void> => {
       console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
       autoSubmitSweep = startAutoSubmitSweep();
       console.log(`⏱️  Auto-submit sweep started (every 60s)`);
+      retentionPurge = startRetentionPurge();
+      console.log(`🧹 Retention purge started (every 24h)`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -79,6 +86,7 @@ const startServer = async (): Promise<void> => {
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received. Shutting down gracefully...');
   if (autoSubmitSweep) clearInterval(autoSubmitSweep);
+  if (retentionPurge) clearInterval(retentionPurge);
   io?.close();
   await import('./prisma/client.js').then((m) => m.default.$disconnect());
   httpServer.close(() => {

@@ -202,7 +202,7 @@ export function ProctoringWrapper({
                 Proctoring Warning ({warningCount}/{maxWarnings})
               </h4>
               <p className="text-sm font-medium mt-0.5 truncate text-white">
-                {latestWarningReason || "Violation detected"}
+                {latestWarningReason || "Integrity signal recorded"}
               </p>
             </div>
             <button

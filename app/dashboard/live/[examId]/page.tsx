@@ -336,7 +336,7 @@ export default function LiveProctoringDashboard() {
       {errorMessage && (
         <div role="alert" className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           <AlertTriangle className="h-5 w-5 shrink-0" />
-          <span className="flex-1">{errorMessage}</span>
+          <span className="min-w-0 flex-1 break-words">{errorMessage}</span>
           <Button size="sm" variant="outline" onClick={() => void loadInitial()} className="h-8 border-destructive/30">Retry</Button>
         </div>
       )}

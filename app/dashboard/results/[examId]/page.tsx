@@ -397,7 +397,7 @@ function ExamResultsContent() {
       {errorMessage && (
         <div role="alert" className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
           <AlertTriangle className="h-5 w-5 shrink-0" />
-          <div className="flex-1 text-sm leading-5">{errorMessage}</div>
+          <div className="min-w-0 flex-1 break-words text-sm leading-5">{errorMessage}</div>
           <Button size="sm" variant="outline" onClick={() => void loadResults()} className="h-8 border-destructive/30">
             Retry
           </Button>

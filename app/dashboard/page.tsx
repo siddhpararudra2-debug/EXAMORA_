@@ -442,7 +442,7 @@ function DashboardHomeContent() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                     <Button variant="outline" size="sm" asChild className="h-7 text-xs border-zinc-200 dark:border-zinc-800">
                       <Link href={`/dashboard/results/${e.id}`}>
                         {e.status === "COMPLETED" ? "Gradebook" : "View"}

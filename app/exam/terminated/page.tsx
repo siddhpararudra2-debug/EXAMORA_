@@ -61,7 +61,7 @@ function getReasonInfo(reason: Reason) {
   return {
     title: "Your exam has been terminated",
     subtitle:
-      "The proctoring system detected repeated violations of the exam integrity policy. Any answers submitted up to this point have been retained.",
+      "The proctoring system recorded repeated warnings under the exam integrity policy. Any answers submitted up to this point have been retained.",
     icon: ShieldX,
     tone: "red",
   } as const;

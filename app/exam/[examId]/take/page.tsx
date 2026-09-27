@@ -666,7 +666,9 @@ function TakeExamContent() {
     timeLeft !== null && timeLeft <= 5 * 60 && !timerAlmostOver;
 
   const pageBody = (
-    <div className="flex min-h-screen flex-col bg-background text-foreground relative selection:bg-primary/20">
+    // overflow-x-clip (not hidden): clips oversized decorative layers on
+    // narrow screens without breaking sticky header/footer positioning.
+    <div className="flex min-h-screen flex-col overflow-x-clip bg-background text-foreground relative selection:bg-primary/20">
       {/* Strict termination overlay */}
       {terminated && (
         <div
@@ -694,7 +696,7 @@ function TakeExamContent() {
               </h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
                 {terminatedReason === "warnings_limit"
-                  ? `Due to repeated proctoring violations (${warnings}/${warningLimit} warnings), this session has been closed.`
+                  ? `Due to repeated proctoring warnings (${warnings}/${warningLimit}), this session has been closed.`
                   : terminatedReason === "teacher"
                   ? "Your teacher ended this session. Any answers submitted so far have been saved."
                   : "This session has been closed. Any answers submitted so far have been retained."}

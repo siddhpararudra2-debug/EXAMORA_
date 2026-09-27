@@ -158,6 +158,10 @@ model Exam {
   settings         Json?        @db.JsonB
   status           ExamStatus   @default(DRAFT)
   published_at     DateTime?
+  /// Final-verification retention clock: set when results are declared
+  /// (COMPLETED), cleared on unpublish. The violation-metadata purge job
+  /// nulls Violation.metadata 90 days after this date.
+  completed_at     DateTime?
   created_by       String
   creator          Teacher      @relation(fields: [created_by], references: [id], onDelete: Restrict)
   created_at       DateTime     @default(now())

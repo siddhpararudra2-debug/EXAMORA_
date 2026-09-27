@@ -355,11 +355,12 @@ export const declareExamResults = async (
     //    overwrites total_score/percentage with the same values).
     const gradedSessions = await gradeAllSubmissionsForExam(examId);
 
-    // 2. Mark the exam as COMPLETED
+    // 2. Mark the exam as COMPLETED (completed_at starts the 90-day
+    // violation-metadata retention clock — see server/jobs/retention.purge.ts)
     if (exam.status !== ExamStatus.COMPLETED) {
       await prisma.exam.update({
         where: { id: examId },
-        data: { status: ExamStatus.COMPLETED },
+        data: { status: ExamStatus.COMPLETED, completed_at: new Date() },
       });
     }
 
