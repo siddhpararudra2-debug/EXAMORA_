@@ -673,11 +673,11 @@ function TakeExamContent() {
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="term-title"
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-xl animate-in fade-in duration-300"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 animate-in fade-in duration-300"
         >
-          <div className="w-full max-w-md overflow-hidden rounded-2xl glass-panel border-destructive/30 animate-in zoom-in-95 duration-500">
+          <div className="w-full max-w-md overflow-hidden rounded-lg border-destructive/30 animate-in zoom-in-95 duration-500">
             <div className="flex items-center justify-center bg-destructive/10 py-10">
-              <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground shadow-sm">
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-lg bg-destructive text-destructive-foreground shadow-sm">
                 <OctagonX className="h-10 w-10" />
               </div>
             </div>
@@ -740,8 +740,8 @@ function TakeExamContent() {
 
       {/* Submitted success state (visible for ~4.5s before redirect) */}
       {submitted && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="w-full max-w-xl rounded-2xl glass-panel p-10 text-center animate-in zoom-in-95 duration-500">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 animate-in fade-in duration-300">
+          <div className="w-full max-w-xl rounded-lg p-10 text-center animate-in zoom-in-95 duration-500">
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary">
               <CheckCircle2 className="h-10 w-10" />
             </div>
@@ -760,7 +760,7 @@ function TakeExamContent() {
             {isPracticeQuiz && submittedResult?.score !== undefined && (
               <div
                 role="status"
-                className="mx-auto mt-8 max-w-sm rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-6"
+                className="mx-auto mt-8 max-w-sm rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-6"
               >
                 <p className="text-sm font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
                   Nice work!
@@ -848,7 +848,7 @@ function TakeExamContent() {
       {!submitted && (
         <>
           {/* Top Bar */}
-          <header className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-xl">
+          <header className="sticky top-0 z-30 border-b border-border/40 bg-background/80 ">
             <div className="mx-auto flex h-20 w-full max-w-5xl flex-wrap items-center gap-4 px-4 sm:px-6 lg:px-8">
               <div className="flex min-w-0 flex-1 flex-col justify-center">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
@@ -1111,7 +1111,7 @@ function TakeExamContent() {
           </main>
 
           {/* Bottom Bar */}
-          <footer className="sticky bottom-0 z-30 border-t border-border/40 bg-background/80 backdrop-blur-xl">
+          <footer className="sticky bottom-0 z-30 border-t border-border/40 bg-background/80 ">
             <div className="mx-auto flex h-24 w-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
               <Button
                 type="button"
@@ -1160,12 +1160,12 @@ function TakeExamContent() {
           {/* Confirmation Dialog */}
           {showConfirm && (
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 animate-in fade-in duration-200"
               role="dialog"
               aria-modal="true"
               aria-labelledby="submit-confirm-title"
             >
-              <div className="w-full max-w-md rounded-2xl glass-panel p-8 shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="w-full max-w-md rounded-lg p-8 shadow-2xl animate-in zoom-in-95 duration-300">
                 <div className="flex items-start gap-5">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Send className="h-6 w-6" />

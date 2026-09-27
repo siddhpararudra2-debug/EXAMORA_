@@ -77,7 +77,7 @@ export function SupervisionGrid({
       data-exam-id={examId}
       className="flex flex-col gap-4"
     >
-      <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <ShieldCheck className="h-5 w-5" aria-hidden="true" />

@@ -24,9 +24,9 @@ function TimesUpContent() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
            style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
       
-      <Card className="glass-panel w-full max-w-lg text-center animate-in zoom-in-95 duration-500 relative z-10">
+      <Card className="w-full max-w-lg text-center animate-in zoom-in-95 duration-500 relative z-10">
         <CardHeader className="items-center gap-4 pt-10">
-          <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500">
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
             <Clock className="h-10 w-10" />
             <span className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm">
               <Hourglass className="h-4 w-4" />

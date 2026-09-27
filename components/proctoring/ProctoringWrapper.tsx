@@ -195,7 +195,7 @@ export function ProctoringWrapper({
       {/* Top Violation Warning Banner */}
       {showWarningBanner && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 transition-all">
-          <div className="flex items-center gap-3 rounded-xl border border-red-500 bg-red-600 text-white p-4 shadow-2xl backdrop-blur animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-3 rounded-xl border border-red-500 bg-red-600 text-white p-4 shadow-2xl animate-in fade-in slide-in-from-top-4">
             <AlertTriangle className="h-6 w-6 shrink-0 text-amber-300 animate-bounce" />
             <div className="flex-1 min-w-0">
               <h4 className="text-xs font-bold uppercase tracking-wider text-red-100">
@@ -234,9 +234,9 @@ export function ProctoringWrapper({
 
       {/* Step 5: Small picture-in-picture webcam preview in bottom-right corner with monitoring badge */}
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
-        <div className="pointer-events-none relative overflow-hidden rounded-2xl border-2 border-slate-700 bg-slate-900 shadow-2xl transition-all">
+        <div className="pointer-events-none relative overflow-hidden rounded-lg border-2 border-slate-700 bg-slate-900 shadow-2xl transition-all">
           {/* Top Bar with AI Monitoring Badge (video never leaves the device) */}
-          <div className="pointer-events-auto flex items-center justify-between gap-2 bg-slate-950/90 px-3 py-1.5 backdrop-blur">
+          <div className="pointer-events-auto flex items-center justify-between gap-2 bg-slate-950/90 px-3 py-1.5 ">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
@@ -276,19 +276,19 @@ export function ProctoringWrapper({
               {/* Status Overlay Badges */}
               <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1 pointer-events-none">
                 {isModelLoading ? (
-                  <span className="rounded bg-slate-900/80 px-2 py-0.5 text-[10px] text-indigo-300 backdrop-blur">
+                  <span className="rounded bg-slate-900/80 px-2 py-0.5 text-[10px] text-indigo-300 ">
                     Loading AI…
                   </span>
                 ) : faceCount === 1 ? (
-                  <span className="rounded bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 text-[10px] font-medium text-emerald-300 backdrop-blur">
+                  <span className="rounded bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 text-[10px] font-medium text-emerald-300 ">
                     ✓ Face Verified
                   </span>
                 ) : faceCount === 0 ? (
-                  <span className="rounded bg-red-950/90 border border-red-500/50 px-2 py-0.5 text-[10px] font-bold text-red-300 backdrop-blur animate-pulse">
+                  <span className="rounded bg-red-950/90 border border-red-500/50 px-2 py-0.5 text-[10px] font-bold text-red-300 animate-pulse">
                     ⚠️ No Face
                   </span>
                 ) : (
-                  <span className="rounded bg-amber-950/90 border border-amber-500/50 px-2 py-0.5 text-[10px] font-bold text-amber-300 backdrop-blur animate-pulse">
+                  <span className="rounded bg-amber-950/90 border border-amber-500/50 px-2 py-0.5 text-[10px] font-bold text-amber-300 animate-pulse">
                     ⚠️ Multiple Faces ({faceCount})
                   </span>
                 )}

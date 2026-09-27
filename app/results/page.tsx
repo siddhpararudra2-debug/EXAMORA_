@@ -76,7 +76,7 @@ export default function StudentResultsLookupPage() {
           </p>
         </div>
 
-        <Card className="glass-panel">
+        <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
@@ -119,7 +119,7 @@ export default function StudentResultsLookupPage() {
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {results.map((r) => (
-                  <Card key={r.id} className="glass-panel hover-lift">
+                  <Card key={r.id}>
                     <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3">
                       <div>
                         <Badge className="bg-emerald-500/10 text-emerald-600 border-none mb-1 gap-1">

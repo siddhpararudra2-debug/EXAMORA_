@@ -395,7 +395,7 @@ function ExamResultsContent() {
   return (
     <div className="flex flex-col gap-8">
       {errorMessage && (
-        <div role="alert" className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+        <div role="alert" className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <div className="flex-1 text-sm leading-5">{errorMessage}</div>
           <Button size="sm" variant="outline" onClick={() => void loadResults()} className="h-8 border-destructive/30">
@@ -481,7 +481,7 @@ function ExamResultsContent() {
       <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="glass-panel">
+              <Card key={i} >
                 <CardContent className="p-6">
                   <div className="h-4 w-24 animate-pulse rounded bg-muted" />
                   <div className="mt-3 h-8 w-16 animate-pulse rounded bg-muted" />
@@ -491,7 +491,7 @@ function ExamResultsContent() {
           : stats.map((s) => {
               const Icon = s.icon;
               return (
-                <Card key={s.label} className="glass-panel">
+                <Card key={s.label} >
                   <CardContent className="flex items-start justify-between p-6">
                     <div>
                       <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -512,7 +512,7 @@ function ExamResultsContent() {
 
       {/* P3-1 item analysis — hardest questions first */}
       {analytics && analytics.submittedSessions > 0 && (
-        <Card className="glass-panel">
+        <Card >
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <TrendingUp className="h-5 w-5 text-primary" />
@@ -577,7 +577,7 @@ function ExamResultsContent() {
         </Card>
       )}
 
-      <Card className="glass-panel">
+      <Card >
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2 text-lg">

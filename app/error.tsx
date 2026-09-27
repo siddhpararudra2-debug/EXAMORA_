@@ -17,7 +17,7 @@ export default function RootErrorBoundary({
 }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/90 p-8 text-center shadow-2xl backdrop-blur">
+      <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/90 p-8 text-center shadow-2xl ">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-rose-950/60 text-rose-400 ring-8 ring-rose-950/40">
           <AlertTriangle className="h-10 w-10" />
         </div>

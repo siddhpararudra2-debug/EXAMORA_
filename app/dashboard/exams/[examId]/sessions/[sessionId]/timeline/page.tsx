@@ -110,7 +110,7 @@ export default function ProctoringTimelinePage() {
   if (!session) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-md text-center bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="max-w-md text-center bg-white p-8 rounded-lg border border-slate-200 shadow-sm">
           <ShieldAlert className="mx-auto h-12 w-12 text-red-500" />
           <h2 className="mt-4 text-xl font-bold text-slate-900">Unable to load audit timeline</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">{errorMessage ?? "The requested session timeline could not be loaded."}</p>
@@ -151,10 +151,10 @@ export default function ProctoringTimelinePage() {
         </div>
 
         {/* Student Info Summary Header */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-700 font-bold text-xl">
+              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 font-bold text-xl">
                 {session.studentName.charAt(0)}
               </div>
               <div>
@@ -201,7 +201,7 @@ export default function ProctoringTimelinePage() {
         />
 
         {/* TASK 1 Step 2: Chronological Log List View */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
             <ShieldAlert className="h-5 w-5 text-indigo-600" /> Chronological Incident Log ({session.events.length})
           </h3>

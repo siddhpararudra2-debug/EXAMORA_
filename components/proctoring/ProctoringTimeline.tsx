@@ -141,7 +141,7 @@ export function ProctoringTimeline({
   const totalDurationMs = Math.max(1, examDurationMinutes * 60 * 1000);
 
   return (
-    <div className={`w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm ${className}`}>
+    <div className={`w-full rounded-lg border border-slate-200 bg-white p-6 shadow-sm ${className}`}>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
@@ -212,7 +212,7 @@ export function ProctoringTimeline({
             style={{
               left: `${Math.max(10, Math.min(90, hoveredEvent.percentage))}%`,
             }}
-            className="absolute bottom-8 -translate-x-1/2 z-30 w-64 rounded-xl border border-slate-200 bg-slate-900 text-white p-3 shadow-xl backdrop-blur animate-in fade-in zoom-in-95 duration-150"
+            className="absolute bottom-8 -translate-x-1/2 z-30 w-64 rounded-xl border border-slate-200 bg-slate-900 text-white p-3 shadow-xl animate-in fade-in zoom-in-95 duration-150"
           >
             <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
               <span className="font-mono text-xs text-amber-300 font-semibold">

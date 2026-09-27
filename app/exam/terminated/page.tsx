@@ -145,7 +145,7 @@ function TerminatedContent() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] opacity-20 pointer-events-none" 
            style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
 
-      <Card className="glass-panel w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-500 relative z-10 border-border/40">
+      <Card className="w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-500 relative z-10 border-border/40">
         <div
           className={cn(
             "flex items-center justify-center border-b border-border/40 py-10 transition-colors",
@@ -154,7 +154,7 @@ function TerminatedContent() {
         >
           <div
             className={cn(
-              "relative flex h-20 w-20 items-center justify-center rounded-2xl bg-background shadow-sm ring-1",
+              "relative flex h-20 w-20 items-center justify-center rounded-lg bg-background shadow-sm ring-1",
               tone.ring,
               tone.iconTint
             )}

@@ -183,8 +183,8 @@ export function BulkInviteModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+      <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
@@ -313,7 +313,7 @@ export function BulkInviteModal({
                     handleFileChange(e.dataTransfer.files[0]);
                   }
                 }}
-                className="group cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/30 p-8 text-center transition"
+                className="group cursor-pointer rounded-lg border-2 border-dashed border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/30 p-8 text-center transition"
               >
                 <input
                   ref={fileInputRef}

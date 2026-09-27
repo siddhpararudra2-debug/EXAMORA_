@@ -112,7 +112,7 @@ export default function TeacherExamDetailsPage() {
   if (!exam) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <div className="max-w-md rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
           <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
           <h2 className="mt-4 text-xl font-bold text-slate-900">Unable to load exam</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">{errorMessage ?? "This exam could not be found."}</p>
@@ -145,7 +145,7 @@ export default function TeacherExamDetailsPage() {
         </div>
 
         {/* Main Details Header */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
               <div className={cn(
@@ -209,19 +209,19 @@ export default function TeacherExamDetailsPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <span className="text-xs font-medium uppercase tracking-wider text-slate-500">Active Candidates</span>
             <p className="mt-2 text-3xl font-bold text-indigo-600">{exam.activeSessionsCount}</p>
             <p className="mt-1 text-xs text-slate-400">Currently taking this exam</p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <span className="text-xs font-medium uppercase tracking-wider text-slate-500">Completed Submissions</span>
             <p className="mt-2 text-3xl font-bold text-emerald-600">{exam.completedSessionsCount}</p>
             <p className="mt-1 text-xs text-slate-400">Graded and stored</p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <span className="text-xs font-medium uppercase tracking-wider text-slate-500">Total Enrolled</span>
             <p className="mt-2 text-3xl font-bold text-slate-900">
               {exam.activeSessionsCount + exam.completedSessionsCount}

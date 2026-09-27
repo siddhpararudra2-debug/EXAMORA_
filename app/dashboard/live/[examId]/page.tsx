@@ -334,7 +334,7 @@ export default function LiveProctoringDashboard() {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
       {errorMessage && (
-        <div role="alert" className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+        <div role="alert" className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <span className="flex-1">{errorMessage}</span>
           <Button size="sm" variant="outline" onClick={() => void loadInitial()} className="h-8 border-destructive/30">Retry</Button>
@@ -404,7 +404,7 @@ export default function LiveProctoringDashboard() {
 
       {/* Stats row */}
       <section className="grid grid-cols-2 gap-5 sm:grid-cols-4">
-        <Card className="glass-panel animate-in slide-in-from-bottom-4 fade-in duration-700">
+        <Card className="animate-in slide-in-from-bottom-4 fade-in duration-700">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-foreground">
@@ -425,7 +425,7 @@ export default function LiveProctoringDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="glass-panel animate-in slide-in-from-bottom-4 fade-in duration-700 delay-75">
+        <Card className="animate-in slide-in-from-bottom-4 fade-in duration-700 delay-75">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -442,7 +442,7 @@ export default function LiveProctoringDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="glass-panel animate-in slide-in-from-bottom-4 fade-in duration-700 delay-150">
+        <Card className="animate-in slide-in-from-bottom-4 fade-in duration-700 delay-150">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-foreground">
@@ -458,7 +458,7 @@ export default function LiveProctoringDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="glass-panel animate-in slide-in-from-bottom-4 fade-in duration-700 delay-200">
+        <Card className="animate-in slide-in-from-bottom-4 fade-in duration-700 delay-200">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
@@ -488,16 +488,16 @@ export default function LiveProctoringDashboard() {
 
       {/* Grid */}
       {loading ? (
-        <div className="flex min-h-[400px] items-center justify-center rounded-2xl glass-panel">
+        <div className="flex min-h-[400px] items-center justify-center rounded-lg">
           <div className="flex items-center gap-3 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
             <span className="text-lg font-medium">Loading student sessions…</span>
           </div>
         </div>
       ) : sessions.length === 0 ? (
-        <Card className="glass-panel border-dashed border-border/60">
+        <Card className="border-dashed border-border/60">
           <CardContent className="flex flex-col items-center justify-center gap-4 p-16 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
+            <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
               <Users2 className="h-8 w-8" />
             </div>
             <h3 className="text-xl font-bold text-foreground">
@@ -518,9 +518,9 @@ export default function LiveProctoringDashboard() {
               <Card
                 key={s.id}
                 className={cn(
-                  "glass-panel hover-lift transition-all",
+                  "transition-all",
                   terminated && "border-destructive/30 bg-destructive/5 ring-1 ring-destructive/20",
-                  s._new && "animate-[fadeIn_300ms_ease-out] ring-2 ring-primary/30"
+                  s._new && "animate-in fade-in duration-300 ring-2 ring-primary/30"
                 )}
               >
                 <CardHeader className="flex-row items-start justify-between gap-3 p-6 pb-2">

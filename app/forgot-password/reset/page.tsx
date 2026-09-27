@@ -93,7 +93,7 @@ function ResetPasswordContent() {
           </p>
         </div>
 
-        <Card className="glass-panel animate-in slide-in-from-bottom-8 fade-in duration-1000">
+        <Card className="animate-in slide-in-from-bottom-8 fade-in duration-1000">
           <CardHeader className="pt-6">
             <CardTitle className="text-xl font-bold">Password Reset</CardTitle>
             <CardDescription>Your new password must be at least 8 characters.</CardDescription>

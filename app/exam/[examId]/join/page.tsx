@@ -212,9 +212,9 @@ export default function JoinExamPage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
              style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
              
-        <Card className="glass-panel w-full max-w-lg text-center animate-in slide-in-from-bottom-8 fade-in duration-700 relative z-10">
+        <Card className="w-full max-w-lg text-center animate-in slide-in-from-bottom-8 fade-in duration-700 relative z-10">
           <CardHeader className="items-center gap-4 pt-10">
-            <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
               {inactive ? (
                 <CalendarX2 className="h-10 w-10" />
               ) : verificationError ? (
@@ -281,9 +281,9 @@ export default function JoinExamPage() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-20 pointer-events-none" 
            style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
 
-      <Card className="glass-panel w-full max-w-lg animate-in slide-in-from-bottom-8 fade-in duration-700 relative z-10">
+      <Card className="w-full max-w-lg animate-in slide-in-from-bottom-8 fade-in duration-700 relative z-10">
         <CardHeader className="items-center gap-4 pt-10 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+          <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <ClipboardList className="h-8 w-8" />
           </div>
           <div className="space-y-2">

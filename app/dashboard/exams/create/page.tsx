@@ -867,7 +867,7 @@ const handleBankQuestionsAdded = async (
             <li
               key={s.id}
               className={cn(
-                "flex items-center gap-3 rounded-2xl border p-4 transition",
+                "flex items-center gap-3 rounded-lg border p-4 transition",
                 active &&
                   "border-indigo-200 bg-indigo-50/60 ring-2 ring-indigo-200",
                 done && "border-emerald-200 bg-emerald-50/50",
@@ -1729,7 +1729,7 @@ const handleBankQuestionsAdded = async (
                   <button
                     type="button"
                     onClick={() => addQuestion()}
-                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/40 px-6 py-5 text-base font-semibold text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50/40 hover:text-indigo-700"
+                    className="group flex items-center justify-center gap-3 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50/40 px-6 py-5 text-base font-semibold text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50/40 hover:text-indigo-700"
                   >
                     <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200 group-hover:ring-indigo-200">
                       <Plus className="h-5 w-5" />
@@ -1743,7 +1743,7 @@ const handleBankQuestionsAdded = async (
                   <button
                     type="button"
                     onClick={() => setIsBankPickerOpen(true)}
-                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50/60 px-6 py-5 text-base font-semibold text-violet-700 transition hover:border-violet-500 hover:bg-violet-100/50 shadow-sm"
+                    className="group flex items-center justify-center gap-3 rounded-lg border-2 border-dashed border-violet-300 bg-violet-50/60 px-6 py-5 text-base font-semibold text-violet-700 transition hover:border-violet-500 hover:bg-violet-100/50 shadow-sm"
                   >
                     <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white shadow-md shadow-violet-200">
                       <BookMarked className="h-5 w-5" />
@@ -1754,7 +1754,7 @@ const handleBankQuestionsAdded = async (
                   <button
                     type="button"
                     onClick={() => setIsDocUploaderOpen(true)}
-                    className="group flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 px-6 py-5 text-base font-semibold text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-100/50 shadow-sm"
+                    className="group flex items-center justify-center gap-3 rounded-lg border-2 border-dashed border-emerald-300 bg-emerald-50/60 px-6 py-5 text-base font-semibold text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-100/50 shadow-sm"
                   >
                     <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-200">
                       <FileText className="h-5 w-5" />
@@ -1773,7 +1773,7 @@ const handleBankQuestionsAdded = async (
           )}
 
           {/* Footer / navigation */}
-          <div className="sticky bottom-0 z-10 -mx-3 border-t border-slate-200 bg-white/90 px-3 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <div className="sticky bottom-0 z-10 -mx-3 border-t border-slate-200 bg-white/90 px-3 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
             <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
               {step === 1 ? (
                 <Button
