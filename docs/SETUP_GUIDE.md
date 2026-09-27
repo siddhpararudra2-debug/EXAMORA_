@@ -120,8 +120,8 @@ FRONTEND_URL="http://localhost:3000"
 
 | Variable | Example Value | Description |
 | :--- | :--- | :--- |
-| `NEXT_PUBLIC_API_URL` | `https://examora-backend.onrender.com/api` | Render Express API base URL |
-| `NEXT_PUBLIC_SOCKET_URL` | `https://examora-backend.onrender.com` | Render Socket.io server URL |
+| `NEXT_PUBLIC_API_URL` | `https://examora-dbme.onrender.com/api` | Render Express API base URL |
+| `NEXT_PUBLIC_SOCKET_URL` | `https://examora-dbme.onrender.com` | Render Socket.io server URL |
 
 ---
 
