@@ -111,6 +111,7 @@ test.describe("Proctoring & warnings flow", () => {
     browser,
     request,
   }) => {
+    test.setTimeout(120000);
     const stamp = Date.now();
     const token = await registerTeacher(
       request,
@@ -179,6 +180,7 @@ test.describe("Proctoring & warnings flow", () => {
     browser,
     request,
   }) => {
+    test.setTimeout(120000);
     const stamp = Date.now();
     const teacherEmail = `proctor_teacher2_${stamp}@example.com`;
     const token = await registerTeacher(request, teacherEmail);

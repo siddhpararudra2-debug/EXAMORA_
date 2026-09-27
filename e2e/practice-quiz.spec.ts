@@ -8,6 +8,7 @@ test.describe("Practice quiz mode", () => {
     browser,
     request,
   }) => {
+    test.setTimeout(120000);
     const stamp = Date.now();
     const teacherEmail = `practice_teacher_${stamp}@example.com`;
     const reg = await request.post("/api/auth/register", {

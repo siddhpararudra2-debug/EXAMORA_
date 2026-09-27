@@ -15,6 +15,9 @@ test.describe("Examora happy path", () => {
     browser,
     request,
   }) => {
+    // Dev-server compile variance makes this long flow exceed the 30s
+    // default (UI exam creation alone is ~10s on a cold server).
+    test.setTimeout(120000);
     // ── 1. Register a teacher through the Express API ──────────────────────
     const registerRes = await request.post("/api/auth/register", {
       data: {
