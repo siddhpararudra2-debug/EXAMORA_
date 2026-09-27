@@ -8,7 +8,7 @@
 #   1. Create a free PostgreSQL + Redis (or Upstash) instance on Render.
 #   2. In the dashboard, create a new "Web Service" pointing at this repo:
 #        Root Directory: (empty — monorepo root)
-#        Build Command:  npm ci && npx prisma generate && npx prisma migrate deploy && npm run server:build
+#        Build Command:  npm install --no-audit --no-fund && npx prisma generate && npx prisma migrate deploy && npm run server:build
 #        Start Command:  npm run server:start
 #      (or use "Blueprint" and reference this file directly)
 #   3. Provide the env vars below (DATABASE_URL, REDIS_URL, JWT_SECRET, ...).
@@ -21,7 +21,7 @@ services:
     region: oregon
     plan: free
     rootDir: .
-    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run server:build
+    buildCommand: npm install --no-audit --no-fund && npx prisma generate && npx prisma migrate deploy && npm run server:build
     startCommand: npm run server:start
     healthCheckPath: /health
     autoDeploy: true
@@ -31,9 +31,11 @@ services:
       - key: PORT
         value: 4000
       - key: DATABASE_URL
-        sync: false            # set manually — Render PostgreSQL connection string
+        sync: false            # set manually — Neon PostgreSQL pooled connection string
+      - key: DIRECT_URL
+        sync: false            # set manually — Neon PostgreSQL direct connection string
       - key: REDIS_URL
-        sync: false            # optional — set manually if using Redis for Socket.io
+        sync: false            # set manually — Upstash Redis URL
       - key: JWT_SECRET
         generateValue: true
       - key: SESSION_SECRET
@@ -41,7 +43,11 @@ services:
       - key: AUTH_SECRET
         generateValue: true
       - key: FRONTEND_URL
-        value: https://examora.vercel.app     # ← replace with your Vercel frontend URL
+        value: https://examora-delta.vercel.app
+      - key: TRUST_PROXY
+        value: "1"
+      - key: ENABLE_REMOTE_MEDIA_SUPERVISION
+        value: "false"
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
