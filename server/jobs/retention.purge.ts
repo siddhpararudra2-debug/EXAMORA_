@@ -1,4 +1,5 @@
 import prisma from '../../prisma/client.js';
+import { Prisma } from '@prisma/client';
 
 /**
  * Final verification — 90-day violation-metadata retention purge (spec §6.4).
@@ -40,7 +41,7 @@ export async function purgeViolationMetadata(
 
     const result = await tx.violation.updateMany({
       where: {
-        metadata: { not: null },
+        metadata: { not: Prisma.AnyNull },
         occurred_at: { lt: cutoff },
         session: {
           exam: {
@@ -49,7 +50,7 @@ export async function purgeViolationMetadata(
           },
         },
       },
-      data: { metadata: null },
+      data: { metadata: Prisma.DbNull },
     });
 
     if (result.count > 0) {

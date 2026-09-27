@@ -247,7 +247,7 @@ export type FromBankInput = z.infer<typeof fromBankSchema>;
 // ── Educator grade override (P2-6) ────────────────────────────────────────────
 
 export const gradeOverrideSchema = z.object({
-  finalScore: z.number('finalScore must be a number'),
+  finalScore: z.number({ invalid_type_error: 'finalScore must be a number' }),
   gradingNote: z.string().max(2000, 'Grading note is too long').optional(),
 });
 

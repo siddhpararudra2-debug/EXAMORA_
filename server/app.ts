@@ -96,13 +96,13 @@ export function createApp(options: CreateAppOptions = {}): AppBundle {
   // Docker HEALTHCHECKs can distinguish "process up" from "actually serving".
   app.get('/health', async (_req: Request, res: Response) => {
     try {
-      const prisma = (await import('../prisma/client.js')).default ?? null;
-      if (!prisma) {
+      const prismaClient = (await import('../prisma/client.js')).prisma;
+      if (!prismaClient) {
         res.status(503).json({ status: 'degraded', db: 'unavailable' });
         return;
       }
       await Promise.race([
-        prisma.$queryRaw`SELECT 1`,
+        prismaClient.$queryRaw`SELECT 1`,
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('db probe timeout')), 3000),
         ),

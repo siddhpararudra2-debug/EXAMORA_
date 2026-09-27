@@ -88,7 +88,7 @@ process.on('SIGTERM', async () => {
   if (autoSubmitSweep) clearInterval(autoSubmitSweep);
   if (retentionPurge) clearInterval(retentionPurge);
   io?.close();
-  await import('./prisma/client.js').then((m) => m.default.$disconnect());
+  await import('./prisma/client.js').then((m) => m.prisma.$disconnect());
   httpServer.close(() => {
     console.log('Server closed');
     process.exit(0);

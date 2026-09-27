@@ -21,7 +21,7 @@ services:
     region: oregon
     plan: free
     rootDir: .
-    buildCommand: npm install --no-audit --no-fund && npx prisma generate && npx prisma migrate deploy && npm run server:build
+    buildCommand: npm install --include=dev --no-audit --no-fund && npx prisma generate && npx prisma migrate deploy && npm run server:build
     startCommand: npm run server:start
     healthCheckPath: /health
     autoDeploy: true
